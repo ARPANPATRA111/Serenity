@@ -59,6 +59,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
   const db = getAdminFirestore();
   const now = new Date().toISOString();
   
+  // Build template object
   const template: Template = {
     id: generateTemplateId(),
     name: input.name,
@@ -75,8 +76,12 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
     tags: input.tags || [],
   };
 
-  await db.collection(COLLECTION).doc(template.id).set(template);
-  console.log(`[Firebase Templates] Created template: ${template.name} (${template.id})`);
+  // Remove undefined values to avoid Firestore issues
+  const cleanedTemplate = Object.fromEntries(
+    Object.entries(template).filter(([, v]) => v !== undefined)
+  ) as Template;
+
+  await db.collection(COLLECTION).doc(template.id).set(cleanedTemplate);
   
   return template;
 }

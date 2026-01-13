@@ -34,8 +34,6 @@ export async function GET(request: NextRequest) {
     const searchQuery = searchParams.get('search');
     const limit = parseInt(searchParams.get('limit') || '50', 10);
 
-    console.log('[Templates API] GET request:', { userId, isPublic, searchQuery, limit });
-
     let templates: Template[] = [];
 
     try {
@@ -49,13 +47,10 @@ export async function GET(request: NextRequest) {
         // Get public templates
         templates = await getPublicTemplates(limit);
       }
-    } catch (dbError) {
-      console.error('[Templates API] Database error:', dbError);
+    } catch {
       // Return empty array on database errors (Firebase might not be configured)
       templates = [];
     }
-
-    console.log(`[Templates API] Returning ${templates.length} templates`);
 
     return NextResponse.json({
       success: true,
@@ -89,7 +84,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[Templates API] Creating template:', { name, userId, isPublic });
+    // Check if Firebase Admin is configured
+    if (!process.env.FIREBASE_ADMIN_PROJECT_ID || !process.env.FIREBASE_ADMIN_CLIENT_EMAIL || !process.env.FIREBASE_ADMIN_PRIVATE_KEY) {
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error: Firebase Admin not configured. Please set FIREBASE_ADMIN_* environment variables.' },
+        { status: 500 }
+      );
+    }
 
     const template = await createTemplate({
       name,
@@ -102,16 +103,14 @@ export async function POST(request: NextRequest) {
       tags: tags || [],
     });
 
-    console.log('[Templates API] Template created:', template.id);
-
     return NextResponse.json({
       success: true,
       template,
     }, { status: 201 });
   } catch (error) {
-    console.error('[Templates API] Error creating template:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create template';
     return NextResponse.json(
-      { success: false, error: 'Failed to create template' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

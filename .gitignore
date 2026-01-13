@@ -51,4 +51,10 @@ firestore-debug.log
 *.ps1
 arpan.md
 I.md
-update all the Dependencies  
+
+# Login to Firebase
+firebase login
+
+# Deploy only indexes
+firebase deploy --only firestore:indexes
+firebase deploy --only firestore:rules

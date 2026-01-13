@@ -50,9 +50,21 @@ export async function GET(request: NextRequest) {
         .limit(500)
         .get();
     } catch (e: any) {
-        // If it's a credentials error, return empty in dev
-        console.error('Firestore Error:', e);
-        return NextResponse.json({ success: true, certificates: [], error: 'Database unavailable' });
+        // If it's a missing index error, try without ordering
+        if (e.code === 9) {
+          try {
+            snapshot = await certificatesRef
+              .where('userId', '==', userId)
+              .limit(500)
+              .get();
+          } catch {
+            return NextResponse.json({ success: true, certificates: [], error: 'Database unavailable' });
+          }
+        } else {
+          // Don't log full stack trace in dev
+          console.warn('[Certificates API] Database query failed');
+          return NextResponse.json({ success: true, certificates: [], error: 'Database unavailable' });
+        }
     }
     
     const certificates = snapshot.docs.map(doc => {

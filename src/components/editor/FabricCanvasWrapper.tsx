@@ -33,14 +33,14 @@ export function FabricCanvasWrapper() {
     if (fabricHook && fabricHook.getCanvas() && !initRef.current) {
       initRef.current = true;
       setFabricInstance(fabricHook);
-      console.log('[FabricCanvasWrapper] Canvas ready and instance set');
+      // Dev logging removed
     }
   }, [fabricHook, setFabricInstance]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      console.log('[FabricCanvasWrapper] Unmounting, clearing instance');
+      // Dev logging removed
       initRef.current = false;
       setFabricInstance(null);
     };

@@ -5,12 +5,14 @@
  * 
  * Provides media upload and management functionality.
  * All media must be uploaded before use in the editor.
+ * Images are automatically compressed before upload for optimal performance.
  */
 
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore, MediaAsset } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
+import imageCompression from 'browser-image-compression';
 import {
   Upload,
   Image as ImageIcon,
@@ -21,12 +23,22 @@ import {
   X,
   Check,
   HardDrive,
+  Zap,
 } from 'lucide-react';
 import Image from 'next/image';
 
-// Maximum file size: 5MB
+// Maximum file size: 5MB (before compression)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp'];
+
+// Compression options - maintains quality while reducing size
+const COMPRESSION_OPTIONS = {
+  maxSizeMB: 1, // Target 1MB max after compression
+  maxWidthOrHeight: 2048, // Max dimension
+  useWebWorker: true,
+  preserveExif: false,
+  fileType: 'image/webp', // Convert to WebP for better compression
+};
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -53,6 +65,7 @@ export function LeftSidebar() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [compressionStatus, setCompressionStatus] = useState<string | null>(null);
 
   // Fetch user media on mount
   useEffect(() => {
@@ -89,7 +102,25 @@ export function LeftSidebar() {
     return null;
   };
 
-  // Handle file upload
+  // Compress image before upload
+  const compressImage = async (file: File): Promise<File> => {
+    // Skip compression for SVGs and GIFs (they don't benefit from this type of compression)
+    if (file.type === 'image/svg+xml' || file.type === 'image/gif') {
+      return file;
+    }
+
+    try {
+      console.log(`[Media] Compressing ${file.name}: ${formatFileSize(file.size)}`);
+      const compressedFile = await imageCompression(file, COMPRESSION_OPTIONS);
+      console.log(`[Media] Compressed to: ${formatFileSize(compressedFile.size)} (${((1 - compressedFile.size / file.size) * 100).toFixed(1)}% reduction)`);
+      return compressedFile;
+    } catch (e) {
+      console.warn('[Media] Compression failed, using original:', e);
+      return file;
+    }
+  };
+
+  // Handle file upload with compression
   const handleUpload = useCallback(async (files: FileList | File[]) => {
     if (!user?.id) return;
     
@@ -105,12 +136,26 @@ export function LeftSidebar() {
 
     setUploadError(null);
     setIsUploadingMedia(true);
+    setCompressionStatus('Preparing...');
 
     try {
-      for (const file of fileArray) {
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        
+        // Show compression status
+        setCompressionStatus(`Optimizing ${i + 1}/${fileArray.length}...`);
+        
+        // Compress the image
+        const compressedFile = await compressImage(file);
+        
+        setCompressionStatus(`Uploading ${i + 1}/${fileArray.length}...`);
+        
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', compressedFile);
         formData.append('userId', user.id);
+        // Keep original filename but note the original size
+        formData.append('originalName', file.name);
+        formData.append('originalSize', file.size.toString());
 
         const res = await fetch('/api/media', {
           method: 'POST',
@@ -132,6 +177,7 @@ export function LeftSidebar() {
       setUploadError('Upload failed. Please try again.');
     } finally {
       setIsUploadingMedia(false);
+      setCompressionStatus(null);
     }
   }, [user?.id, addMediaAsset, setIsUploadingMedia]);
 
@@ -230,10 +276,19 @@ export function LeftSidebar() {
             )}
             <div>
               <p className="text-sm font-medium">
-                {isUploadingMedia ? 'Uploading...' : 'Upload Media'}
+                {isUploadingMedia 
+                  ? (compressionStatus || 'Processing...') 
+                  : 'Upload Media'}
               </p>
               <p className="text-xs text-muted-foreground">
-                Images, SVGs, GIFs • Max 5MB
+                {isUploadingMedia ? (
+                  <span className="flex items-center gap-1">
+                    <Zap className="h-3 w-3" />
+                    Auto-optimizing for best quality
+                  </span>
+                ) : (
+                  'Images, SVGs, GIFs • Max 5MB'
+                )}
               </p>
             </div>
           </button>
@@ -254,6 +309,10 @@ export function LeftSidebar() {
         <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <HardDrive className="h-3 w-3" />
           <span>Storage: {formatFileSize(totalStorage)}</span>
+          <span className="ml-auto flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+            <Zap className="h-3 w-3" />
+            <span>Optimized</span>
+          </span>
         </div>
       </div>
 

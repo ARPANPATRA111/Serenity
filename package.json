@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@vercel/blob": "^2.0.0",
+    "browser-image-compression": "^2.0.2",
     "clsx": "^2.1.1",
     "fabric": "5.3.0",
     "file-saver": "^2.0.5",

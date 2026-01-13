@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Templates collection
+    match /templates/{templateId} {
+      // Anyone can read public templates
+      allow read: if resource.data.isPublic == true;
+      // Users can read their own templates
+      allow read: if isOwner(resource.data.userId);
+      // Users can create templates for themselves
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // Users can update/delete their own templates
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+
+    // Certificates collection
+    match /certificates/{certificateId} {
+      // Anyone can read certificates (for verification)
+      allow read: if true;
+      // Users can create certificates for themselves
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // Users can update/delete their own certificates
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+
+    // User media collection
+    match /user-media/{mediaId} {
+      // Users can read their own media
+      allow read: if isOwner(resource.data.userId);
+      // Users can create media for themselves
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // Users can delete their own media
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Users can read/write their own data
+      allow read, write: if isOwner(userId);
+    }
+
+    // Leads collection (for email capture)
+    match /leads/{leadId} {
+      // Anyone can create a lead (email signup)
+      allow create: if true;
+      // Only the user can read their own lead data
+      allow read: if isAuthenticated() && resource.data.email == request.auth.token.email;
+    }
+  }
+}

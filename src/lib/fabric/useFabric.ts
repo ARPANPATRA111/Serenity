@@ -110,12 +110,12 @@ export function useFabric(
       
       if (templateIdFromUrl) {
         // Loading existing template - clear auto-save and let API load handle it
-        console.log('[useFabric] Template ID in URL, will load from API');
+        // Dev logging removed
         localStorage.removeItem(CANVAS_AUTOSAVE_KEY);
         isLoadingExistingTemplate = true;
       } else {
         // Creating new template - clear any stale auto-save data
-        console.log('[useFabric] No template ID, creating fresh canvas');
+        // Dev logging removed
         localStorage.removeItem(CANVAS_AUTOSAVE_KEY);
         isLoadingExistingTemplate = false;
       }
@@ -195,7 +195,9 @@ export function useFabric(
         borderDashArray: [4, 2],
         selectable: true,
         evented: true,
-      });
+      } as fabric.ITextboxOptions);
+      // Fix browser compatibility for textBaseline
+      (verifyTextbox as any).textBaseline = 'alphabetic';
       // Mark as verification URL - cannot be deleted
       (verifyTextbox as any).isVerificationUrl = true;
       (verifyTextbox as any).isLocked = true;
@@ -453,7 +455,9 @@ export function useFabric(
       fontFamily: 'Arial',
       fill: '#000000',
       ...options,
-    });
+    } as fabric.ITextboxOptions);
+    // Fix browser compatibility for textBaseline
+    (textbox as any).textBaseline = 'alphabetic';
 
     fabricRef.current.add(textbox);
     fabricRef.current.setActiveObject(textbox);
@@ -480,6 +484,8 @@ export function useFabric(
       isPlaceholder: true,
       ...options,
     });
+    // Fix browser compatibility for textBaseline
+    (textbox as any).textBaseline = 'alphabetic';
 
     fabricRef.current.add(textbox);
     fabricRef.current.setActiveObject(textbox);
@@ -660,9 +666,16 @@ export function useFabric(
   const toJSON = useCallback(() => {
     if (!fabricRef.current) return null;
     const json = fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isBoundary', 'isVerificationUrl', 'isLinkElement', 'linkUrl']);
-    // Filter out boundary objects
+    // Filter out boundary objects and fix invalid textBaseline values
     if (json.objects) {
       json.objects = json.objects.filter((obj: any) => !obj.isBoundary);
+      // Fix Fabric.js 'alphabetic' vs 'alphabetical' textBaseline issue
+      json.objects = json.objects.map((obj: any) => {
+        if (obj.textBaseline === 'alphabetical') {
+          obj.textBaseline = 'alphabetic';
+        }
+        return obj;
+      });
     }
     return json;
   }, []);
@@ -679,6 +692,16 @@ export function useFabric(
 
       const data = typeof json === 'string' ? JSON.parse(json) : json;
       
+      // Fix textBaseline issue in loaded templates (Fabric.js uses 'alphabetical' but browsers expect 'alphabetic')
+      if (data.objects) {
+        data.objects = data.objects.map((obj: any) => {
+          if (obj.textBaseline === 'alphabetical') {
+            obj.textBaseline = 'alphabetic';
+          }
+          return obj;
+        });
+      }
+      
       fabricRef.current.loadFromJSON(data, () => {
         if (fabricRef.current) {
           // Re-apply verification URL properties to ensure they persist
@@ -693,6 +716,10 @@ export function useFabric(
                 borderColor: '#dc2626',
                 cornerColor: '#dc2626',
               });
+            }
+            // Fix textBaseline for any remaining objects
+            if (obj.textBaseline === 'alphabetical') {
+              obj.set({ textBaseline: 'alphabetic' });
             }
           });
           
