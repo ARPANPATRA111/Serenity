@@ -259,6 +259,7 @@ export function EditorLayout() {
       <GenerationModal
         isOpen={generationModalOpen}
         onClose={() => setGenerationModalOpen(false)}
+        onSave={handleSave}
       />
     </div>
   );

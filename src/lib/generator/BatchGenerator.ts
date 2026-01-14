@@ -110,6 +110,8 @@ export async function generateBatch(
     certificateIds: [],
   };
 
+  const thumbnailMap: Map<string, string> = new Map();
+
   console.log('[BatchGenerator] Starting batch generation with options:', {
     dataRowsCount: dataRows.length,
     nameField,
@@ -179,18 +181,10 @@ export async function generateBatch(
           await updateQRCode(staticCanvas, certificateId);
         }
         
-        // Update verification URL placeholder (if present)
         updateVerificationUrlPlaceholder(staticCanvas, certificateId);
         
-        // Add verification URL text only if no QR code AND no verification placeholder
-        // (The clickable link is always added to the PDF separately)
-        const hasVerificationText = staticCanvas.getObjects().some(
-          obj => (obj as any).isVerificationUrl || 
-                 (obj.type === 'text' && (obj as fabric.Text).text?.includes('Verify:'))
-        );
-        if (!hasQRCode && !hasVerificationText) {
-          addVerificationURL(staticCanvas, certificateId);
-        }
+        // Collect all clickable links for PDF annotations
+        const clickableLinks = collectClickableLinks(staticCanvas, certificateId);
 
         // Render canvas
         staticCanvas.requestRenderAll();
@@ -221,19 +215,16 @@ export async function generateBatch(
           // Add image to PDF (full page, scaled to fit)
           pdf.addImage(dataURL, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
 
-          // Add clickable link over the verification URL area at the bottom
-          // This makes the existing URL text or QR code clickable
-          const verifyUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/verify/${certificateId}`;
+          const scaleX = pdfWidth / A4_LANDSCAPE.width;
+          const scaleY = pdfHeight / A4_LANDSCAPE.height;
           
-          // Add clickable area at the bottom where the URL/QR is displayed
-          // The link covers the area without adding visible text (text already in image)
-          const linkWidth = hasQRCode ? 150 : 400; // QR code is smaller
-          const linkHeight = hasQRCode ? 150 : 30;
-          const linkX = (pdfWidth - linkWidth) / 2;
-          const linkY = hasQRCode ? pdfHeight - 180 : pdfHeight - 35;
-          
-          // Add clickable link annotation (invisible, just makes the area clickable)
-          pdf.link(linkX, linkY, linkWidth, linkHeight, { url: verifyUrl });
+          for (const link of clickableLinks) {
+            const linkX = link.x * scaleX;
+            const linkY = link.y * scaleY;
+            const linkWidth = link.width * scaleX;
+            const linkHeight = link.height * scaleY;
+            pdf.link(linkX, linkY, linkWidth, linkHeight, { url: link.url });
+          }
 
           // Get PDF blob
           const pdfBlob = pdf.output('blob');
@@ -247,6 +238,14 @@ export async function generateBatch(
           const pngBlob = await dataURLToBlob(dataURL);
           pdfFolder?.file(`${sanitizedName}_${certificateId}.png`, pngBlob);
         }
+
+        // Capture thumbnail NOW while canvas has THIS certificate's content
+        const thumbnailDataURL = staticCanvas.toDataURL({
+          format: 'png',
+          quality: 0.8,
+          multiplier: 1.5, // 1.5x for decent quality but not too large
+        });
+        thumbnailMap.set(certificateId, thumbnailDataURL);
 
         // Create certificate record for Firebase
         const record: Partial<FirebaseCertificateRecord> = {
@@ -297,7 +296,7 @@ export async function generateBatch(
     console.log('[BatchGenerator] Preparing to store certificates, total generated:', result.totalGenerated);
     console.log('[BatchGenerator] Certificate IDs generated:', result.certificateIds);
     
-    // Build certificate records with their images
+    // Build certificate records with their images (using thumbnails captured during generation)
     const certificatesToSave: FirebaseCertificateRecord[] = [];
     
     for (let i = 0; i < dataRows.length; i++) {
@@ -310,12 +309,10 @@ export async function generateBatch(
       
       const recipientName = String(row[nameField] || `Certificate_${i + 1}`);
       
-      // Generate certificate thumbnail (smaller size for storage)
-      const thumbnailDataURL = staticCanvas.toDataURL({
-        format: 'png',
-        quality: 0.8,
-        multiplier: 1.5, // 1.5x for decent quality but not too large
-      });
+      const thumbnailDataURL = thumbnailMap.get(certId) || '';
+      if (!thumbnailDataURL) {
+        console.warn(`[BatchGenerator] No thumbnail found for certificate ${certId}`);
+      }
       
       certificatesToSave.push({
         id: certId,
@@ -419,7 +416,62 @@ function updateTextboxesWithData(
 }
 
 /**
+ * Clickable link info for PDF annotations
+ */
+interface ClickableLinkInfo {
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Collect all clickable links from canvas objects
+ * This includes verification URL placeholders and user-added link elements
+ */
+function collectClickableLinks(
+  canvas: fabric.StaticCanvas,
+  certificateId: string
+): ClickableLinkInfo[] {
+  const links: ClickableLinkInfo[] = [];
+  const verificationURL = `${typeof window !== 'undefined' ? window.location.origin : 'https://serenity.app'}/verify/${certificateId}`;
+  
+  const objects = canvas.getObjects();
+  for (const obj of objects) {
+    // Verification URL placeholder - always links to verification page
+    if ((obj as any).isVerificationUrl) {
+      const bounds = obj.getBoundingRect();
+      links.push({
+        url: verificationURL,
+        x: bounds.left,
+        y: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      });
+    }
+    // User-added clickable link elements
+    else if ((obj as any).isClickableLink && obj.type === 'textbox') {
+      const text = (obj as fabric.Textbox).text || '';
+      // Use the text content as the URL
+      const url = text.startsWith('http') ? text : `https://${text}`;
+      const bounds = obj.getBoundingRect();
+      links.push({
+        url,
+        x: bounds.left,
+        y: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      });
+    }
+  }
+  
+  return links;
+}
+
+/**
  * Update verification URL placeholder with actual URL
+ * Replaces {{VERIFICATION_URL}} with the actual verification link
  */
 function updateVerificationUrlPlaceholder(
   canvas: fabric.StaticCanvas,
@@ -431,9 +483,27 @@ function updateVerificationUrlPlaceholder(
   for (const obj of objects) {
     // Check if this is a verification URL placeholder
     if ((obj as any).isVerificationUrl || 
-        (obj.type === 'text' && (obj as fabric.Text).text?.includes('{{VERIFICATION_URL}}'))) {
-      (obj as fabric.Text).set('text', `Verify: ${verificationURL}`);
-      (obj as any).isVerificationUrl = false; // Clear the flag
+        (obj.type === 'textbox' && (obj as fabric.Textbox).text?.includes('{{VERIFICATION_URL}}'))) {
+      const textbox = obj as fabric.Textbox;
+      
+      // Replace placeholder text with actual URL (no prefix, clean look)
+      textbox.set({
+        text: verificationURL,
+        backgroundColor: 'transparent', // Remove background color for clean output
+        strokeWidth: 0, // Remove border
+        stroke: undefined,
+        strokeDashArray: undefined,
+      });
+      
+      // Ensure textbox is wide enough to display the full URL without wrapping
+      // Use a minimum width based on URL length
+      const minWidth = Math.max(350, verificationURL.length * 6);
+      if (textbox.width && textbox.width < minWidth) {
+        textbox.set({ width: minWidth });
+      }
+      
+      // Keep the flag so we can add PDF link annotation
+      (obj as any).isVerificationUrl = true;
     }
   }
 }
@@ -450,30 +520,6 @@ async function updateQRCode(
   if (qrImage && typeof qrImage.updateVerificationId === 'function') {
     await qrImage.updateVerificationId(certificateId);
   }
-}
-
-/**
- * Add verification URL at the bottom of the certificate
- */
-function addVerificationURL(
-  canvas: fabric.StaticCanvas,
-  certificateId: string
-): void {
-  const verificationURL = `${typeof window !== 'undefined' ? window.location.origin : 'https://serenity.app'}/verify/${certificateId}`;
-  
-  const verificationText = new fabric.Text(`Verify: ${verificationURL}`, {
-    left: A4_LANDSCAPE.width / 2,
-    top: A4_LANDSCAPE.height - 25,
-    originX: 'center',
-    originY: 'center',
-    fontSize: 10,
-    fontFamily: 'Arial',
-    fill: '#666666',
-    selectable: false,
-    evented: false,
-  });
-  
-  canvas.add(verificationText);
 }
 
 /**

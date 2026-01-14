@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
@@ -588,11 +589,20 @@ export default function DashboardPage() {
                   >
                     {/* Thumbnail */}
                     <div className="h-32 relative">
-                      {template.thumbnail?.startsWith('data:') || template.thumbnail?.startsWith('http') ? (
+                      {template.thumbnail?.startsWith('data:') ? (
                         <img 
                           src={template.thumbnail} 
                           alt={template.name}
                           className="w-full h-full object-cover"
+                        />
+                      ) : template.thumbnail?.startsWith('http') ? (
+                        <Image 
+                          src={template.thumbnail} 
+                          alt={template.name}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          priority={index < 3}
                         />
                       ) : (
                         <div className={`w-full h-full bg-gradient-to-br ${template.thumbnail || gradientColors[0]}`} />

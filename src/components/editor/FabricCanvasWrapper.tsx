@@ -158,8 +158,20 @@ export function FabricCanvasWrapper() {
           <span className="text-xs text-muted-foreground bg-background px-2 py-1 rounded">
             A4 Landscape ({A4_LANDSCAPE.width} × {A4_LANDSCAPE.height}px) | 
             <span className="text-red-500 ml-1">Red dashed line = Print boundary</span> | 
-            Zoom: {Math.round(zoomLevel * 100)}% |
-            <span className="text-blue-500 ml-1">Alt+Drag to pan</span>
+            Zoom: {Math.round(zoomLevel * 100)}%
+          </span>
+        </div>
+        
+        {/* Keyboard shortcuts hint */}
+        <div className="absolute -bottom-20 left-0 right-0 text-center">
+          <span className="text-[10px] text-muted-foreground/70 bg-background/50 px-2 py-1 rounded">
+            <span className="font-medium">Shortcuts:</span>{' '}
+            <span className="text-blue-500">Ctrl+S</span> Save |{' '}
+            <span className="text-blue-500">Ctrl+Z</span> Undo |{' '}
+            <span className="text-blue-500">Ctrl+Y</span> Redo |{' '}
+            <span className="text-blue-500">Ctrl+Q</span> Preview |{' '}
+            <span className="text-blue-500">Alt+Drag</span> Pan |{' '}
+            <span className="text-blue-500">Del</span> Delete
           </span>
         </div>
       </div>

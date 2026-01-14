@@ -66,6 +66,7 @@ export interface EditorState {
   setLeftSidebarOpen: (open: boolean) => void;
   setRightSidebarOpen: (open: boolean) => void;
   pushHistory: (json: string) => void;
+  setHistoryState: (canUndo: boolean, canRedo: boolean) => void;
   setClipboard: (obj: fabric.Object | null) => void;
   setTemplateInfo: (id: string | null, name: string) => void;
   setTemplateName: (name: string) => void;
@@ -132,6 +133,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       isDirty: true,
     });
   },
+
+  setHistoryState: (canUndo, canRedo) => set({ canUndo, canRedo }),
 
   setClipboard: (obj) => set({ clipboard: obj }),
 

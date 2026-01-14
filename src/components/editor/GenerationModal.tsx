@@ -21,11 +21,12 @@ import { Download, FileText, Mail, CheckCircle, AlertCircle } from 'lucide-react
 interface GenerationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSave?: () => Promise<void> | void;
 }
 
 type GenerationStep = 'configure' | 'generating' | 'complete';
 
-export function GenerationModal({ isOpen, onClose }: GenerationModalProps) {
+export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProps) {
   const { fabricInstance } = useFabricContext();
   const { dataSource, headers, rows } = useDataSourceStore();
   const { templateId, templateName } = useEditorStore();
@@ -71,6 +72,15 @@ export function GenerationModal({ isOpen, onClose }: GenerationModalProps) {
   const handleGenerate = useCallback(async () => {
     if (!fabricInstance || !dataSource) return;
 
+    // Auto-save the canvas before generating
+    if (onSave) {
+      try {
+        await onSave();
+      } catch (e) {
+        console.warn('Failed to auto-save before generation:', e);
+      }
+    }
+
     const templateJSON = JSON.stringify(fabricInstance.toJSON());
     
     setStep('generating');
@@ -111,12 +121,17 @@ export function GenerationModal({ isOpen, onClose }: GenerationModalProps) {
     dataSource,
     rows,
     nameField,
+    templateId,
+    templateName,
+    user?.id,
+    user?.name,
     isCancelled,
     startGeneration,
     updateProgress,
     addError,
     addGeneratedId,
     complete,
+    onSave,
   ]);
 
   const handleDownload = useCallback(() => {

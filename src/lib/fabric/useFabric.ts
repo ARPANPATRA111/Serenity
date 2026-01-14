@@ -75,6 +75,7 @@ export function useFabric(
     setIsEditingText,
     setZoomLevel,
     pushHistory,
+    setHistoryState,
   } = useEditorStore();
 
   /**
@@ -182,9 +183,8 @@ export function useFabric(
         width: 350,
         fontSize: 9,
         fontFamily: 'Courier New, monospace',
-        fill: '#0066cc',
+        fill: '#666666', // Neutral gray color - will be a clickable link in PDF
         textAlign: 'center',
-        backgroundColor: 'rgba(0, 102, 204, 0.05)',
         // Lock scaling/resizing but allow movement
         lockScalingX: true,
         lockScalingY: true,
@@ -237,15 +237,17 @@ export function useFabric(
       if (!isHistoryActionRef.current) {
         // Inline save to history
         if (fabricRef.current) {
-          const json = JSON.stringify(fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId']));
+          const json = JSON.stringify(fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isVerificationUrl', 'isClickableLink', 'isLocked']));
           historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
           historyRef.current.push(json);
           historyIndexRef.current = historyRef.current.length - 1;
-          if (historyRef.current.length > 50) {
+          if (historyRef.current.length > 3) {
             historyRef.current.shift();
             historyIndexRef.current--;
           }
-          pushHistory(json);
+          const canUndoNow = historyIndexRef.current > 0;
+          const canRedoNow = false; // After a new action, no redo available
+          setHistoryState(canUndoNow, canRedoNow);
           // Auto-save to localStorage
           if (typeof window !== 'undefined') {
             try {
@@ -264,14 +266,48 @@ export function useFabric(
     canvas.on('object:added', debouncedOnModified);
     canvas.on('object:removed', debouncedOnModified);
 
-    // Zoom events - allow zoom between 90% and 300%
+    // Helper function to constrain viewport to printable area
+    const constrainViewport = () => {
+      const vpt = canvas.viewportTransform;
+      if (!vpt) return;
+      
+      const zoom = canvas.getZoom();
+      const canvasEl = canvas.getElement();
+      const canvasWidth = canvasEl?.clientWidth || width;
+      const canvasHeight = canvasEl?.clientHeight || height;
+      
+      // Calculate the scaled dimensions of the printable area
+      const scaledWidth = width * zoom;
+      const scaledHeight = height * zoom;
+      
+      // If zoomed out or at 100%, center the canvas
+      if (zoom <= 1.0) {
+        vpt[4] = (canvasWidth - scaledWidth) / 2;
+        vpt[5] = (canvasHeight - scaledHeight) / 2;
+      } else {
+        // When zoomed in, constrain panning to keep content visible
+        const maxPanX = 0;
+        const minPanX = canvasWidth - scaledWidth;
+        const maxPanY = 0;
+        const minPanY = canvasHeight - scaledHeight;
+        
+        vpt[4] = Math.min(maxPanX, Math.max(minPanX, vpt[4]));
+        vpt[5] = Math.min(maxPanY, Math.max(minPanY, vpt[5]));
+      }
+    };
+
+    // Zoom events - limit zoom to 100%-300% to keep content within print boundary
     canvas.on('mouse:wheel', (opt) => {
       const delta = opt.e.deltaY;
       let zoom = canvas.getZoom();
       zoom *= 0.999 ** delta;
-      // Allow zoom from 90% to 300%
-      zoom = Math.min(Math.max(0.9, zoom), 3.0);
+      // Minimum zoom of 1.0 (100%) ensures content stays within print boundary
+      // Maximum zoom of 3.0 (300%) for detailed editing
+      zoom = Math.min(Math.max(1.0, zoom), 3.0);
       canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
+      // Constrain viewport after zooming
+      constrainViewport();
+      canvas.requestRenderAll();
       setZoomLevel(zoom);
       opt.e.preventDefault();
       opt.e.stopPropagation();
@@ -301,6 +337,7 @@ export function useFabric(
         if (vpt) {
           vpt[4] += evt.clientX - lastPosX;
           vpt[5] += evt.clientY - lastPosY;
+          constrainViewport();
           canvas.requestRenderAll();
           lastPosX = evt.clientX;
           lastPosY = evt.clientY;
@@ -313,8 +350,19 @@ export function useFabric(
         isPanning = false;
         canvas.selection = true;
         canvas.setCursor('default');
+        constrainViewport();
+        canvas.requestRenderAll();
       }
     });
+
+    setTimeout(() => {
+      if (fabricRef.current) {
+        const initialJson = JSON.stringify(fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isVerificationUrl', 'isClickableLink', 'isLocked']));
+        historyRef.current = [initialJson];
+        historyIndexRef.current = 0;
+        setHistoryState(false, false); // Initial state: can't undo or redo
+      }
+    }, 100);
 
     // Notify that canvas is ready
     onReady?.(canvas);
@@ -336,33 +384,6 @@ export function useFabric(
   }, [canvasRef]);
 
   /**
-   * Save current canvas state to history
-   */
-  const saveToHistory = useCallback(() => {
-    if (!fabricRef.current) return;
-
-    const json = JSON.stringify(fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId']));
-    
-    // Remove any redo states
-    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-    
-    // Add new state
-    historyRef.current.push(json);
-    historyIndexRef.current = historyRef.current.length - 1;
-
-    // Keep history manageable (max 50 states)
-    if (historyRef.current.length > 50) {
-      historyRef.current.shift();
-      historyIndexRef.current--;
-    }
-
-    pushHistory(json);
-    
-    // Auto-save to localStorage
-    autoSaveToLocalStorage(json);
-  }, [pushHistory]);
-
-  /**
    * Auto-save canvas state to localStorage
    */
   const autoSaveToLocalStorage = useCallback((json: string) => {
@@ -377,6 +398,33 @@ export function useFabric(
       console.warn('Failed to auto-save canvas:', e);
     }
   }, []);
+
+  /**
+   * Save current canvas state to history
+   */
+  const saveToHistory = useCallback(() => {
+    if (!fabricRef.current) return;
+
+    const json = JSON.stringify(fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isVerificationUrl', 'isClickableLink', 'isLocked']));
+    
+    // Remove any redo states
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    
+    // Add new state
+    historyRef.current.push(json);
+    historyIndexRef.current = historyRef.current.length - 1;
+
+    // Keep history manageable (max 3 states for quick undo/redo)
+    if (historyRef.current.length > 3) {
+      historyRef.current.shift();
+      historyIndexRef.current--;
+    }
+
+    pushHistory(json);
+    
+    // Auto-save to localStorage
+    autoSaveToLocalStorage(json);
+  }, [pushHistory, autoSaveToLocalStorage]);
 
   /**
    * Restore canvas from auto-save in localStorage
@@ -418,11 +466,85 @@ export function useFabric(
     historyIndexRef.current--;
     const state = historyRef.current[historyIndexRef.current];
     
+    // Update store with new history state IMMEDIATELY (before async load)
+    const canUndoNow = historyIndexRef.current > 0;
+    const canRedoNow = historyIndexRef.current < historyRef.current.length - 1;
+    setHistoryState(canUndoNow, canRedoNow);
+    
     fabricRef.current.loadFromJSON(JSON.parse(state), () => {
-      fabricRef.current?.requestRenderAll();
-      isHistoryActionRef.current = false;
+      if (!fabricRef.current) return;
+      
+      // Re-add boundary elements (they are excluded from history via excludeFromExport)
+      const hasOuterShade = fabricRef.current.getObjects().some((obj: any) => obj.isOuterShade);
+      const hasInnerClear = fabricRef.current.getObjects().some((obj: any) => obj.isInnerClear);
+      const hasBoundaryRect = fabricRef.current.getObjects().some((obj: any) => obj.isBoundary);
+      
+      if (!hasOuterShade) {
+        const outerShadeRect = new fabric.Rect({
+          left: -50,
+          top: -50,
+          width: width + 100,
+          height: height + 100,
+          fill: 'rgba(220, 38, 38, 0.08)',
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+          objectCaching: false,
+        });
+        (outerShadeRect as any).isOuterShade = true;
+        fabricRef.current.add(outerShadeRect);
+        fabricRef.current.sendToBack(outerShadeRect);
+      }
+      
+      if (!hasInnerClear) {
+        const innerClearRect = new fabric.Rect({
+          left: 0,
+          top: 0,
+          width: width,
+          height: height,
+          fill: backgroundColor,
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+          objectCaching: false,
+        });
+        (innerClearRect as any).isInnerClear = true;
+        fabricRef.current.add(innerClearRect);
+        // Send to back but above outer shade
+        const outerShade = fabricRef.current.getObjects().find((obj: any) => obj.isOuterShade);
+        if (outerShade) {
+          fabricRef.current.sendToBack(innerClearRect);
+          fabricRef.current.sendToBack(outerShade);
+        }
+      }
+      
+      if (!hasBoundaryRect) {
+        const boundaryRect = new fabric.Rect({
+          left: 0,
+          top: 0,
+          width: width,
+          height: height,
+          fill: 'transparent',
+          stroke: '#dc2626',
+          strokeWidth: 2,
+          strokeDashArray: [10, 5],
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+          objectCaching: false,
+        });
+        (boundaryRect as any).isBoundary = true;
+        fabricRef.current.add(boundaryRect);
+      }
+      
+      fabricRef.current.requestRenderAll();
+      
+      // Delay resetting the flag longer than the debounce (300ms) to prevent trailing events
+      setTimeout(() => {
+        isHistoryActionRef.current = false;
+      }, 400);
     });
-  }, []);
+  }, [width, height, backgroundColor, setHistoryState]);
 
   /**
    * Redo the last undone action
@@ -434,11 +556,85 @@ export function useFabric(
     historyIndexRef.current++;
     const state = historyRef.current[historyIndexRef.current];
     
+    // Update store with new history state IMMEDIATELY (before async load)
+    const canUndoNow = historyIndexRef.current > 0;
+    const canRedoNow = historyIndexRef.current < historyRef.current.length - 1;
+    setHistoryState(canUndoNow, canRedoNow);
+    
     fabricRef.current.loadFromJSON(JSON.parse(state), () => {
-      fabricRef.current?.requestRenderAll();
-      isHistoryActionRef.current = false;
+      if (!fabricRef.current) return;
+      
+      // Re-add boundary elements (they are excluded from history via excludeFromExport)
+      const hasOuterShade = fabricRef.current.getObjects().some((obj: any) => obj.isOuterShade);
+      const hasInnerClear = fabricRef.current.getObjects().some((obj: any) => obj.isInnerClear);
+      const hasBoundaryRect = fabricRef.current.getObjects().some((obj: any) => obj.isBoundary);
+      
+      if (!hasOuterShade) {
+        const outerShadeRect = new fabric.Rect({
+          left: -50,
+          top: -50,
+          width: width + 100,
+          height: height + 100,
+          fill: 'rgba(220, 38, 38, 0.08)',
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+          objectCaching: false,
+        });
+        (outerShadeRect as any).isOuterShade = true;
+        fabricRef.current.add(outerShadeRect);
+        fabricRef.current.sendToBack(outerShadeRect);
+      }
+      
+      if (!hasInnerClear) {
+        const innerClearRect = new fabric.Rect({
+          left: 0,
+          top: 0,
+          width: width,
+          height: height,
+          fill: backgroundColor,
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+          objectCaching: false,
+        });
+        (innerClearRect as any).isInnerClear = true;
+        fabricRef.current.add(innerClearRect);
+        // Send to back but above outer shade
+        const outerShade = fabricRef.current.getObjects().find((obj: any) => obj.isOuterShade);
+        if (outerShade) {
+          fabricRef.current.sendToBack(innerClearRect);
+          fabricRef.current.sendToBack(outerShade);
+        }
+      }
+      
+      if (!hasBoundaryRect) {
+        const boundaryRect = new fabric.Rect({
+          left: 0,
+          top: 0,
+          width: width,
+          height: height,
+          fill: 'transparent',
+          stroke: '#dc2626',
+          strokeWidth: 2,
+          strokeDashArray: [10, 5],
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+          objectCaching: false,
+        });
+        (boundaryRect as any).isBoundary = true;
+        fabricRef.current.add(boundaryRect);
+      }
+      
+      fabricRef.current.requestRenderAll();
+      
+      // Delay resetting the flag longer than the debounce (300ms) to prevent trailing events
+      setTimeout(() => {
+        isHistoryActionRef.current = false;
+      }, 400);
     });
-  }, []);
+  }, [width, height, backgroundColor, setHistoryState]);
 
   /**
    * Add a text object to the canvas
@@ -665,7 +861,7 @@ export function useFabric(
    */
   const toJSON = useCallback(() => {
     if (!fabricRef.current) return null;
-    const json = fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isBoundary', 'isVerificationUrl', 'isLinkElement', 'linkUrl']);
+    const json = fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isBoundary', 'isVerificationUrl', 'isClickableLink', 'isLocked']);
     // Filter out boundary objects and fix invalid textBaseline values
     if (json.objects) {
       json.objects = json.objects.filter((obj: any) => !obj.isBoundary);
@@ -706,14 +902,19 @@ export function useFabric(
         if (fabricRef.current) {
           // Re-apply verification URL properties to ensure they persist
           const objects = fabricRef.current.getObjects();
+          let hasVerificationUrl = false;
+          
           objects.forEach((obj: any) => {
             if (obj.isVerificationUrl) {
+              hasVerificationUrl = true;
               obj.set({
                 lockScalingX: true,
                 lockScalingY: true,
+                lockUniScaling: true,
                 hasControls: false,
                 hasBorders: true,
                 borderColor: '#dc2626',
+                borderDashArray: [4, 2],
                 cornerColor: '#dc2626',
               });
             }
@@ -722,6 +923,34 @@ export function useFabric(
               obj.set({ textBaseline: 'alphabetic' });
             }
           });
+          
+          // Add verification URL if not present (for old templates)
+          if (!hasVerificationUrl) {
+            const verifyTextbox = new fabric.Textbox('{{VERIFICATION_URL}}', {
+              left: width / 2,
+              top: height - 25,
+              originX: 'center',
+              originY: 'center',
+              width: 350,
+              fontSize: 9,
+              fontFamily: 'Courier New, monospace',
+              fill: '#666666',
+              textAlign: 'center',
+              lockScalingX: true,
+              lockScalingY: true,
+              lockUniScaling: true,
+              hasControls: false,
+              hasBorders: true,
+              borderColor: '#dc2626',
+              borderDashArray: [4, 2],
+              selectable: true,
+              evented: true,
+            } as fabric.ITextboxOptions);
+            (verifyTextbox as any).textBaseline = 'alphabetic';
+            (verifyTextbox as any).isVerificationUrl = true;
+            (verifyTextbox as any).isLocked = true;
+            fabricRef.current.add(verifyTextbox);
+          }
           
           // Re-add the outer shade rect after loading (it gets removed by loadFromJSON)
           const outerShadeRect = new fabric.Rect({

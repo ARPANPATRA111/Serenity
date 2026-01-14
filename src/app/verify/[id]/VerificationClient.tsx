@@ -108,11 +108,22 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
             {result.certificate.certificateImage && (
               <div className="mb-8 overflow-hidden rounded-xl border border-border shadow-lg">
                 <div className="relative aspect-[1.414/1] w-full bg-muted">
-                  <img
-                    src={result.certificate.certificateImage}
-                    alt={`Certificate for ${result.certificate.recipientName}`}
-                    className="w-full h-full object-contain"
-                  />
+                  {result.certificate.certificateImage.startsWith('data:') ? (
+                    <img
+                      src={result.certificate.certificateImage}
+                      alt={`Certificate for ${result.certificate.recipientName}`}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <Image
+                      src={result.certificate.certificateImage}
+                      alt={`Certificate for ${result.certificate.recipientName}`}
+                      fill
+                      className="object-contain"
+                      sizes="(max-width: 768px) 100vw, 800px"
+                      priority
+                    />
+                  )}
                 </div>
                 <div className="flex items-center justify-between border-t border-border bg-card p-4">
                   <span className="text-sm text-muted-foreground">Certificate Preview</span>

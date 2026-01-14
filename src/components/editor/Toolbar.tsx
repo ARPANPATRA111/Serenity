@@ -15,7 +15,7 @@
  * - SAVE & GENERATE Actions
  */
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore } from '@/store/editorStore';
 import { useDataSourceStore } from '@/store/dataSourceStore';
@@ -135,12 +135,19 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
   
   const [showGrid, setShowGrid] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const { rows } = useDataSourceStore();
+  const [previewOriginalTexts, setPreviewOriginalTexts] = useState<Map<string, string>>(new Map());
+  const { rows, getPreviewRow } = useDataSourceStore();
 
   const toggleRightSidebar = () => {
     const currentState = useEditorStore.getState().rightSidebarOpen;
     useEditorStore.getState().setRightSidebarOpen(!currentState);
   };
+
+  // Refs to hold the latest handlers for keyboard shortcuts
+  const handleUndoRef = useRef<() => void>();
+  const handleRedoRef = useRef<() => void>();
+  const handleDeleteRef = useRef<() => void>();
+  const handleTogglePreviewRef = useRef<() => void>();
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -154,20 +161,25 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
       // Ctrl+Z for Undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
-        if (canUndo) handleUndo();
+        if (canUndo) handleUndoRef.current?.();
       }
 
       // Ctrl+Y for Redo
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault();
-        if (canRedo) handleRedo();
+        if (canRedo) handleRedoRef.current?.();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'q') {
+        e.preventDefault();
+        handleTogglePreviewRef.current?.();
       }
 
       // Del/Backspace for Delete
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Only if canvas is active and not editing text
         if (fabricInstance && selectedObject && !useEditorStore.getState().isEditingText) {
-          handleDelete();
+          handleDeleteRef.current?.();
         }
       }
     };
@@ -251,20 +263,25 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
       reader.readAsDataURL(file);
     };
     input.click();
-  }, [fabricInstance]);
+  }, [fabricInstance, isPreviewMode]);
 
   const handleAddShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line') => {
+    if (isPreviewMode) return;
     fabricInstance?.addShape(type);
     closeDropdowns();
-  }, [fabricInstance]);
+  }, [fabricInstance, isPreviewMode]);
 
   const handleUndo = useCallback(() => {
     fabricInstance?.undo();
   }, [fabricInstance]);
 
+  handleUndoRef.current = handleUndo;
+
   const handleRedo = useCallback(() => {
     fabricInstance?.redo();
   }, [fabricInstance]);
+
+  handleRedoRef.current = handleRedo;
 
   const handleClone = useCallback(() => {
     const canvas = fabricInstance?.getCanvas();
@@ -327,26 +344,126 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
     }
   }, [fabricInstance, pushHistory, isPreviewMode]);
 
+  handleDeleteRef.current = handleDelete;
+
   // Toggle preview mode
   const handleTogglePreview = useCallback(() => {
     const newPreviewState = !isPreviewMode;
-    setPreviewMode(newPreviewState);
-    
-    // When entering preview mode, disable canvas selection
     const canvas = fabricInstance?.getCanvas();
-    if (canvas) {
-      canvas.discardActiveObject();
-      canvas.selection = !newPreviewState;
-      canvas.forEachObject((obj: any) => {
-        // Don't change evented state for boundary elements
+    
+    if (!canvas) {
+      setPreviewMode(newPreviewState);
+      return;
+    }
+    
+    if (newPreviewState) {
+      // Entering preview mode - store original texts and replace with preview data
+      const previewRow = getPreviewRow();
+      const originalTexts = new Map<string, string>();
+      const objects = canvas.getObjects();
+      
+      objects.forEach((obj: any, index: number) => {
+        const objId = `obj_${index}`;
+        const objType = obj.type?.toLowerCase() || '';
+        const isTextObj = objType === 'textbox' || objType === 'variabletextbox' || objType === 'i-text';
+        
+        // Store original texts for variable textboxes (with dynamicKey property)
+        if (isTextObj && obj.dynamicKey) {
+          originalTexts.set(objId, obj.text || '');
+          
+          // Replace with preview data if available
+          if (previewRow && previewRow[obj.dynamicKey] !== undefined) {
+            obj.set('text', String(previewRow[obj.dynamicKey]));
+            // Remove placeholder styling for preview
+            obj.set({
+              strokeWidth: 0,
+              stroke: undefined,
+              strokeDashArray: undefined,
+            });
+          }
+        }
+        // Also check for textboxes with {{placeholder}} pattern but no dynamicKey (manually typed)
+        else if (isTextObj && typeof obj.text === 'string' && obj.text.includes('{{')) {
+          originalTexts.set(objId, obj.text || '');
+          
+          // Replace all {{key}} patterns with preview data
+          if (previewRow) {
+            let newText = obj.text;
+            Object.entries(previewRow).forEach(([dataKey, dataValue]) => {
+              const regex = new RegExp(`\\{\\{${dataKey}\\}\\}`, 'gi');
+              newText = newText.replace(regex, String(dataValue || ''));
+            });
+            if (newText !== obj.text) {
+              obj.set('text', newText);
+            }
+          }
+        }
+        
+        // Handle verification URL placeholder
+        if (obj.isVerificationUrl) {
+          originalTexts.set(`verify_${index}`, obj.text || '');
+          obj.set('text', `${window.location.origin}/verify/preview-id`);
+        }
+        
+        // Disable selection for all non-boundary elements in preview mode
         if (!obj.isBoundary && !obj.isOuterShade && !obj.isInnerClear) {
-          obj.selectable = !newPreviewState;
-          obj.evented = !newPreviewState;
+          obj.selectable = false;
+          obj.evented = false;
         }
       });
-      canvas.requestRenderAll();
+      
+      setPreviewOriginalTexts(originalTexts);
+      canvas.discardActiveObject();
+      canvas.selection = false;
+    } else {
+      // Exiting preview mode - restore original texts
+      const objects = canvas.getObjects();
+      
+      objects.forEach((obj: any, index: number) => {
+        const objId = `obj_${index}`;
+        const originalText = previewOriginalTexts.get(objId);
+        const objType = obj.type?.toLowerCase() || '';
+        const isTextObj = objType === 'textbox' || objType === 'variabletextbox' || objType === 'i-text';
+        
+        // Restore original texts for variable textboxes
+        if (isTextObj && originalText !== undefined) {
+          obj.set('text', originalText);
+          // Restore placeholder styling if it was a placeholder
+          if (obj.dynamicKey || originalText.includes('{{')) {
+            obj.set({
+              strokeWidth: 1,
+              stroke: '#3b82f6',
+              strokeDashArray: [4, 2],
+            });
+          }
+        }
+        
+        // Restore verification URL placeholder
+        if (obj.isVerificationUrl) {
+          const originalVerifyText = previewOriginalTexts.get(`verify_${index}`);
+          if (originalVerifyText !== undefined) {
+            obj.set('text', originalVerifyText);
+          }
+        }
+        
+        // Re-enable selection for non-boundary elements
+        if (!obj.isBoundary && !obj.isOuterShade && !obj.isInnerClear) {
+          obj.selectable = true;
+          obj.evented = true;
+          obj.hoverCursor = 'move'; // Reset cursor
+        }
+      });
+      
+      canvas.selection = true;
+      setPreviewOriginalTexts(new Map());
     }
-  }, [isPreviewMode, setPreviewMode, fabricInstance]);
+    
+    canvas.requestRenderAll();
+    setPreviewMode(newPreviewState);
+  }, [isPreviewMode, setPreviewMode, fabricInstance, getPreviewRow, previewOriginalTexts]);
+
+  // Update ref for keyboard shortcut
+  handleTogglePreviewRef.current = handleTogglePreview;
 
   const handleAlign = useCallback((align: string) => {
     if (isPreviewMode) return;
@@ -383,7 +500,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
     activeObject.setCoords();
     canvas.requestRenderAll();
     closeDropdowns();
-  }, [fabricInstance]);
+  }, [fabricInstance, isPreviewMode]);
 
   const handleBringToFront = useCallback(() => {
     const canvas = fabricInstance?.getCanvas();
