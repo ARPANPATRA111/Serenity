@@ -197,19 +197,21 @@ export function EditorLayout() {
 
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">
-      {/* Top Toolbar */}
-      <Toolbar 
-        onSave={handleSave} 
-        saveStatus={saveStatus}
-        onGenerate={() => setGenerationModalOpen(true)}
-      />
+      {/* Top Toolbar - Scrollable on small screens */}
+      <div className="min-w-0 flex-shrink-0">
+        <Toolbar 
+          onSave={handleSave} 
+          saveStatus={saveStatus}
+          onGenerate={() => setGenerationModalOpen(true)}
+        />
+      </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Sidebar */}
+      <div className="flex flex-1 overflow-hidden relative min-h-0">
+        {/* Left Sidebar - Hidden on small screens */}
         {leftSidebarOpen && (
           <div 
-            className="border-r border-border bg-card z-10 relative"
+            className="hidden md:block border-r border-border bg-card z-10 relative flex-shrink-0"
             style={{ width: leftSidebarWidth }}
           >
              <LeftSidebar />
@@ -240,10 +242,10 @@ export function EditorLayout() {
           </div>
         </div>
 
-        {/* Right Sidebar (Data Sources) */}
+        {/* Right Sidebar (Data Sources) - Hidden on small screens */}
         {rightSidebarOpen && (
           <div 
-            className="border-l border-border bg-card z-10 relative"
+            className="hidden lg:block border-l border-border bg-card z-10 relative flex-shrink-0"
             style={{ width: rightSidebarWidth }}
           >
              {/* Resize Handle */}

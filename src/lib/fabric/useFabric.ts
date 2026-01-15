@@ -945,6 +945,24 @@ export function useFabric(
   }, [width, height]);
 
   /**
+   * Utility function to restore the correct z-order of helper objects
+   * Order should be: outerShade (back) -> innerClear -> boundaryRect -> user objects (front)
+   */
+  const restoreHelperOrder = useCallback(() => {
+    if (!fabricRef.current) return;
+    
+    const canvas = fabricRef.current;
+    const outerShade = canvas.getObjects().find((obj: any) => obj.isOuterShade);
+    const innerClear = canvas.getObjects().find((obj: any) => obj.isInnerClear);
+    const boundaryRect = canvas.getObjects().find((obj: any) => obj.isBoundary);
+    
+    // Send to back in reverse order (last one ends up at the very back)
+    if (boundaryRect) canvas.sendToBack(boundaryRect);
+    if (innerClear) canvas.sendToBack(innerClear);
+    if (outerShade) canvas.sendToBack(outerShade);
+  }, []);
+
+  /**
    * Add a decorative border to the certificate
    */
   const addBorder = useCallback((style: 'simple' | 'double' | 'ornate' | 'gold' | 'corner', color: string = '#d4af37', options?: fabric.IObjectOptions) => {
@@ -953,6 +971,7 @@ export function useFabric(
     const padding = 20;
     const borderWidth = width - padding * 2;
     const borderHeight = height - padding * 2;
+    let result: fabric.Object | null = null;
 
     switch (style) {
       case 'simple':
@@ -967,12 +986,8 @@ export function useFabric(
           ...options,
         });
         fabricRef.current.add(simpleBorder);
-        fabricRef.current.sendToBack(simpleBorder);
-        // Ensure helper rects stay at back
-        const helpers = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
-        helpers.forEach(obj => fabricRef.current?.sendToBack(obj));
-        fabricRef.current.requestRenderAll();
-        return simpleBorder;
+        result = simpleBorder;
+        break;
 
       case 'double':
         const outerBorder = new fabric.Rect({
@@ -1001,14 +1016,10 @@ export function useFabric(
           ...options,
         });
         fabricRef.current.add(borderGroup);
-        fabricRef.current.sendToBack(borderGroup);
-        const helpers2 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
-        helpers2.forEach(obj => fabricRef.current?.sendToBack(obj));
-        fabricRef.current.requestRenderAll();
-        return borderGroup;
+        result = borderGroup;
+        break;
 
       case 'ornate':
-        // Create ornate border with decorative corners
         const ornateOuter = new fabric.Rect({
           left: 0,
           top: 0,
@@ -1033,11 +1044,8 @@ export function useFabric(
           ...options,
         });
         fabricRef.current.add(ornateGroup);
-        fabricRef.current.sendToBack(ornateGroup);
-        const helpers3 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
-        helpers3.forEach(obj => fabricRef.current?.sendToBack(obj));
-        fabricRef.current.requestRenderAll();
-        return ornateGroup;
+        result = ornateGroup;
+        break;
 
       case 'gold':
         const goldBorder = new fabric.Rect({
@@ -1053,18 +1061,13 @@ export function useFabric(
           ...options,
         });
         fabricRef.current.add(goldBorder);
-        fabricRef.current.sendToBack(goldBorder);
-        const helpers4 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
-        helpers4.forEach(obj => fabricRef.current?.sendToBack(obj));
-        fabricRef.current.requestRenderAll();
-        return goldBorder;
+        result = goldBorder;
+        break;
 
       case 'corner':
-        // Corner decorations only
         const cornerSize = 40;
         const corners: fabric.Object[] = [];
         
-        // Top-left corner
         corners.push(new fabric.Path(`M 0 ${cornerSize} L 0 0 L ${cornerSize} 0`, {
           left: padding,
           top: padding,
@@ -1073,7 +1076,6 @@ export function useFabric(
           fill: 'transparent',
         }));
         
-        // Top-right corner
         corners.push(new fabric.Path(`M 0 0 L ${cornerSize} 0 L ${cornerSize} ${cornerSize}`, {
           left: padding + borderWidth - cornerSize,
           top: padding,
@@ -1082,7 +1084,6 @@ export function useFabric(
           fill: 'transparent',
         }));
         
-        // Bottom-left corner
         corners.push(new fabric.Path(`M 0 0 L 0 ${cornerSize} L ${cornerSize} ${cornerSize}`, {
           left: padding,
           top: padding + borderHeight - cornerSize,
@@ -1091,7 +1092,6 @@ export function useFabric(
           fill: 'transparent',
         }));
         
-        // Bottom-right corner
         corners.push(new fabric.Path(`M ${cornerSize} 0 L ${cornerSize} ${cornerSize} L 0 ${cornerSize}`, {
           left: padding + borderWidth - cornerSize,
           top: padding + borderHeight - cornerSize,
@@ -1101,19 +1101,26 @@ export function useFabric(
         }));
         
         const cornerGroup = new fabric.Group(corners, {
+          left: padding,
+          top: padding,
           ...options,
         });
         fabricRef.current.add(cornerGroup);
-        fabricRef.current.sendToBack(cornerGroup);
-        const helpers5 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
-        helpers5.forEach(obj => fabricRef.current?.sendToBack(obj));
-        fabricRef.current.requestRenderAll();
-        return cornerGroup;
-
-      default:
-        return null;
+        result = cornerGroup;
+        break;
     }
-  }, [width, height]);
+
+    // Send the border to back (just above helper objects)
+    if (result) {
+      fabricRef.current.sendToBack(result);
+    }
+    
+    // Restore correct order of helper objects
+    restoreHelperOrder();
+    
+    fabricRef.current.requestRenderAll();
+    return result;
+  }, [width, height, restoreHelperOrder]);
 
   /**
    * Delete selected objects

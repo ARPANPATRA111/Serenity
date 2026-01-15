@@ -40,6 +40,9 @@ export function registerVariableTextbox(): void {
       // Set custom properties
       this.dynamicKey = options?.dynamicKey || '';
       this.isPlaceholder = options?.isPlaceholder ?? !!this.dynamicKey;
+      
+      // Fix browser compatibility for textBaseline
+      this.textBaseline = 'alphabetic';
 
       // Apply placeholder styling if dynamicKey is set
       if (this.dynamicKey) {

@@ -8,8 +8,6 @@
  * - Object manipulation (copy, delete, order)
  * - Alignment and distribution tools
  * - History (undo/redo)
- * - Zoom controls
- * - Grid toggle
  * - Preview mode
  * - Export/Import
  * - SAVE & GENERATE Actions
@@ -32,8 +30,6 @@ import {
   Redo2,
   ArrowUpToLine,
   ArrowDownToLine,
-  ZoomIn,
-  ZoomOut,
   Download,
   Upload,
   AlignHorizontalJustifyCenter,
@@ -43,7 +39,6 @@ import {
   AlignStartVertical,
   AlignEndVertical,
   AlignCenterVertical,
-  Grid3X3,
   FlipHorizontal,
   FlipVertical,
   RotateCcw,
@@ -80,9 +75,33 @@ interface ToolbarDropdownProps {
 }
 
 function ToolbarDropdown({ trigger, children, isOpen, onToggle }: ToolbarDropdownProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      
+      // Position below the trigger
+      let top = rect.bottom + 4;
+      let left = rect.left;
+      
+      // If dropdown would go off the right edge, align to right side of trigger
+      if (left + 180 > viewportWidth) {
+        left = rect.right - 180;
+      }
+      
+      // Ensure minimum left position
+      if (left < 8) left = 8;
+      
+      setDropdownPosition({ top, left });
+    }
+  }, [isOpen]);
+
   return (
     <div className="relative">
-      <button onClick={onToggle} className="toolbar-button flex items-center gap-1">
+      <button ref={triggerRef} onClick={onToggle} className="toolbar-button flex items-center gap-1">
         {trigger}
         <ChevronDown className="h-3 w-3" />
       </button>
@@ -90,7 +109,8 @@ function ToolbarDropdown({ trigger, children, isOpen, onToggle }: ToolbarDropdow
         <>
           <div className="fixed inset-0 z-40" onClick={onToggle} />
           <div 
-            className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-card shadow-lg p-1"
+            className="fixed z-[100] min-w-[180px] rounded-lg border border-border bg-card shadow-lg p-1"
+            style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -138,7 +158,6 @@ interface ToolbarProps {
 export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: ToolbarProps) {
   const { fabricInstance } = useFabricContext();
   const { 
-    zoomLevel, setZoomLevel, 
     canUndo, canRedo, 
     selectedObject,
     templateName, setTemplateName,
@@ -147,7 +166,6 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
     setPreviewMode,
   } = useEditorStore();
   
-  const [showGrid, setShowGrid] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [previewOriginalTexts, setPreviewOriginalTexts] = useState<Map<string, string>>(new Map());
   const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#ffffff');
@@ -604,15 +622,6 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
     }
   }, [fabricInstance]);
 
-  const handleToggleGrid = useCallback(() => {
-    setShowGrid(!showGrid);
-    // TODO: Implement grid rendering in fabricInstance
-  }, [showGrid]);
-
-  const handleZoomIn = () => setZoomLevel(zoomLevel * 1.1);
-  const handleZoomOut = () => setZoomLevel(zoomLevel / 1.1);
-  const handleZoomReset = () => setZoomLevel(1);
-
   // Export as JSON
   const handleExport = useCallback(() => {
     const canvas = fabricInstance?.getCanvas();
@@ -671,329 +680,225 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
   const isVerificationSelected = selectedObject && (selectedObject as any).isVerificationUrl;
 
   return (
-    <div className={`toolbar ${isPreviewMode ? 'bg-amber-500/10 border-amber-500/30' : ''}`}>
-      {/* Preview Mode Indicator */}
-      {isPreviewMode && (
-        <div className="flex items-center gap-2 mr-4 px-3 py-1 bg-amber-500/20 rounded-full">
-          <Eye className="h-4 w-4 text-amber-600" />
-          <span className="text-xs font-semibold text-amber-600">Preview Mode</span>
+    <div className={`flex flex-col ${isPreviewMode ? 'bg-amber-500/10' : ''}`}>
+      {/* Primary Toolbar Row - Always visible */}
+      <div className="toolbar border-b border-border">
+        {/* Preview Mode Indicator */}
+        {isPreviewMode && (
+          <div className="flex items-center gap-1 mr-2 px-2 py-0.5 bg-amber-500/20 rounded-full flex-shrink-0">
+            <Eye className="h-3 w-3 text-amber-600" />
+            <span className="text-xs font-semibold text-amber-600 hidden sm:inline">Preview</span>
+          </div>
+        )}
+        
+        {/* Home Button */}
+        <Link href="/dashboard" className="toolbar-button text-muted-foreground flex-shrink-0" title="Back to Dashboard">
+          <ChevronLeft />
+        </Link>
+        
+        {/* Template Name Input */}
+        <div className="flex flex-col justify-center min-w-0 flex-shrink mx-1 sm:mx-2">
+           <input 
+             type="text" 
+             value={templateName} 
+             onChange={(e) => setTemplateName(e.target.value)}
+             disabled={isPreviewMode}
+             className="h-5 sm:h-6 min-w-12 sm:min-w-20 w-full max-w-24 sm:max-w-48 rounded border-transparent bg-transparent px-1 text-xs sm:text-sm font-semibold hover:border-border hover:bg-muted focus:border-primary focus:bg-background focus:outline-none disabled:opacity-50"
+             placeholder="Untitled"
+           />
         </div>
-      )}
-      
-      {/* Home Button */}
-      <Link href="/dashboard" className="toolbar-button text-muted-foreground mr-2" title="Back to Dashboard">
-        <ChevronLeft className="h-5 w-5" />
-      </Link>
-      
-      {/* Template Name Input */}
-      <div className="mr-4 flex flex-col justify-center">
-         <input 
-           type="text" 
-           value={templateName} 
-           onChange={(e) => setTemplateName(e.target.value)}
-           disabled={isPreviewMode}
-           className="h-6 w-48 rounded border-transparent bg-transparent px-1 text-sm font-semibold hover:border-border hover:bg-muted focus:border-primary focus:bg-background focus:outline-none disabled:opacity-50"
-           placeholder="Untitled Template"
-         />
-      </div>
 
-      <div className="h-6 w-px bg-border mx-2" />
+        <div className="toolbar-divider" />
 
-      {/* Text Tools */}
-      <ToolbarDropdown
-        trigger={<Type className="h-5 w-5" />}
-        isOpen={openDropdown === 'text'}
-        onToggle={() => toggleDropdown('text')}
-      >
-        <DropdownItem icon={Type} label="Body Text" onClick={handleAddText} disabled={isPreviewMode} />
-        <DropdownItem icon={Type} label="Heading" onClick={handleAddHeading} disabled={isPreviewMode} />
-        <DropdownItem icon={Type} label="Subheading" onClick={handleAddSubheading} disabled={isPreviewMode} />
-      </ToolbarDropdown>
-
-      <button onClick={handleAddImage} className="toolbar-button" title="Add Image" disabled={isPreviewMode}>
-        <ImageIcon className="h-5 w-5" />
-      </button>
-
-      {/* Add Link Button */}
-      <button onClick={handleAddLink} className="toolbar-button" title="Add Clickable Link" disabled={isPreviewMode}>
-        <Link2 className="h-5 w-5" />
-      </button>
-
-      <div className="toolbar-divider" />
-
-      {/* Shapes */}
-      <ToolbarDropdown
-        trigger={<Square className="h-5 w-5" />}
-        isOpen={openDropdown === 'shapes'}
-        onToggle={() => toggleDropdown('shapes')}
-      >
-        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Basic Shapes</div>
-        <DropdownItem icon={Square} label="Rectangle" onClick={() => handleAddShape('rect')} disabled={isPreviewMode} />
-        <DropdownItem icon={RectangleHorizontal} label="Rounded Rectangle" onClick={() => handleAddShape('roundedRect')} disabled={isPreviewMode} />
-        <DropdownItem icon={Circle} label="Circle" onClick={() => handleAddShape('circle')} disabled={isPreviewMode} />
-        <DropdownItem icon={Triangle} label="Triangle" onClick={() => handleAddShape('triangle')} disabled={isPreviewMode} />
-        <DropdownItem icon={Diamond} label="Diamond" onClick={() => handleAddShape('diamond')} disabled={isPreviewMode} />
-        <div className="my-1 border-t border-border" />
-        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Polygons</div>
-        <DropdownItem icon={Pentagon} label="Pentagon" onClick={() => handleAddShape('pentagon')} disabled={isPreviewMode} />
-        <DropdownItem icon={Hexagon} label="Hexagon" onClick={() => handleAddShape('hexagon')} disabled={isPreviewMode} />
-        <DropdownItem icon={Star} label="Star" onClick={() => handleAddShape('star')} disabled={isPreviewMode} />
-        <DropdownItem icon={ArrowRight} label="Arrow Shape" onClick={() => handleAddShape('arrow')} disabled={isPreviewMode} />
-        <div className="my-1 border-t border-border" />
-        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Lines</div>
-        <DropdownItem icon={Minus} label="Solid Line" onClick={() => handleAddShape('line')} disabled={isPreviewMode} />
-        <DropdownItem icon={MoreHorizontal} label="Dashed Line" onClick={() => handleAddShape('dashedLine')} disabled={isPreviewMode} />
-        <DropdownItem icon={ArrowRight} label="Arrow Line" onClick={() => handleAddShape('arrowLine')} disabled={isPreviewMode} />
-      </ToolbarDropdown>
-
-      {/* Borders */}
-      <ToolbarDropdown
-        trigger={<Frame className="h-5 w-5" />}
-        isOpen={openDropdown === 'borders'}
-        onToggle={() => toggleDropdown('borders')}
-      >
-        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Certificate Borders</div>
-        <div className="px-2 py-2 flex items-center gap-2 border-b border-border mb-1">
-          <span className="text-xs text-muted-foreground">Color:</span>
-          <ColorPicker
-            value={borderColor}
-            onChange={setBorderColor}
-            showLabel={false}
-            size="sm"
-          />
-          <span className="text-xs text-muted-foreground flex-1 truncate">{borderColor}</span>
-        </div>
-        <DropdownItem icon={Square} label="Simple Border" onClick={() => handleAddBorder('simple')} disabled={isPreviewMode} />
-        <DropdownItem icon={Square} label="Double Border" onClick={() => handleAddBorder('double')} disabled={isPreviewMode} />
-        <DropdownItem icon={Square} label="Ornate Border" onClick={() => handleAddBorder('ornate')} disabled={isPreviewMode} />
-        <DropdownItem icon={Square} label="Gold Frame" onClick={() => handleAddBorder('gold')} disabled={isPreviewMode} />
-        <DropdownItem icon={Square} label="Corner Only" onClick={() => handleAddBorder('corner')} disabled={isPreviewMode} />
-      </ToolbarDropdown>
-
-      {/* Background Color */}
-      <div className="flex items-center gap-1 mx-1" title="Canvas Background Color">
-        <ColorPicker
-          value={canvasBackgroundColor}
-          onChange={handleBackgroundColorChange}
-          label="Background"
-          showLabel={false}
-          size="sm"
-        />
-      </div>
-
-      <div className="toolbar-divider" />
-
-      {/* History */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={handleUndo}
-          className="toolbar-button"
-          title="Undo (Ctrl+Z)"
-          disabled={!canUndo || isPreviewMode}
+        {/* Core Tools - Always visible */}
+        <ToolbarDropdown
+          trigger={<Type />}
+          isOpen={openDropdown === 'text'}
+          onToggle={() => toggleDropdown('text')}
         >
-          <Undo2 className="h-5 w-5" />
+          <DropdownItem icon={Type} label="Body Text" onClick={handleAddText} disabled={isPreviewMode} />
+          <DropdownItem icon={Type} label="Heading" onClick={handleAddHeading} disabled={isPreviewMode} />
+          <DropdownItem icon={Type} label="Subheading" onClick={handleAddSubheading} disabled={isPreviewMode} />
+        </ToolbarDropdown>
+
+        <button onClick={handleAddImage} className="toolbar-button" title="Add Image" disabled={isPreviewMode}>
+          <ImageIcon />
         </button>
-        <button
-          onClick={handleRedo}
-          className="toolbar-button"
-          title="Redo (Ctrl+Y)"
-          disabled={!canRedo || isPreviewMode}
+
+        <ToolbarDropdown
+          trigger={<Square />}
+          isOpen={openDropdown === 'shapes'}
+          onToggle={() => toggleDropdown('shapes')}
         >
-          <Redo2 className="h-5 w-5" />
+          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Basic Shapes</div>
+          <DropdownItem icon={Square} label="Rectangle" onClick={() => handleAddShape('rect')} disabled={isPreviewMode} />
+          <DropdownItem icon={RectangleHorizontal} label="Rounded Rectangle" onClick={() => handleAddShape('roundedRect')} disabled={isPreviewMode} />
+          <DropdownItem icon={Circle} label="Circle" onClick={() => handleAddShape('circle')} disabled={isPreviewMode} />
+          <DropdownItem icon={Triangle} label="Triangle" onClick={() => handleAddShape('triangle')} disabled={isPreviewMode} />
+          <div className="my-1 border-t border-border" />
+          <DropdownItem icon={Minus} label="Line" onClick={() => handleAddShape('line')} disabled={isPreviewMode} />
+          <DropdownItem icon={ArrowRight} label="Arrow" onClick={() => handleAddShape('arrowLine')} disabled={isPreviewMode} />
+        </ToolbarDropdown>
+
+        <div className="toolbar-divider" />
+
+        {/* History */}
+        <button onClick={handleUndo} className="toolbar-button" title="Undo" disabled={!canUndo || isPreviewMode}>
+          <Undo2 />
         </button>
-      </div>
+        <button onClick={handleRedo} className="toolbar-button" title="Redo" disabled={!canRedo || isPreviewMode}>
+          <Redo2 />
+        </button>
 
-      <div className="toolbar-divider" />
+        <div className="toolbar-divider" />
 
-      {/* Object Operations */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={handleClone}
-          className="toolbar-button"
-          title="Duplicate (Ctrl+D)"
-          disabled={!isObjectSelected || isPreviewMode}
-        >
-          <Copy className="h-5 w-5" />
+        {/* Object Operations */}
+        <button onClick={handleClone} className="toolbar-button" title="Duplicate" disabled={!isObjectSelected || isPreviewMode}>
+          <Copy />
         </button>
         <button
           onClick={handleDelete}
-          className={`toolbar-button ${isVerificationSelected ? 'opacity-30 cursor-not-allowed' : ''}`}
-          title={isVerificationSelected ? "Cannot delete Verification URL" : "Delete (Del)"}
+          className={`toolbar-button ${isVerificationSelected ? 'opacity-30' : ''}`}
+          title="Delete"
           disabled={!isObjectSelected || isPreviewMode}
         >
-          <Trash2 className="h-5 w-5" />
+          <Trash2 />
         </button>
-      </div>
 
-      <div className="toolbar-divider" />
+        {/* Spacer */}
+        <div className="flex-1 min-w-2" />
 
-      {/* Alignment */}
-      <ToolbarDropdown
-        trigger={<AlignHorizontalJustifyCenter className="h-5 w-5" />}
-        isOpen={openDropdown === 'align'}
-        onToggle={() => toggleDropdown('align')}
-      >
-        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Horizontal</div>
-        <DropdownItem icon={AlignLeft} label="Align Left" onClick={() => handleAlign('left')} disabled={!isObjectSelected || isPreviewMode} />
-        <DropdownItem icon={AlignCenterHorizontal} label="Center Horizontal" onClick={() => handleAlign('center')} disabled={!isObjectSelected || isPreviewMode} />
-        <DropdownItem icon={AlignRight} label="Align Right" onClick={() => handleAlign('right')} disabled={!isObjectSelected || isPreviewMode} />
-        <div className="my-1 border-t border-border" />
-        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Vertical</div>
-        <DropdownItem icon={AlignStartVertical} label="Align Top" onClick={() => handleAlign('top')} disabled={!isObjectSelected || isPreviewMode} />
-        <DropdownItem icon={AlignCenterVertical} label="Center Vertical" onClick={() => handleAlign('middle')} disabled={!isObjectSelected || isPreviewMode} />
-        <DropdownItem icon={AlignEndVertical} label="Align Bottom" onClick={() => handleAlign('bottom')} disabled={!isObjectSelected || isPreviewMode} />
-      </ToolbarDropdown>
-
-      {/* Layer Operations */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={handleBringToFront}
-          className="toolbar-button"
-          title="Bring to Front"
-          disabled={!isObjectSelected || isPreviewMode}
-        >
-          <ArrowUpToLine className="h-5 w-5" />
-        </button>
-        <button
-          onClick={handleSendToBack}
-          className="toolbar-button"
-          title="Send to Back"
-          disabled={!isObjectSelected}
-        >
-          <ArrowDownToLine className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="toolbar-divider" />
-
-      {/* Transform */}
-      <ToolbarDropdown
-        trigger={<FlipHorizontal className="h-5 w-5" />}
-        isOpen={openDropdown === 'transform'}
-        onToggle={() => toggleDropdown('transform')}
-      >
-        <DropdownItem icon={FlipHorizontal} label="Flip Horizontal" onClick={handleFlipHorizontal} disabled={!isObjectSelected} />
-        <DropdownItem icon={FlipVertical} label="Flip Vertical" onClick={handleFlipVertical} disabled={!isObjectSelected} />
-        <div className="my-1 border-t border-border" />
-        <DropdownItem icon={RotateCcw} label="Rotate Left 90°" onClick={() => handleRotate(-90)} disabled={!isObjectSelected} />
-        <DropdownItem icon={RotateCw} label="Rotate Right 90°" onClick={() => handleRotate(90)} disabled={!isObjectSelected} />
-        <div className="my-1 border-t border-border" />
-        <DropdownItem 
-          icon={isLocked ? Unlock : Lock} 
-          label={isLocked ? "Unlock Object" : "Lock Object"} 
-          onClick={handleToggleLock} 
-          disabled={!isObjectSelected}
-        />
-      </ToolbarDropdown>
-
-      <div className="toolbar-divider" />
-
-      {/* View Options */}
-      <button
-        onClick={handleToggleGrid}
-        className={`toolbar-button ${showGrid ? 'bg-primary/20 text-primary' : ''}`}
-        title="Toggle Grid"
-      >
-        <Grid3X3 className="h-5 w-5" />
-      </button>
-
-      {/* Zoom */}
-      <div className="flex items-center gap-1">
-        <button onClick={handleZoomOut} className="toolbar-button" title="Zoom Out">
-          <ZoomOut className="h-5 w-5" />
-        </button>
-        <button 
-          onClick={handleZoomReset}
-          className="w-14 text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-          title="Reset Zoom"
-        >
-          {Math.round(zoomLevel * 100)}%
-        </button>
-        <button onClick={handleZoomIn} className="toolbar-button" title="Zoom In">
-          <ZoomIn className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="flex-1" />
-
-      {/* PREVIEW, SAVE & GENERATE Actions */}
-      <div className="flex items-center gap-2 mr-2">
-         {saveStatus === 'error' && (
-           <span className="text-xs text-destructive mr-2">Save failed</span>
-         )}
-         {saveStatus === 'saved' && (
-           <span className="text-xs text-green-600 mr-2">Saved</span>
-         )}
-         
-         {/* Preview Toggle Button */}
-         <button
-           onClick={handleTogglePreview}
-           title={isPreviewMode ? "Exit Preview Mode" : "Preview Certificate"}
-           className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-             isPreviewMode 
-               ? 'bg-amber-500 text-white hover:bg-amber-600' 
-               : 'bg-white border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-           }`}
-         >
-            {isPreviewMode ? (
-              <>
-                <EyeOff className="h-4 w-4" />
-                <span className="hidden xl:inline">Exit Preview</span>
-              </>
-            ) : (
-              <>
-                <Eye className="h-4 w-4" />
-                <span className="hidden xl:inline">Preview</span>
-              </>
-            )}
-         </button>
-         
-         <button
-           onClick={toggleRightSidebar}
-           title="Toggle Data Source"
-           className="flex items-center gap-2 rounded-md bg-white border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-         >
-            <Database className="h-4 w-4" />
-            <span className="hidden xl:inline">Data</span>
-         </button>
-
-         <button
-           onClick={() => onSave?.()}
-           disabled={saveStatus === 'saving' || isPreviewMode}
-           className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
-         >
-           {saveStatus === 'saving' ? (
-             <Loader2 className="h-4 w-4 animate-spin" />
-           ) : (
-             <Save className="h-4 w-4" />
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+           {saveStatus === 'saved' && (
+             <span className="text-xs text-green-600 hidden sm:block">✓</span>
            )}
-           Save
-         </button>
+           
+           <button
+             onClick={handleTogglePreview}
+             title={isPreviewMode ? "Exit Preview" : "Preview"}
+             className={`toolbar-button ${isPreviewMode ? 'bg-amber-500 text-white' : ''}`}
+           >
+              {isPreviewMode ? <EyeOff /> : <Eye />}
+           </button>
+           
+           <button onClick={toggleRightSidebar} className="toolbar-button" title="Data Source">
+              <Database />
+           </button>
 
-         <button
-           onClick={onGenerate}
-           disabled={rows.length === 0 || isPreviewMode}
-           title={rows.length === 0 ? "Connect a data source first" : "Generate Certificates"}
-           className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-         >
-           <Wand2 className="h-4 w-4" />
-           Generate
-         </button>
+           <button
+             onClick={() => onSave?.()}
+             disabled={saveStatus === 'saving' || isPreviewMode}
+             className="flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 flex-shrink-0"
+           >
+             {saveStatus === 'saving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+             <span className="hidden sm:inline">Save</span>
+           </button>
+
+           <button
+             onClick={onGenerate}
+             disabled={rows.length === 0 || isPreviewMode}
+             title={rows.length === 0 ? "Connect data source" : "Generate"}
+             className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex-shrink-0"
+           >
+             <Wand2 className="h-3.5 w-3.5" />
+             <span className="hidden sm:inline">Generate</span>
+           </button>
+
+           <ToolbarDropdown
+             trigger={<Download />}
+             isOpen={openDropdown === 'export'}
+             onToggle={() => toggleDropdown('export')}
+           >
+             <DropdownItem icon={Download} label="Export JSON" onClick={handleExport} />
+             <DropdownItem icon={ImageIcon} label="Export PNG" onClick={handleExportImage} />
+             <div className="my-1 border-t border-border" />
+             <DropdownItem icon={Upload} label="Import" onClick={handleImport} disabled={isPreviewMode} />
+           </ToolbarDropdown>
+        </div>
       </div>
 
-      <div className="h-6 w-px bg-border mx-2" />
+      {/* Secondary Toolbar Row - Additional tools */}
+      <div className="toolbar border-b border-border bg-muted/30">
+        {/* Link */}
+        <button onClick={handleAddLink} className="toolbar-button" title="Add Link" disabled={isPreviewMode}>
+          <Link2 />
+        </button>
 
-      {/* Import/Export */}
-      <ToolbarDropdown
-        trigger={<Download className="h-5 w-5" />}
-        isOpen={openDropdown === 'export'}
-        onToggle={() => toggleDropdown('export')}
-      >
-        <DropdownItem icon={Download} label="Export Template (JSON)" onClick={handleExport} />
-        <DropdownItem icon={ImageIcon} label="Export as Image (PNG)" onClick={handleExportImage} />
-        <div className="my-1 border-t border-border" />
-        <DropdownItem icon={Upload} label="Import Template" onClick={handleImport} disabled={isPreviewMode} />
-      </ToolbarDropdown>
+        {/* Borders */}
+        <ToolbarDropdown
+          trigger={<Frame />}
+          isOpen={openDropdown === 'borders'}
+          onToggle={() => toggleDropdown('borders')}
+        >
+          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Borders</div>
+          <div className="px-2 py-2 flex items-center gap-2 border-b border-border mb-1">
+            <span className="text-xs text-muted-foreground">Color:</span>
+            <ColorPicker value={borderColor} onChange={setBorderColor} showLabel={false} size="sm" />
+          </div>
+          <DropdownItem icon={Square} label="Simple" onClick={() => handleAddBorder('simple')} disabled={isPreviewMode} />
+          <DropdownItem icon={Square} label="Double" onClick={() => handleAddBorder('double')} disabled={isPreviewMode} />
+          <DropdownItem icon={Square} label="Ornate" onClick={() => handleAddBorder('ornate')} disabled={isPreviewMode} />
+          <DropdownItem icon={Square} label="Gold Frame" onClick={() => handleAddBorder('gold')} disabled={isPreviewMode} />
+        </ToolbarDropdown>
+
+        {/* Background Color */}
+        <div className="flex items-center" title="Background Color">
+          <ColorPicker
+            value={canvasBackgroundColor}
+            onChange={handleBackgroundColorChange}
+            showLabel={false}
+            size="sm"
+          />
+        </div>
+
+        <div className="toolbar-divider" />
+
+        {/* Alignment */}
+        <ToolbarDropdown
+          trigger={<AlignHorizontalJustifyCenter />}
+          isOpen={openDropdown === 'align'}
+          onToggle={() => toggleDropdown('align')}
+        >
+          <DropdownItem icon={AlignLeft} label="Align Left" onClick={() => handleAlign('left')} disabled={!isObjectSelected} />
+          <DropdownItem icon={AlignCenterHorizontal} label="Center H" onClick={() => handleAlign('center')} disabled={!isObjectSelected} />
+          <DropdownItem icon={AlignRight} label="Align Right" onClick={() => handleAlign('right')} disabled={!isObjectSelected} />
+          <div className="my-1 border-t border-border" />
+          <DropdownItem icon={AlignStartVertical} label="Align Top" onClick={() => handleAlign('top')} disabled={!isObjectSelected} />
+          <DropdownItem icon={AlignCenterVertical} label="Center V" onClick={() => handleAlign('middle')} disabled={!isObjectSelected} />
+          <DropdownItem icon={AlignEndVertical} label="Align Bottom" onClick={() => handleAlign('bottom')} disabled={!isObjectSelected} />
+        </ToolbarDropdown>
+
+        {/* Layer Operations */}
+        <button onClick={handleBringToFront} className="toolbar-button" title="Bring to Front" disabled={!isObjectSelected}>
+          <ArrowUpToLine />
+        </button>
+        <button onClick={handleSendToBack} className="toolbar-button" title="Send to Back" disabled={!isObjectSelected}>
+          <ArrowDownToLine />
+        </button>
+
+        <div className="toolbar-divider" />
+
+        {/* Transform */}
+        <ToolbarDropdown
+          trigger={<FlipHorizontal />}
+          isOpen={openDropdown === 'transform'}
+          onToggle={() => toggleDropdown('transform')}
+        >
+          <DropdownItem icon={FlipHorizontal} label="Flip H" onClick={handleFlipHorizontal} disabled={!isObjectSelected} />
+          <DropdownItem icon={FlipVertical} label="Flip V" onClick={handleFlipVertical} disabled={!isObjectSelected} />
+          <div className="my-1 border-t border-border" />
+          <DropdownItem icon={RotateCcw} label="Rotate -90°" onClick={() => handleRotate(-90)} disabled={!isObjectSelected} />
+          <DropdownItem icon={RotateCw} label="Rotate +90°" onClick={() => handleRotate(90)} disabled={!isObjectSelected} />
+          <div className="my-1 border-t border-border" />
+          <DropdownItem 
+            icon={isLocked ? Unlock : Lock} 
+            label={isLocked ? "Unlock" : "Lock"} 
+            onClick={handleToggleLock} 
+            disabled={!isObjectSelected}
+          />
+        </ToolbarDropdown>
+      </div>
     </div>
   );
 }
