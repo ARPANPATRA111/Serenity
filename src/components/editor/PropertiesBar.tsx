@@ -6,6 +6,7 @@ import { useFabricContext } from './FabricContext';
 import { isVariableTextbox } from '@/lib/fabric';
 import { getAllFonts, loadGoogleFont, isGoogleFont, loadAllGoogleFonts } from '@/lib/fonts/googleFonts';
 import { Input } from '@/components/ui/Input';
+import { ColorPicker } from '@/components/ui/ColorPicker';
 import {
   AlignLeft,
   AlignCenter,
@@ -98,6 +99,9 @@ export function PropertiesBar() {
   const isText = selectedObjectType === 'textbox' || selectedObjectType === 'variableTextbox' || selectedObjectType === 'i-text';
   const isImage = selectedObjectType === 'image';
   const isQRCode = isImage && !!object.verificationId;
+  const isLine = selectedObjectType === 'line';
+  const isShape = selectedObjectType === 'rect' || selectedObjectType === 'circle' || selectedObjectType === 'triangle' || selectedObjectType === 'polygon' || selectedObjectType === 'path' || selectedObjectType === 'group';
+  const hasStroke = isLine || isShape || (object.stroke && object.stroke !== 'transparent');
   
   const handleUpdate = () => {
     fabricInstance?.getCanvas()?.requestRenderAll();
@@ -128,17 +132,39 @@ export function PropertiesBar() {
 
       {/* Common Properties: Position & Opacity are less critical for top bar, usually style is first */}
       
-      {/* Fill Color */}
-      {!isImage && (
+      {/* Fill Color - Not for images or pure lines */}
+      {!isImage && !isLine && (
         <div className="flex items-center gap-2 shrink-0">
-           <div className="relative flex items-center justify-center" title="Fill Color">
-            <input
-              type="color"
-              value={(object.fill as string) || '#000000'}
-              onChange={(e) => handleChange('fill', e.target.value)}
-              className="h-6 w-6 cursor-pointer overflow-hidden rounded border border-border p-0"
-            />
-          </div>
+          <ColorPicker
+            value={(object.fill as string) || '#000000'}
+            onChange={(color) => handleChange('fill', color)}
+            label="Fill"
+            showLabel={false}
+            size="sm"
+          />
+        </div>
+      )}
+
+      {/* Stroke Color - For shapes and lines */}
+      {hasStroke && (
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs text-muted-foreground">Stroke:</span>
+          <ColorPicker
+            value={(object.stroke as string) || '#000000'}
+            onChange={(color) => handleChange('stroke', color)}
+            label="Stroke"
+            showLabel={false}
+            size="sm"
+          />
+          <input
+            type="number"
+            value={object.strokeWidth || 1}
+            onChange={(e) => handleChange('strokeWidth', parseInt(e.target.value))}
+            className="h-6 w-14 rounded border border-border px-1 text-xs"
+            min="1"
+            max="50"
+            title="Stroke Width"
+          />
         </div>
       )}
 

@@ -153,6 +153,10 @@ export interface CertificateRecord {
   id: string;
   /** Template ID used */
   templateId: string;
+  /** User ID who created the certificate */
+  userId?: string;
+  /** Template name for display */
+  templateName?: string;
   /** Recipient name */
   recipientName: string;
   /** Recipient email (plain text for display, stored securely) */

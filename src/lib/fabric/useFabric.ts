@@ -155,15 +155,19 @@ export function useFabric(
     outerShade.sendToBack();
     
     // Add canvas boundary indicator - RED dashed line
+    // Use strokeUniform to maintain consistent stroke width regardless of scale
+    // Position with half stroke width offset to ensure full visibility
+    const strokeWidth = 3;
     const boundaryRect = new fabric.Rect({
-      left: 0,
-      top: 0,
-      width: width,
-      height: height,
+      left: strokeWidth / 2,
+      top: strokeWidth / 2,
+      width: width - strokeWidth,
+      height: height - strokeWidth,
       fill: 'transparent',
       stroke: '#dc2626',
-      strokeWidth: 2,
-      strokeDashArray: [10, 5],
+      strokeWidth: strokeWidth,
+      strokeDashArray: [12, 6],
+      strokeUniform: true,
       selectable: false,
       evented: false,
       excludeFromExport: true,
@@ -519,15 +523,17 @@ export function useFabric(
       }
       
       if (!hasBoundaryRect) {
+        const strokeWidth = 3;
         const boundaryRect = new fabric.Rect({
-          left: 0,
-          top: 0,
-          width: width,
-          height: height,
+          left: strokeWidth / 2,
+          top: strokeWidth / 2,
+          width: width - strokeWidth,
+          height: height - strokeWidth,
           fill: 'transparent',
           stroke: '#dc2626',
-          strokeWidth: 2,
-          strokeDashArray: [10, 5],
+          strokeWidth: strokeWidth,
+          strokeDashArray: [12, 6],
+          strokeUniform: true,
           selectable: false,
           evented: false,
           excludeFromExport: true,
@@ -609,15 +615,17 @@ export function useFabric(
       }
       
       if (!hasBoundaryRect) {
+        const strokeWidth = 3;
         const boundaryRect = new fabric.Rect({
-          left: 0,
-          top: 0,
-          width: width,
-          height: height,
+          left: strokeWidth / 2,
+          top: strokeWidth / 2,
+          width: width - strokeWidth,
+          height: height - strokeWidth,
           fill: 'transparent',
           stroke: '#dc2626',
-          strokeWidth: 2,
-          strokeDashArray: [10, 5],
+          strokeWidth: strokeWidth,
+          strokeDashArray: [12, 6],
+          strokeUniform: true,
           selectable: false,
           evented: false,
           excludeFromExport: true,
@@ -737,10 +745,39 @@ export function useFabric(
   /**
    * Add a shape to the canvas
    */
-  const addShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line', options?: fabric.IObjectOptions) => {
+  const addShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond', options?: fabric.IObjectOptions) => {
     if (!fabricRef.current) return null;
 
     let shape: fabric.Object;
+
+    // Helper function to create polygon points
+    const createPolygonPoints = (sides: number, radius: number) => {
+      const points = [];
+      const angleStep = (2 * Math.PI) / sides;
+      for (let i = 0; i < sides; i++) {
+        const angle = i * angleStep - Math.PI / 2; // Start from top
+        points.push({
+          x: radius * Math.cos(angle),
+          y: radius * Math.sin(angle),
+        });
+      }
+      return points;
+    };
+
+    // Helper function to create star points
+    const createStarPoints = (points: number, outerRadius: number, innerRadius: number) => {
+      const starPoints = [];
+      const step = Math.PI / points;
+      for (let i = 0; i < 2 * points; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = i * step - Math.PI / 2;
+        starPoints.push({
+          x: radius * Math.cos(angle),
+          y: radius * Math.sin(angle),
+        });
+      }
+      return starPoints;
+    };
 
     switch (type) {
       case 'rect':
@@ -751,6 +788,20 @@ export function useFabric(
           originY: 'center',
           width: 100,
           height: 100,
+          fill: '#3b82f6',
+          ...options,
+        });
+        break;
+      case 'roundedRect':
+        shape = new fabric.Rect({
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          width: 120,
+          height: 80,
+          rx: 15,
+          ry: 15,
           fill: '#3b82f6',
           ...options,
         });
@@ -779,11 +830,106 @@ export function useFabric(
         });
         break;
       case 'line':
-        shape = new fabric.Line([50, 50, 200, 50], {
+        shape = new fabric.Line([0, 0, 150, 0], {
           left: width / 2 - 75,
           top: height / 2,
           stroke: '#3b82f6',
           strokeWidth: 2,
+          strokeUniform: true,
+          ...options,
+        });
+        break;
+      case 'dashedLine':
+        shape = new fabric.Line([0, 0, 150, 0], {
+          left: width / 2 - 75,
+          top: height / 2,
+          stroke: '#3b82f6',
+          strokeWidth: 2,
+          strokeDashArray: [10, 5],
+          strokeUniform: true,
+          ...options,
+        });
+        break;
+      case 'arrowLine':
+        // Create an arrow using a path
+        const arrowPath = 'M 0 25 L 120 25 M 100 10 L 120 25 L 100 40';
+        shape = new fabric.Path(arrowPath, {
+          left: width / 2 - 60,
+          top: height / 2,
+          stroke: '#3b82f6',
+          strokeWidth: 3,
+          fill: 'transparent',
+          strokeLineCap: 'round',
+          strokeLineJoin: 'round',
+          ...options,
+        });
+        break;
+      case 'star':
+        const starPoints = createStarPoints(5, 50, 25);
+        shape = new fabric.Polygon(starPoints, {
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: '#f59e0b',
+          ...options,
+        });
+        break;
+      case 'pentagon':
+        const pentagonPoints = createPolygonPoints(5, 50);
+        shape = new fabric.Polygon(pentagonPoints, {
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: '#3b82f6',
+          ...options,
+        });
+        break;
+      case 'hexagon':
+        const hexagonPoints = createPolygonPoints(6, 50);
+        shape = new fabric.Polygon(hexagonPoints, {
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: '#3b82f6',
+          ...options,
+        });
+        break;
+      case 'arrow':
+        // Arrow shape pointing right
+        const arrowPoints = [
+          { x: 0, y: 20 },
+          { x: 60, y: 20 },
+          { x: 60, y: 0 },
+          { x: 100, y: 30 },
+          { x: 60, y: 60 },
+          { x: 60, y: 40 },
+          { x: 0, y: 40 },
+        ];
+        shape = new fabric.Polygon(arrowPoints, {
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: '#3b82f6',
+          ...options,
+        });
+        break;
+      case 'diamond':
+        const diamondPoints = [
+          { x: 50, y: 0 },
+          { x: 100, y: 50 },
+          { x: 50, y: 100 },
+          { x: 0, y: 50 },
+        ];
+        shape = new fabric.Polygon(diamondPoints, {
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: '#3b82f6',
           ...options,
         });
         break;
@@ -796,6 +942,177 @@ export function useFabric(
     fabricRef.current.requestRenderAll();
 
     return shape;
+  }, [width, height]);
+
+  /**
+   * Add a decorative border to the certificate
+   */
+  const addBorder = useCallback((style: 'simple' | 'double' | 'ornate' | 'gold' | 'corner', color: string = '#d4af37', options?: fabric.IObjectOptions) => {
+    if (!fabricRef.current) return null;
+
+    const padding = 20;
+    const borderWidth = width - padding * 2;
+    const borderHeight = height - padding * 2;
+
+    switch (style) {
+      case 'simple':
+        const simpleBorder = new fabric.Rect({
+          left: padding,
+          top: padding,
+          width: borderWidth,
+          height: borderHeight,
+          fill: 'transparent',
+          stroke: color,
+          strokeWidth: 3,
+          ...options,
+        });
+        fabricRef.current.add(simpleBorder);
+        fabricRef.current.sendToBack(simpleBorder);
+        // Ensure helper rects stay at back
+        const helpers = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
+        helpers.forEach(obj => fabricRef.current?.sendToBack(obj));
+        fabricRef.current.requestRenderAll();
+        return simpleBorder;
+
+      case 'double':
+        const outerBorder = new fabric.Rect({
+          left: padding,
+          top: padding,
+          width: borderWidth,
+          height: borderHeight,
+          fill: 'transparent',
+          stroke: color,
+          strokeWidth: 3,
+          ...options,
+        });
+        const innerBorder = new fabric.Rect({
+          left: padding + 10,
+          top: padding + 10,
+          width: borderWidth - 20,
+          height: borderHeight - 20,
+          fill: 'transparent',
+          stroke: color,
+          strokeWidth: 1,
+          ...options,
+        });
+        const borderGroup = new fabric.Group([outerBorder, innerBorder], {
+          left: padding,
+          top: padding,
+          ...options,
+        });
+        fabricRef.current.add(borderGroup);
+        fabricRef.current.sendToBack(borderGroup);
+        const helpers2 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
+        helpers2.forEach(obj => fabricRef.current?.sendToBack(obj));
+        fabricRef.current.requestRenderAll();
+        return borderGroup;
+
+      case 'ornate':
+        // Create ornate border with decorative corners
+        const ornateOuter = new fabric.Rect({
+          left: 0,
+          top: 0,
+          width: borderWidth,
+          height: borderHeight,
+          fill: 'transparent',
+          stroke: color,
+          strokeWidth: 4,
+        });
+        const ornateInner = new fabric.Rect({
+          left: 8,
+          top: 8,
+          width: borderWidth - 16,
+          height: borderHeight - 16,
+          fill: 'transparent',
+          stroke: color,
+          strokeWidth: 1,
+        });
+        const ornateGroup = new fabric.Group([ornateOuter, ornateInner], {
+          left: padding,
+          top: padding,
+          ...options,
+        });
+        fabricRef.current.add(ornateGroup);
+        fabricRef.current.sendToBack(ornateGroup);
+        const helpers3 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
+        helpers3.forEach(obj => fabricRef.current?.sendToBack(obj));
+        fabricRef.current.requestRenderAll();
+        return ornateGroup;
+
+      case 'gold':
+        const goldBorder = new fabric.Rect({
+          left: padding,
+          top: padding,
+          width: borderWidth,
+          height: borderHeight,
+          fill: 'transparent',
+          stroke: color,
+          strokeWidth: 8,
+          rx: 10,
+          ry: 10,
+          ...options,
+        });
+        fabricRef.current.add(goldBorder);
+        fabricRef.current.sendToBack(goldBorder);
+        const helpers4 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
+        helpers4.forEach(obj => fabricRef.current?.sendToBack(obj));
+        fabricRef.current.requestRenderAll();
+        return goldBorder;
+
+      case 'corner':
+        // Corner decorations only
+        const cornerSize = 40;
+        const corners: fabric.Object[] = [];
+        
+        // Top-left corner
+        corners.push(new fabric.Path(`M 0 ${cornerSize} L 0 0 L ${cornerSize} 0`, {
+          left: padding,
+          top: padding,
+          stroke: color,
+          strokeWidth: 4,
+          fill: 'transparent',
+        }));
+        
+        // Top-right corner
+        corners.push(new fabric.Path(`M 0 0 L ${cornerSize} 0 L ${cornerSize} ${cornerSize}`, {
+          left: padding + borderWidth - cornerSize,
+          top: padding,
+          stroke: color,
+          strokeWidth: 4,
+          fill: 'transparent',
+        }));
+        
+        // Bottom-left corner
+        corners.push(new fabric.Path(`M 0 0 L 0 ${cornerSize} L ${cornerSize} ${cornerSize}`, {
+          left: padding,
+          top: padding + borderHeight - cornerSize,
+          stroke: color,
+          strokeWidth: 4,
+          fill: 'transparent',
+        }));
+        
+        // Bottom-right corner
+        corners.push(new fabric.Path(`M ${cornerSize} 0 L ${cornerSize} ${cornerSize} L 0 ${cornerSize}`, {
+          left: padding + borderWidth - cornerSize,
+          top: padding + borderHeight - cornerSize,
+          stroke: color,
+          strokeWidth: 4,
+          fill: 'transparent',
+        }));
+        
+        const cornerGroup = new fabric.Group(corners, {
+          ...options,
+        });
+        fabricRef.current.add(cornerGroup);
+        fabricRef.current.sendToBack(cornerGroup);
+        const helpers5 = fabricRef.current.getObjects().filter((obj: any) => obj.isOuterShade || obj.isInnerClear);
+        helpers5.forEach(obj => fabricRef.current?.sendToBack(obj));
+        fabricRef.current.requestRenderAll();
+        return cornerGroup;
+
+      default:
+        return null;
+    }
   }, [width, height]);
 
   /**
@@ -952,7 +1269,12 @@ export function useFabric(
             fabricRef.current.add(verifyTextbox);
           }
           
-          // Re-add the outer shade rect after loading (it gets removed by loadFromJSON)
+          // Re-add helper objects after loading (they get removed by loadFromJSON due to excludeFromExport)
+          
+          // Get canvas background color from loaded JSON or use default
+          const canvasBgColor = data.background || backgroundColor;
+          
+          // 1. Outer shade (red transparent overlay outside printable area)
           const outerShadeRect = new fabric.Rect({
             left: -50,
             top: -50,
@@ -964,20 +1286,40 @@ export function useFabric(
             excludeFromExport: true,
             objectCaching: false,
           });
-          (outerShadeRect as any).isBoundary = true;
+          (outerShadeRect as any).isOuterShade = true;
           fabricRef.current.add(outerShadeRect);
           fabricRef.current.sendToBack(outerShadeRect);
           
-          // Re-add the boundary rect after loading
+          // 2. Inner clear (the certificate background - covers the red shade in printable area)
+          const innerClearRect = new fabric.Rect({
+            left: 0,
+            top: 0,
+            width: width,
+            height: height,
+            fill: canvasBgColor,
+            selectable: false,
+            evented: false,
+            excludeFromExport: true,
+            objectCaching: false,
+          });
+          (innerClearRect as any).isInnerClear = true;
+          fabricRef.current.add(innerClearRect);
+          fabricRef.current.sendToBack(innerClearRect);
+          // Ensure outer shade is behind inner clear
+          fabricRef.current.sendToBack(outerShadeRect);
+          
+          // 3. Boundary rect (red dashed line showing print boundary)
+          const strokeWidth = 3;
           const boundaryRect = new fabric.Rect({
-            left: 2,
-            top: 2,
-            width: width - 4,
-            height: height - 4,
+            left: strokeWidth / 2,
+            top: strokeWidth / 2,
+            width: width - strokeWidth,
+            height: height - strokeWidth,
             fill: 'transparent',
             stroke: '#dc2626',
-            strokeWidth: 3,
-            strokeDashArray: [15, 8],
+            strokeWidth: strokeWidth,
+            strokeDashArray: [12, 6],
+            strokeUniform: true,
             selectable: false,
             evented: false,
             excludeFromExport: true,
@@ -1026,7 +1368,7 @@ export function useFabric(
     fabricRef.current.clear();
     fabricRef.current.backgroundColor = backgroundColor;
     
-    // Re-add the outer shade rect after clearing
+    // 1. Re-add the outer shade rect after clearing
     const outerShadeRect = new fabric.Rect({
       left: -50,
       top: -50,
@@ -1038,20 +1380,39 @@ export function useFabric(
       excludeFromExport: true,
       objectCaching: false,
     });
-    (outerShadeRect as any).isBoundary = true;
+    (outerShadeRect as any).isOuterShade = true;
     fabricRef.current.add(outerShadeRect);
     fabricRef.current.sendToBack(outerShadeRect);
     
-    // Re-add the boundary rect after clearing
+    // 2. Re-add the inner clear rect (certificate background)
+    const innerClearRect = new fabric.Rect({
+      left: 0,
+      top: 0,
+      width: width,
+      height: height,
+      fill: backgroundColor,
+      selectable: false,
+      evented: false,
+      excludeFromExport: true,
+      objectCaching: false,
+    });
+    (innerClearRect as any).isInnerClear = true;
+    fabricRef.current.add(innerClearRect);
+    fabricRef.current.sendToBack(innerClearRect);
+    fabricRef.current.sendToBack(outerShadeRect);
+    
+    // 3. Re-add the boundary rect after clearing
+    const strokeWidth = 3;
     const boundaryRect = new fabric.Rect({
-      left: 2,
-      top: 2,
-      width: width - 4,
-      height: height - 4,
+      left: strokeWidth / 2,
+      top: strokeWidth / 2,
+      width: width - strokeWidth,
+      height: height - strokeWidth,
       fill: 'transparent',
       stroke: '#dc2626',
-      strokeWidth: 3,
-      strokeDashArray: [15, 8],
+      strokeWidth: strokeWidth,
+      strokeDashArray: [12, 6],
+      strokeUniform: true,
       selectable: false,
       evented: false,
       excludeFromExport: true,
@@ -1063,6 +1424,34 @@ export function useFabric(
     fabricRef.current.requestRenderAll();
     saveToHistory();
   }, [backgroundColor, saveToHistory, width, height]);
+
+  /**
+   * Set canvas background color
+   * Updates both the canvas background and the inner clear rect
+   */
+  const setBackgroundColor = useCallback((color: string) => {
+    if (!fabricRef.current) return;
+    
+    // Update the canvas background color
+    fabricRef.current.backgroundColor = color;
+    
+    // Update the inner clear rect if it exists
+    const innerClear = fabricRef.current.getObjects().find((obj: any) => obj.isInnerClear);
+    if (innerClear) {
+      innerClear.set('fill', color);
+    }
+    
+    fabricRef.current.requestRenderAll();
+    saveToHistory();
+  }, [saveToHistory]);
+
+  /**
+   * Get current canvas background color
+   */
+  const getBackgroundColor = useCallback((): string => {
+    if (!fabricRef.current) return backgroundColor;
+    return (fabricRef.current.backgroundColor as string) || backgroundColor;
+  }, [backgroundColor]);
 
   /**
    * Set background image
@@ -1116,6 +1505,7 @@ export function useFabric(
     addVariableTextbox,
     addImage,
     addShape,
+    addBorder,
     deleteSelected,
     cloneSelected,
     bringToFront,
@@ -1133,6 +1523,8 @@ export function useFabric(
     // Canvas operations
     clear,
     setBackgroundImage,
+    setBackgroundColor,
+    getBackgroundColor,
     clearAutoSave,
     
     // Utilities
@@ -1143,6 +1535,7 @@ export function useFabric(
     addVariableTextbox,
     addImage,
     addShape,
+    addBorder,
     deleteSelected,
     cloneSelected,
     bringToFront,
@@ -1154,6 +1547,8 @@ export function useFabric(
     toHighDPIDataURL,
     clear,
     setBackgroundImage,
+    setBackgroundColor,
+    getBackgroundColor,
     clearAutoSave,
     isVariable,
   ]);

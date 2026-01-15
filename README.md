@@ -20,6 +20,26 @@ A production-ready, SaaS-grade Certificate Generator built with Next.js 14 and F
 
 ### New Features (v2.0)
 
+#### 🎨 Enhanced Color Picker
+- Professional color selection component
+- Preset color palettes with 10+ color categories
+- Quick access to common colors
+- Recent colors memory (saved to localStorage)
+- Custom hex color input
+- Native color picker integration
+
+#### 📐 Shapes & Borders
+- Multiple shape types: rectangles, circles, triangles, stars, polygons
+- Line tools: solid, dashed, and arrow lines
+- Certificate border styles: simple, double, ornate, gold frame, corner
+- Customizable stroke colors and widths
+
+#### 🖼️ Interactive Homepage
+- Animated floating dots background
+- Mouse-following spotlight effect
+- Gradient orbs with smooth animations
+- Modern, engaging design
+
 #### 📁 Media Library
 - Personal cloud storage for each user via Firebase Storage
 - Drag-and-drop upload interface

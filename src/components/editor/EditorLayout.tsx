@@ -178,10 +178,12 @@ export function EditorLayout() {
       if (data.success) {
         setSaveStatus('saved');
         setIsDirty(false);
-        if (data.id && !templateId) {
-          setTemplateInfo(data.id, templateName);
+        // Check both data.id and data.template?.id for new templates
+        const newTemplateId = data.id || data.template?.id;
+        if (newTemplateId && !templateId) {
+          setTemplateInfo(newTemplateId, templateName);
           // Update URL without reload
-          window.history.pushState({}, '', `/editor?template=${data.id}`);
+          window.history.pushState({}, '', `/editor?template=${newTemplateId}`);
         }
         setTimeout(() => setSaveStatus('idle'), 2000);
       } else {

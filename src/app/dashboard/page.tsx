@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
@@ -94,16 +95,21 @@ const gradientColors = [
 
 export default function DashboardPage() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [templateTab, setTemplateTab] = useState<'my' | 'public'>('my');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Real data from API (Firebase)
   const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [templates, setTemplates] = useState<DashboardTemplate[]>([]);
+  const [publicTemplates, setPublicTemplates] = useState<DashboardTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [certificatesLoading, setCertificatesLoading] = useState(true);
+  const [publicTemplatesLoading, setPublicTemplatesLoading] = useState(true);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Fetch certificates from Firebase API
   useEffect(() => {
@@ -160,6 +166,30 @@ export default function DashboardPage() {
     fetchTemplates();
   }, [user?.id]);
 
+  // Fetch public templates
+  useEffect(() => {
+    async function fetchPublicTemplates() {
+      try {
+        const response = await fetch('/api/templates?public=true');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[Dashboard] Loaded public templates:', data.templates?.length || 0);
+          // Filter out user's own templates from public list
+          const filtered = (data.templates || []).filter(
+            (t: DashboardTemplate) => t.userId !== user?.id
+          );
+          setPublicTemplates(filtered);
+        }
+      } catch (error) {
+        console.error('[Dashboard] Error fetching public templates:', error);
+      } finally {
+        setPublicTemplatesLoading(false);
+      }
+    }
+
+    fetchPublicTemplates();
+  }, [user?.id]);
+
   // Handle template deletion via API
   const handleDeleteTemplate = useCallback(async (templateId: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -209,14 +239,25 @@ export default function DashboardPage() {
     setActiveDropdown(null);
   }, []);
 
-  // Filter templates by search query
-  const filteredTemplates = useMemo(() => {
+  // Filter templates by search query (both user and public)
+  const filteredUserTemplates = useMemo(() => {
     if (!searchQuery.trim()) return templates;
     const query = searchQuery.toLowerCase();
     return templates.filter(tmpl => 
       tmpl.name.toLowerCase().includes(query)
     );
   }, [templates, searchQuery]);
+
+  const filteredPublicTemplates = useMemo(() => {
+    if (!searchQuery.trim()) return publicTemplates;
+    const query = searchQuery.toLowerCase();
+    return publicTemplates.filter(tmpl => 
+      tmpl.name.toLowerCase().includes(query)
+    );
+  }, [publicTemplates, searchQuery]);
+
+  // Get current templates based on tab
+  const displayTemplates = templateTab === 'my' ? filteredUserTemplates : filteredPublicTemplates;
 
   // Recent activity from certificates (sorted by creation date, newest first)
   const sortedCertificates = useMemo(() => 
@@ -276,14 +317,17 @@ export default function DashboardPage() {
     },
   ];
 
-  // Format templates for display (use filtered templates)
-  const recentTemplates = filteredTemplates.slice(0, 4).map((tmpl, i) => ({
+  // Format templates for display (use display templates based on tab)
+  const recentTemplates = displayTemplates.slice(0, 6).map((tmpl, i) => ({
     id: tmpl.id,
     name: tmpl.name,
     lastUsed: formatTimeAgo(new Date(tmpl.updatedAt)),
     count: tmpl.certificateCount,
     thumbnail: tmpl.thumbnail || gradientColors[i % gradientColors.length],
     isPublic: tmpl.isPublic,
+    creatorName: tmpl.creatorName,
+    stars: tmpl.stars || 0,
+    userId: tmpl.userId,
   }));
 
   const recentActivity = sortedCertificates.slice(0, 4).map((cert, i) => ({
@@ -297,11 +341,69 @@ export default function DashboardPage() {
     fileInputRef.current?.click();
   };
 
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Handle template import
-      console.log('Importing:', file.name);
+    if (!file || !user?.id) return;
+    
+    setImportLoading(true);
+    
+    try {
+      // Read the file content
+      const text = await file.text();
+      const templateData = JSON.parse(text);
+      
+      // Validate it's a valid template (has objects array or canvasJSON)
+      let canvasJSON: string;
+      let templateName = templateData.name || file.name.replace('.json', '');
+      
+      if (templateData.canvasJSON) {
+        // Already a Serenity template format
+        canvasJSON = typeof templateData.canvasJSON === 'string' 
+          ? templateData.canvasJSON 
+          : JSON.stringify(templateData.canvasJSON);
+      } else if (templateData.objects) {
+        // Fabric.js canvas format
+        canvasJSON = JSON.stringify(templateData);
+      } else {
+        throw new Error('Invalid template format. Expected Serenity or Fabric.js format.');
+      }
+      
+      // Create new template via API
+      const response = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${templateName} (Imported)`,
+          canvasJSON,
+          userId: user.id,
+          isPublic: false,
+          creatorName: user.name,
+          creatorEmail: user.email,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create template');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.template?.id) {
+        // Redirect to editor with the new template
+        router.push(`/editor?template=${data.template.id}`);
+      } else {
+        throw new Error('Template created but no ID returned');
+      }
+    } catch (error) {
+      console.error('[Dashboard] Import error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to import template');
+    } finally {
+      setImportLoading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -550,7 +652,7 @@ export default function DashboardPage() {
 
         {/* Main Content Grid */}
         <div className="grid gap-8 lg:grid-cols-3">
-          {/* Recent Templates - 2 columns */}
+          {/* Templates Section - 2 columns */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -558,7 +660,33 @@ export default function DashboardPage() {
             className="lg:col-span-2"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-xl font-semibold">Recent Templates</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="font-display text-xl font-semibold">Templates</h2>
+                {/* Tabs */}
+                <div className="flex items-center gap-1 p-1 rounded-lg bg-muted">
+                  <button
+                    onClick={() => setTemplateTab('my')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      templateTab === 'my'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    My Templates ({templates.length})
+                  </button>
+                  <button
+                    onClick={() => setTemplateTab('public')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                      templateTab === 'public'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Globe className="inline h-3.5 w-3.5 mr-1" />
+                    Public ({publicTemplates.length})
+                  </button>
+                </div>
+              </div>
               <Link
                 href="/templates"
                 className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
@@ -568,14 +696,37 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {templatesLoading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(templateTab === 'my' ? templatesLoading : publicTemplatesLoading) ? (
                 // Skeleton loading state
                 <>
-                  {[1, 2, 3, 4].map((i) => (
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
                     <SkeletonCard key={i} />
                   ))}
                 </>
+              ) : recentTemplates.length === 0 ? (
+                <div className="col-span-full rounded-xl border-2 border-dashed border-border p-8 text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                    {templateTab === 'my' ? (
+                      <FileText className="h-6 w-6 text-muted-foreground" />
+                    ) : (
+                      <Globe className="h-6 w-6 text-muted-foreground" />
+                    )}
+                  </div>
+                  <h3 className="font-semibold">
+                    {templateTab === 'my' ? 'No templates yet' : 'No public templates'}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {templateTab === 'my' 
+                      ? 'Create your first certificate template!'
+                      : 'Be the first to share a template with the community.'
+                    }
+                  </p>
+                  <Link href="/editor" className="btn-primary mt-4 inline-flex text-sm">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Create Template
+                  </Link>
+                </div>
               ) : (
                 <AnimatePresence>
                   {recentTemplates.map((template, index) => (
@@ -583,12 +734,12 @@ export default function DashboardPage() {
                     key={template.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
+                    transition={{ delay: index * 0.05 }}
                     whileHover={{ y: -4 }}
                     className="group relative rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg hover:border-primary/50 transition-all duration-300"
                   >
                     {/* Thumbnail */}
-                    <div className="h-32 relative">
+                    <div className="h-28 relative">
                       {template.thumbnail?.startsWith('data:') ? (
                         <img 
                           src={template.thumbnail} 
@@ -605,114 +756,68 @@ export default function DashboardPage() {
                           priority={index < 3}
                         />
                       ) : (
-                        <div className={`w-full h-full bg-gradient-to-br ${template.thumbnail || gradientColors[0]}`} />
+                        <div className={`w-full h-full bg-gradient-to-br ${template.thumbnail || gradientColors[index % gradientColors.length]}`} />
                       )}
                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
                       
-                      {/* Public/Private badge */}
-                      {template.isPublic && (
-                        <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/90 text-white text-xs font-medium">
+                      {/* Public badge (only for my templates that are public) */}
+                      {templateTab === 'my' && template.isPublic && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/90 text-white text-xs font-medium">
                           <Globe className="h-3 w-3" />
                           Public
                         </div>
                       )}
                       
-                      {/* Quick action buttons - visible on hover */}
-                      <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {/* Star/Public toggle button */}
-                        <button
-                          onClick={(e) => handleTogglePublic(template.id, template.isPublic, e)}
-                          className={`p-1.5 rounded-lg backdrop-blur-sm transition-colors ${
-                            template.isPublic 
-                              ? 'bg-yellow-500/90 text-white hover:bg-yellow-600/90' 
-                              : 'bg-white/20 text-white hover:bg-white/30'
-                          }`}
-                          title={template.isPublic ? 'Make Private' : 'Make Public (Star)'}
-                        >
-                          <Star className={`h-4 w-4 ${template.isPublic ? 'fill-current' : ''}`} />
-                        </button>
-                        
-                        {/* Delete button */}
-                        <button
-                          onClick={(e) => handleDeleteTemplate(template.id, e)}
-                          className="p-1.5 rounded-lg bg-red-500/80 backdrop-blur-sm text-white hover:bg-red-600/90 transition-colors"
-                          title="Delete Template"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        
-                        {/* More options dropdown */}
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setActiveDropdown(activeDropdown === template.id ? null : template.id);
-                          }}
-                          className="p-1.5 rounded-lg bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-                      </div>
-                        
-                      {/* Dropdown Menu */}
-                      <AnimatePresence>
-                        {activeDropdown === template.id && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                            className="absolute right-3 top-12 w-44 rounded-lg border border-border bg-card shadow-lg py-1 z-10"
+                      {/* Stars badge for public templates */}
+                      {templateTab === 'public' && template.stars > 0 && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/90 text-white text-xs font-medium">
+                          <Star className="h-3 w-3 fill-current" />
+                          {template.stars}
+                        </div>
+                      )}
+                      
+                      {/* Quick action buttons - only for user's own templates */}
+                      {templateTab === 'my' && (
+                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => handleTogglePublic(template.id, template.isPublic, e)}
+                            className={`p-1 rounded-md backdrop-blur-sm transition-colors ${
+                              template.isPublic 
+                                ? 'bg-yellow-500/90 text-white hover:bg-yellow-600/90' 
+                                : 'bg-white/20 text-white hover:bg-white/30'
+                            }`}
+                            title={template.isPublic ? 'Make Private' : 'Make Public'}
                           >
-                            <Link
-                              href={`/editor?template=${template.id}`}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors"
-                            >
-                              <Edit3 className="h-4 w-4" />
-                              Edit Template
-                            </Link>
-                            <button 
-                              onClick={(e) => handleTogglePublic(template.id, template.isPublic, e)}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors"
-                            >
-                              {template.isPublic ? (
-                                <>
-                                  <Lock className="h-4 w-4" />
-                                  Make Private
-                                </>
-                              ) : (
-                                <>
-                                  <Star className="h-4 w-4" />
-                                  Make Public
-                                </>
-                              )}
-                            </button>
-                            <button className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors">
-                              <Download className="h-4 w-4" />
-                              Export
-                            </button>
-                            <hr className="my-1 border-border" />
-                            <button 
-                              onClick={(e) => handleDeleteTemplate(template.id, e)}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                            <Star className={`h-3.5 w-3.5 ${template.isPublic ? 'fill-current' : ''}`} />
+                          </button>
+                          
+                          <button
+                            onClick={(e) => handleDeleteTemplate(template.id, e)}
+                            className="p-1 rounded-md bg-red-500/80 backdrop-blur-sm text-white hover:bg-red-600/90 transition-colors"
+                            title="Delete Template"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Content */}
-                    <Link href={`/editor?template=${template.id}`} className="block p-4">
-                      <h3 className="font-semibold group-hover:text-primary transition-colors truncate">
+                    <Link href={`/editor?template=${template.id}`} className="block p-3">
+                      <h3 className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
                         {template.name}
                       </h3>
-                      <div className="flex items-center justify-between mt-2 text-sm text-muted-foreground">
+                      {templateTab === 'public' && template.creatorName && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          by {template.creatorName}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
+                          <Clock className="h-3 w-3" />
                           {template.lastUsed}
                         </span>
-                        <span>{template.count.toLocaleString()} generated</span>
+                        <span>{template.count.toLocaleString()} used</span>
                       </div>
                     </Link>
                   </motion.div>

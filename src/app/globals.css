@@ -4,47 +4,47 @@
 
 @layer base {
   :root {
-    /* Theme: "Academic Gold" (Light) - Warm, Professional */
-    --color-background: 254 252 248;
-    --color-foreground: 28 25 23;
-    --color-primary: 180 83 9;
-    --color-primary-foreground: 255 255 255;
-    --color-secondary: 120 53 15;
-    --color-secondary-foreground: 255 255 255;
-    --color-accent: 217 119 6;
-    --color-accent-foreground: 255 255 255;
-    --color-muted: 245 245 244;
-    --color-muted-foreground: 115 115 115;
-    --color-card: 255 255 255;
-    --color-card-foreground: 28 25 23;
-    --color-border: 229 231 235;
-    --color-input: 229 231 235;
-    --color-ring: 180 83 9;
-    --color-success: 22 163 74;
-    --color-warning: 234 179 8;
-    --color-error: 220 38 38;
-  }
-
-  .dark {
-    /* Theme: "Neon Future" (Dark) - Modern, Vibrant */
-    --color-background: 10 10 10;
-    --color-foreground: 250 250 250;
-    --color-primary: 99 102 241;
+    /* Light Theme: Clean, Professional with warm undertones */
+    --color-background: 255 255 255;
+    --color-foreground: 15 23 42;
+    --color-primary: 79 70 229;
     --color-primary-foreground: 255 255 255;
     --color-secondary: 168 85 247;
     --color-secondary-foreground: 255 255 255;
     --color-accent: 236 72 153;
     --color-accent-foreground: 255 255 255;
-    --color-muted: 23 23 23;
-    --color-muted-foreground: 163 163 163;
-    --color-card: 18 18 18;
-    --color-card-foreground: 250 250 250;
-    --color-border: 38 38 38;
-    --color-input: 38 38 38;
-    --color-ring: 99 102 241;
+    --color-muted: 248 250 252;
+    --color-muted-foreground: 100 116 139;
+    --color-card: 255 255 255;
+    --color-card-foreground: 15 23 42;
+    --color-border: 226 232 240;
+    --color-input: 226 232 240;
+    --color-ring: 79 70 229;
     --color-success: 34 197 94;
-    --color-warning: 250 204 21;
+    --color-warning: 245 158 11;
     --color-error: 239 68 68;
+  }
+
+  .dark {
+    /* Dark Theme: Rich, Immersive with vibrant accents */
+    --color-background: 3 7 18;
+    --color-foreground: 248 250 252;
+    --color-primary: 129 140 248;
+    --color-primary-foreground: 15 23 42;
+    --color-secondary: 192 132 252;
+    --color-secondary-foreground: 15 23 42;
+    --color-accent: 244 114 182;
+    --color-accent-foreground: 15 23 42;
+    --color-muted: 15 23 42;
+    --color-muted-foreground: 148 163 184;
+    --color-card: 15 23 42;
+    --color-card-foreground: 248 250 252;
+    --color-border: 30 41 59;
+    --color-input: 30 41 59;
+    --color-ring: 129 140 248;
+    --color-success: 52 211 153;
+    --color-warning: 251 191 36;
+    --color-error: 248 113 113;
   }
 
   * {
@@ -54,6 +54,10 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  ::selection {
+    background-color: rgb(var(--color-primary) / 0.2);
   }
 }
 
@@ -265,5 +269,146 @@
   .dashed-variable {
     border: 2px dashed var(--color-primary);
     border-radius: 4px;
+  }
+  
+  /* Animated glow effect */
+  .glow-animated {
+    animation: glow-pulse 4s ease-in-out infinite;
+  }
+  
+  @keyframes glow-pulse {
+    0%, 100% {
+      box-shadow: 0 0 20px rgb(var(--glow-color) / 0.3),
+                  0 0 40px rgb(var(--glow-color) / 0.15),
+                  0 0 60px rgb(var(--glow-color) / 0.05);
+    }
+    50% {
+      box-shadow: 0 0 30px rgb(var(--glow-color) / 0.4),
+                  0 0 60px rgb(var(--glow-color) / 0.25),
+                  0 0 90px rgb(var(--glow-color) / 0.1);
+    }
+  }
+  
+  /* Shimmer effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgb(var(--color-muted)) 0%,
+      rgb(var(--color-card)) 50%,
+      rgb(var(--color-muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+  
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+  
+  /* Enhanced gradient backgrounds */
+  .bg-gradient-radial {
+    background: radial-gradient(ellipse at center, var(--tw-gradient-stops));
+  }
+  
+  .bg-gradient-conic {
+    background: conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops));
+  }
+  
+  /* Animated gradient border */
+  .border-gradient-animated {
+    background: linear-gradient(var(--color-card), var(--color-card)) padding-box,
+                linear-gradient(90deg, rgb(var(--color-primary)), rgb(var(--color-accent)), rgb(var(--color-primary))) border-box;
+    border: 2px solid transparent;
+    background-size: 100% 100%, 200% 100%;
+    animation: border-shimmer 3s linear infinite;
+  }
+  
+  @keyframes border-shimmer {
+    0% {
+      background-position: 0 0, 0% 0;
+    }
+    100% {
+      background-position: 0 0, 200% 0;
+    }
+  }
+  
+  /* Noise texture overlay */
+  .noise-overlay {
+    position: relative;
+  }
+  
+  .noise-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  /* Floating animation */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+  
+  /* Fade in animation */
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+  
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  /* Scale in animation */
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+  }
+  
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  /* Spin slow */
+  .animate-spin-slow {
+    animation: spin 8s linear infinite;
+  }
+  
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 }

@@ -59,8 +59,18 @@ import {
   Link2,
   Eye,
   EyeOff,
+  Palette,
+  Star,
+  Pentagon,
+  Hexagon,
+  ArrowRight,
+  Diamond,
+  Frame,
+  MoreHorizontal,
+  RectangleHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
+import { ColorPicker } from '@/components/ui/ColorPicker';
 
 interface ToolbarDropdownProps {
   trigger: React.ReactNode;
@@ -79,7 +89,11 @@ function ToolbarDropdown({ trigger, children, isOpen, onToggle }: ToolbarDropdow
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={onToggle} />
-          <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-card shadow-lg p-1">
+          <div 
+            className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-card shadow-lg p-1"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             {children}
           </div>
         </>
@@ -136,7 +150,22 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
   const [showGrid, setShowGrid] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [previewOriginalTexts, setPreviewOriginalTexts] = useState<Map<string, string>>(new Map());
+  const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#ffffff');
+  const [borderColor, setBorderColor] = useState('#d4af37');
   const { rows, getPreviewRow } = useDataSourceStore();
+
+  // Sync canvas background color with fabric instance
+  useEffect(() => {
+    if (fabricInstance) {
+      const currentBg = fabricInstance.getBackgroundColor?.() || '#ffffff';
+      setCanvasBackgroundColor(currentBg);
+    }
+  }, [fabricInstance]);
+
+  const handleBackgroundColorChange = useCallback((color: string) => {
+    setCanvasBackgroundColor(color);
+    fabricInstance?.setBackgroundColor?.(color);
+  }, [fabricInstance]);
 
   const toggleRightSidebar = () => {
     const currentState = useEditorStore.getState().rightSidebarOpen;
@@ -265,11 +294,17 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
     input.click();
   }, [fabricInstance, isPreviewMode]);
 
-  const handleAddShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line') => {
+  const handleAddShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond') => {
     if (isPreviewMode) return;
     fabricInstance?.addShape(type);
     closeDropdowns();
   }, [fabricInstance, isPreviewMode]);
+
+  const handleAddBorder = useCallback((style: 'simple' | 'double' | 'ornate' | 'gold' | 'corner') => {
+    if (isPreviewMode) return;
+    fabricInstance?.addBorder?.(style, borderColor);
+    closeDropdowns();
+  }, [fabricInstance, isPreviewMode, borderColor]);
 
   const handleUndo = useCallback(() => {
     fabricInstance?.undo();
@@ -692,11 +727,59 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
         isOpen={openDropdown === 'shapes'}
         onToggle={() => toggleDropdown('shapes')}
       >
+        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Basic Shapes</div>
         <DropdownItem icon={Square} label="Rectangle" onClick={() => handleAddShape('rect')} disabled={isPreviewMode} />
+        <DropdownItem icon={RectangleHorizontal} label="Rounded Rectangle" onClick={() => handleAddShape('roundedRect')} disabled={isPreviewMode} />
         <DropdownItem icon={Circle} label="Circle" onClick={() => handleAddShape('circle')} disabled={isPreviewMode} />
         <DropdownItem icon={Triangle} label="Triangle" onClick={() => handleAddShape('triangle')} disabled={isPreviewMode} />
-        <DropdownItem icon={Minus} label="Line" onClick={() => handleAddShape('line')} disabled={isPreviewMode} />
+        <DropdownItem icon={Diamond} label="Diamond" onClick={() => handleAddShape('diamond')} disabled={isPreviewMode} />
+        <div className="my-1 border-t border-border" />
+        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Polygons</div>
+        <DropdownItem icon={Pentagon} label="Pentagon" onClick={() => handleAddShape('pentagon')} disabled={isPreviewMode} />
+        <DropdownItem icon={Hexagon} label="Hexagon" onClick={() => handleAddShape('hexagon')} disabled={isPreviewMode} />
+        <DropdownItem icon={Star} label="Star" onClick={() => handleAddShape('star')} disabled={isPreviewMode} />
+        <DropdownItem icon={ArrowRight} label="Arrow Shape" onClick={() => handleAddShape('arrow')} disabled={isPreviewMode} />
+        <div className="my-1 border-t border-border" />
+        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Lines</div>
+        <DropdownItem icon={Minus} label="Solid Line" onClick={() => handleAddShape('line')} disabled={isPreviewMode} />
+        <DropdownItem icon={MoreHorizontal} label="Dashed Line" onClick={() => handleAddShape('dashedLine')} disabled={isPreviewMode} />
+        <DropdownItem icon={ArrowRight} label="Arrow Line" onClick={() => handleAddShape('arrowLine')} disabled={isPreviewMode} />
       </ToolbarDropdown>
+
+      {/* Borders */}
+      <ToolbarDropdown
+        trigger={<Frame className="h-5 w-5" />}
+        isOpen={openDropdown === 'borders'}
+        onToggle={() => toggleDropdown('borders')}
+      >
+        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Certificate Borders</div>
+        <div className="px-2 py-2 flex items-center gap-2 border-b border-border mb-1">
+          <span className="text-xs text-muted-foreground">Color:</span>
+          <ColorPicker
+            value={borderColor}
+            onChange={setBorderColor}
+            showLabel={false}
+            size="sm"
+          />
+          <span className="text-xs text-muted-foreground flex-1 truncate">{borderColor}</span>
+        </div>
+        <DropdownItem icon={Square} label="Simple Border" onClick={() => handleAddBorder('simple')} disabled={isPreviewMode} />
+        <DropdownItem icon={Square} label="Double Border" onClick={() => handleAddBorder('double')} disabled={isPreviewMode} />
+        <DropdownItem icon={Square} label="Ornate Border" onClick={() => handleAddBorder('ornate')} disabled={isPreviewMode} />
+        <DropdownItem icon={Square} label="Gold Frame" onClick={() => handleAddBorder('gold')} disabled={isPreviewMode} />
+        <DropdownItem icon={Square} label="Corner Only" onClick={() => handleAddBorder('corner')} disabled={isPreviewMode} />
+      </ToolbarDropdown>
+
+      {/* Background Color */}
+      <div className="flex items-center gap-1 mx-1" title="Canvas Background Color">
+        <ColorPicker
+          value={canvasBackgroundColor}
+          onChange={handleBackgroundColorChange}
+          label="Background"
+          showLabel={false}
+          size="sm"
+        />
+      </div>
 
       <div className="toolbar-divider" />
 

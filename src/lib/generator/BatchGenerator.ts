@@ -317,6 +317,8 @@ export async function generateBatch(
       certificatesToSave.push({
         id: certId,
         templateId: templateId || 'local',
+        userId: userId, // Track which user created the certificate
+        templateName: templateName, // Store template name for display
         recipientName,
         recipientEmail: String(row['Email'] || row['email'] || ''),
         title: String(row[titleField] || 'Certificate of Completion'),

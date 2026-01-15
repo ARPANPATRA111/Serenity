@@ -46,17 +46,17 @@ export function FabricCanvasWrapper() {
     };
   }, [setFabricInstance]);
 
-  // Calculate scale to fit canvas in container
+  // Calculate scale to fit canvas in container (with extra padding for boundary visibility)
   useEffect(() => {
     const updateScale = () => {
       if (!containerRef.current) return;
 
-      const containerWidth = containerRef.current.clientWidth - 64; // padding
-      const containerHeight = containerRef.current.clientHeight - 64;
+      const containerWidth = containerRef.current.clientWidth - 120;
+      const containerHeight = containerRef.current.clientHeight - 120;
 
       const scaleX = containerWidth / A4_LANDSCAPE.width;
       const scaleY = containerHeight / A4_LANDSCAPE.height;
-      const newScale = Math.min(scaleX, scaleY, 1);
+      const newScale = Math.min(scaleX, scaleY, 0.9);
 
       setScale(newScale);
     };
@@ -117,7 +117,7 @@ export function FabricCanvasWrapper() {
   return (
     <div
       ref={containerRef}
-      className={`canvas-container flex h-full w-full items-center justify-center overflow-auto p-8 ${
+      className={`canvas-container flex h-full w-full items-center justify-center overflow-auto p-12 ${
         isPreviewMode ? 'bg-emerald-500/5' : 'bg-muted/30'
       }`}
       onDragOver={handleDragOver}
