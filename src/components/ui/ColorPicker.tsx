@@ -156,6 +156,7 @@ interface ColorPickerProps {
   showLabel?: boolean;
   size?: 'sm' | 'md' | 'lg';
   showOpacity?: boolean;
+  onPreviewColor?: (color: string | null) => void; // For live preview on hover
 }
 
 export function ColorPicker({ 
@@ -164,15 +165,30 @@ export function ColorPicker({
   label = 'Color',
   showLabel = true,
   size = 'md',
-  showOpacity = false 
+  showOpacity = false,
+  onPreviewColor 
 }: ColorPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'presets' | 'recent'>('presets');
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [colorSelected, setColorSelected] = useState(false); // Track if a color was selected (clicked)
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const colorInputRef = useRef<HTMLInputElement>(null);
+  
+  // Handle hover preview
+  const handlePreviewEnter = useCallback((color: string) => {
+    if (onPreviewColor && !colorSelected) {
+      onPreviewColor(color);
+    }
+  }, [onPreviewColor, colorSelected]);
+
+  const handlePreviewLeave = useCallback(() => {
+    if (onPreviewColor && !colorSelected) {
+      onPreviewColor(null);
+    }
+  }, [onPreviewColor, colorSelected]);
 
   // Load recent colors from localStorage
   useEffect(() => {
@@ -231,10 +247,15 @@ export function ColorPicker({
     });
   }, []);
 
-  // Handle color change
+  // Handle color change (when user clicks to select)
   const handleColorChange = useCallback((color: string) => {
+    setColorSelected(true); // Mark that a color was selected - don't restore on leave
     onChange(color);
     addToRecentColors(color);
+    // Close dropdown after selection
+    setIsOpen(false);
+    // Reset flag after a short delay for next time
+    setTimeout(() => setColorSelected(false), 100);
   }, [onChange, addToRecentColors]);
 
   // Close dropdown when clicking outside
@@ -242,7 +263,11 @@ export function ColorPicker({
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
           triggerRef.current && !triggerRef.current.contains(event.target as Node)) {
+        if (!colorSelected) {
+          handlePreviewLeave(); // Restore original color before closing (only if not selected)
+        }
         setIsOpen(false);
+        setColorSelected(false);
       }
     };
 
@@ -250,7 +275,7 @@ export function ColorPicker({
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, handlePreviewLeave, colorSelected]);
 
   const sizeClasses = {
     sm: 'w-6 h-6',
@@ -271,7 +296,12 @@ export function ColorPicker({
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            if (!isOpen) {
+            if (isOpen) {
+              if (!colorSelected) {
+                handlePreviewLeave(); // Restore original color when closing (only if not selected)
+              }
+              setColorSelected(false);
+            } else {
               updateDropdownPosition();
             }
             setIsOpen(!isOpen);
@@ -318,6 +348,7 @@ export function ColorPicker({
           style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
+          onMouseLeave={handlePreviewLeave}
         >
           {/* Current Color Display */}
           <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
@@ -355,6 +386,8 @@ export function ColorPicker({
                   key={color}
                   type="button"
                   onClick={() => handleColorChange(color)}
+                  onMouseEnter={() => handlePreviewEnter(color)}
+                  onMouseLeave={handlePreviewLeave}
                   className={`w-7 h-7 rounded-lg border-2 transition-all hover:scale-110 ${
                     value.toLowerCase() === color.toLowerCase() 
                       ? 'border-primary ring-2 ring-primary/30 scale-110' 
@@ -414,6 +447,8 @@ export function ColorPicker({
                           key={color}
                           type="button"
                           onClick={() => handleColorChange(color)}
+                          onMouseEnter={() => handlePreviewEnter(color)}
+                          onMouseLeave={handlePreviewLeave}
                           className={`w-6 h-6 rounded-md border transition-all hover:scale-110 ${
                             value.toLowerCase() === color.toLowerCase() 
                               ? 'border-primary ring-2 ring-primary/30 scale-110' 
@@ -436,6 +471,8 @@ export function ColorPicker({
                         key={`${color}-${index}`}
                         type="button"
                         onClick={() => handleColorChange(color)}
+                        onMouseEnter={() => handlePreviewEnter(color)}
+                        onMouseLeave={handlePreviewLeave}
                         className={`w-9 h-9 rounded-lg border-2 transition-all hover:scale-110 ${
                           value.toLowerCase() === color.toLowerCase() 
                             ? 'border-primary ring-2 ring-primary/30 scale-110' 

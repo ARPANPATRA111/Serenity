@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useFabricContext } from './FabricContext';
 import { isVariableTextbox } from '@/lib/fabric';
@@ -19,6 +19,7 @@ import {
   Minus,
   QrCode,
   RefreshCw,
+  ChevronDown,
 } from 'lucide-react';
 
 // Generic Fabric object type
@@ -53,6 +54,16 @@ export function PropertiesBar() {
   const [availableFonts, setAvailableFonts] = useState<string[]>([]);
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [, setForceUpdate] = useState(0);
+  
+  // Font dropdown state
+  const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
+  const [fontDropdownPosition, setFontDropdownPosition] = useState({ top: 0, left: 0 });
+  const fontTriggerRef = useRef<HTMLButtonElement>(null);
+  const fontDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Preview state for hover effects
+  const [originalFont, setOriginalFont] = useState<string | null>(null);
+  const originalColorsRef = useRef<Record<string, string>>({});
 
   // Force re-render helper
   const forceRender = useCallback(() => setForceUpdate(c => c + 1), []);
@@ -86,6 +97,46 @@ export function PropertiesBar() {
     };
     loadFonts();
   }, []);
+  
+  // Close font dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fontDropdownOpen && 
+          fontDropdownRef.current && !fontDropdownRef.current.contains(event.target as Node) &&
+          fontTriggerRef.current && !fontTriggerRef.current.contains(event.target as Node)) {
+        setFontDropdownOpen(false);
+        // Restore original font on close if was previewing
+        if (originalFont && selectedObject) {
+          (selectedObject as unknown as FabricObject).set('fontFamily', originalFont);
+          fabricInstance?.getCanvas()?.requestRenderAll();
+          setOriginalFont(null);
+        }
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [fontDropdownOpen, originalFont, selectedObject, fabricInstance]);
+  
+  // Calculate font dropdown position
+  const updateFontDropdownPosition = useCallback(() => {
+    if (!fontTriggerRef.current) return;
+    const rect = fontTriggerRef.current.getBoundingClientRect();
+    const dropdownWidth = 200;
+    const dropdownHeight = 300;
+    
+    let left = rect.left;
+    let top = rect.bottom + 4;
+    
+    if (left + dropdownWidth > window.innerWidth) {
+      left = window.innerWidth - dropdownWidth - 16;
+    }
+    if (top + dropdownHeight > window.innerHeight) {
+      top = rect.top - dropdownHeight - 4;
+    }
+    
+    setFontDropdownPosition({ top, left });
+  }, []);
 
   if (!selectedObject) {
     return (
@@ -115,6 +166,52 @@ export function PropertiesBar() {
     object.set(property, value);
     handleUpdate();
   };
+  
+  // Font preview handlers
+  const handleFontHover = async (font: string) => {
+    if (!originalFont) {
+      setOriginalFont(object.fontFamily || 'Arial');
+    }
+    if (isGoogleFont(font)) {
+      await loadGoogleFont(font);
+    }
+    object.set('fontFamily', font);
+    handleUpdate();
+  };
+  
+  const handleFontLeave = () => {
+    if (originalFont) {
+      object.set('fontFamily', originalFont);
+      handleUpdate();
+      setOriginalFont(null);
+    }
+  };
+  
+  const handleFontSelect = async (font: string) => {
+    setOriginalFont(null);
+    await handleChange('fontFamily', font);
+    setFontDropdownOpen(false);
+  };
+  
+  // Color preview handlers
+  const handleColorPreview = (property: string) => (color: string | null) => {
+    if (color === null) {
+      // Restore original
+      const original = originalColorsRef.current[property];
+      if (original !== undefined) {
+        object.set(property, original);
+        handleUpdate();
+        delete originalColorsRef.current[property];
+      }
+    } else {
+      // Preview new color
+      if (originalColorsRef.current[property] === undefined) {
+        originalColorsRef.current[property] = (object[property as keyof FabricObject] as string) || '#000000';
+      }
+      object.set(property, color);
+      handleUpdate();
+    }
+  };
 
   // Helper to check if property is active (e.g. bold)
   const isBold = object.fontWeight === 'bold' || object.fontWeight === 700 || object.fontWeight === '700';
@@ -141,6 +238,7 @@ export function PropertiesBar() {
             label="Fill"
             showLabel={false}
             size="sm"
+            onPreviewColor={handleColorPreview('fill')}
           />
         </div>
       )}
@@ -155,6 +253,7 @@ export function PropertiesBar() {
             label="Stroke"
             showLabel={false}
             size="sm"
+            onPreviewColor={handleColorPreview('stroke')}
           />
           <input
             type="number"
@@ -202,23 +301,68 @@ export function PropertiesBar() {
         <>
           <div className="h-6 w-px bg-border mx-1 shrink-0" />
           
-          {/* Font Family */}
+          {/* Font Family - Custom dropdown with hover preview */}
           {fontsLoaded ? (
-            <select
-              value={object.fontFamily || 'Arial'}
-              onChange={(e) => handleChange('fontFamily', e.target.value)}
-              className="h-8 w-32 rounded border border-border bg-background px-2 text-xs"
-              title="Font Family"
-            >
-              <option value="Arial">Arial</option>
-              {availableFonts.map((font) => (
-                <option key={font} value={font} style={{ fontFamily: font }}>
-                  {font}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                ref={fontTriggerRef}
+                onClick={() => {
+                  if (!fontDropdownOpen) {
+                    updateFontDropdownPosition();
+                  }
+                  setFontDropdownOpen(!fontDropdownOpen);
+                }}
+                className="flex items-center justify-between h-8 w-36 rounded border border-border bg-background px-2 text-xs hover:border-primary/50 transition-colors"
+                title="Font Family"
+              >
+                <span 
+                  className="truncate" 
+                  style={{ fontFamily: object.fontFamily || 'Arial' }}
+                >
+                  {object.fontFamily || 'Arial'}
+                </span>
+                <ChevronDown className="h-3 w-3 ml-1 text-muted-foreground" />
+              </button>
+              
+              {/* Font Dropdown */}
+              {fontDropdownOpen && (
+                <div
+                  ref={fontDropdownRef}
+                  className="fixed z-[100] w-52 max-h-72 overflow-y-auto bg-white dark:bg-gray-900 border border-border rounded-lg shadow-xl"
+                  style={{ top: fontDropdownPosition.top, left: fontDropdownPosition.left }}
+                  onMouseLeave={handleFontLeave}
+                >
+                  <div className="p-1">
+                    <button
+                      key="Arial"
+                      onClick={() => handleFontSelect('Arial')}
+                      onMouseEnter={() => handleFontHover('Arial')}
+                      className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-primary/10 transition-colors ${
+                        (object.fontFamily || 'Arial') === 'Arial' ? 'bg-primary/20 font-medium' : ''
+                      }`}
+                      style={{ fontFamily: 'Arial' }}
+                    >
+                      Arial
+                    </button>
+                    {availableFonts.map((font) => (
+                      <button
+                        key={font}
+                        onClick={() => handleFontSelect(font)}
+                        onMouseEnter={() => handleFontHover(font)}
+                        className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-primary/10 transition-colors ${
+                          object.fontFamily === font ? 'bg-primary/20 font-medium' : ''
+                        }`}
+                        style={{ fontFamily: font }}
+                      >
+                        {font}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-             <div className="h-8 w-32 animate-pulse rounded bg-muted" />
+             <div className="h-8 w-36 animate-pulse rounded bg-muted" />
           )}
 
           {/* Font Size */}

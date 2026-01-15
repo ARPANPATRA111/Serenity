@@ -716,9 +716,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
           isOpen={openDropdown === 'text'}
           onToggle={() => toggleDropdown('text')}
         >
-          <DropdownItem icon={Type} label="Body Text" onClick={handleAddText} disabled={isPreviewMode} />
           <DropdownItem icon={Type} label="Heading" onClick={handleAddHeading} disabled={isPreviewMode} />
           <DropdownItem icon={Type} label="Subheading" onClick={handleAddSubheading} disabled={isPreviewMode} />
+          <DropdownItem icon={Type} label="Body Text" onClick={handleAddText} disabled={isPreviewMode} />
         </ToolbarDropdown>
 
         <button onClick={handleAddImage} className="toolbar-button" title="Add Image" disabled={isPreviewMode}>
