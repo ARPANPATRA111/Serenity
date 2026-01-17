@@ -156,7 +156,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [pathname, user, isLoading, router]);
 
   const getActionCodeSettings = (): ActionCodeSettings => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+      (typeof window !== 'undefined' ? window.location.origin : '');
     return {
       url: `${baseUrl}/auth/action`,
       handleCodeInApp: true,
@@ -204,7 +205,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
-      await sendEmailVerification(userCredential.user, getActionCodeSettings());
+      try {
+        await sendEmailVerification(userCredential.user, getActionCodeSettings());
+      } catch (verificationError: any) {
+        if (verificationError.code === 'auth/unauthorized-continue-uri') {
+          await sendEmailVerification(userCredential.user);
+        } else {
+          throw verificationError;
+        }
+      }
       
       const userToSave = {
         id: userCredential.user.uid,
@@ -224,6 +233,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (error.code === 'auth/weak-password') {
         throw new Error('Password should be at least 6 characters');
+      }
+      if (error.code === 'auth/unauthorized-continue-uri') {
+        throw new Error('Email verification setup error. Please contact support.');
       }
       throw error;
     } finally {
@@ -302,7 +314,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resendVerificationEmail = async () => {
     if (firebaseUser && !firebaseUser.emailVerified) {
-      await sendEmailVerification(firebaseUser, getActionCodeSettings());
+      try {
+        await sendEmailVerification(firebaseUser, getActionCodeSettings());
+      } catch (error: any) {
+        if (error.code === 'auth/unauthorized-continue-uri') {
+          await sendEmailVerification(firebaseUser);
+        } else {
+          throw error;
+        }
+      }
     } else {
       throw new Error('No unverified user found');
     }

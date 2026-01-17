@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome, User, CheckCircle2, AlertCircle, Award } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Chrome, User, CheckCircle2, AlertCircle, Award, Sparkles } from 'lucide-react';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
 
 export default function SignupPage() {
-  const { signup, loginWithGoogle, loginWithGithub, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { signup, loginWithGoogle, isLoading: authLoading, isAuthenticated } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -23,7 +23,6 @@ export default function SignupPage() {
     { label: 'Contains uppercase letter', met: /[A-Z]/.test(formData.password) },
   ];
 
-  // If already authenticated, show loading while redirecting
   if (isAuthenticated) {
     return <AuthLoading />;
   }
@@ -52,17 +51,11 @@ export default function SignupPage() {
     setError('');
     try {
       await loginWithGoogle();
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message === 'Login cancelled') {
+        return;
+      }
       setError('Failed to sign up with Google. Please try again.');
-    }
-  };
-
-  const handleGithubLogin = async () => {
-    setError('');
-    try {
-      await loginWithGithub();
-    } catch (err) {
-      setError('Failed to sign up with GitHub. Please try again.');
     }
   };
 
@@ -170,17 +163,6 @@ export default function SignupPage() {
             >
               <Chrome className="h-5 w-5" />
               Sign up with Google
-            </motion.button>
-            
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={handleGithubLogin}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 rounded-xl border border-border bg-card px-4 py-3 font-medium hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Github className="h-5 w-5" />
-              Sign up with GitHub
             </motion.button>
           </div>
 

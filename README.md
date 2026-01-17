@@ -15,8 +15,9 @@ A production-ready, SaaS-grade Certificate Generator built with Next.js 14 and F
 - **Bulk Generation**: Process thousands of certificates client-side
 - **QR Verification**: Each certificate gets a unique verifiable QR code
 - **High-DPI Output**: 300 DPI PDF export for professional printing
-- **Dual Themes**: "Neon Future" (dark) and "Academic Gold" (light)
+- **Dual Themes**: Dark and Light themes with smooth transitions
 - **Privacy-First**: All processing happens in the browser
+- **Fully Responsive**: Optimized for desktop and mobile devices
 
 ### New Features (v2.0)
 
@@ -34,14 +35,16 @@ A production-ready, SaaS-grade Certificate Generator built with Next.js 14 and F
 - Certificate border styles: simple, double, ornate, gold frame, corner
 - Customizable stroke colors and widths
 
-#### 🖼️ Interactive Homepage
-- Animated floating dots background
-- Mouse-following spotlight effect
-- Gradient orbs with smooth animations
-- Modern, engaging design
+#### 🖼️ Stunning Homepage
+- Performance-optimized animated mesh gradient background
+- Floating particles with CSS-only animations
+- Animated geometric shapes
+- Modern, engaging design with smooth transitions
+- Mobile-responsive layout
+- Product preview mockup
 
 #### 📁 Media Library
-- Personal cloud storage for each user via Firebase Storage
+- Personal cloud storage for each user via Vercel Blob
 - Drag-and-drop upload interface
 - Support for PNG, JPG, WebP, SVG, and GIF files
 - 5MB file size limit with validation
@@ -71,18 +74,25 @@ A production-ready, SaaS-grade Certificate Generator built with Next.js 14 and F
 - Certificate info is saved with each template
 - Opens existing templates with their saved certificate info
 - Required before generating certificates
-- Displayed on the public verification page
+- Displayed on the public verification page with sharing options
 
 #### 🔐 Email Verification
 - New user registration requires email verification
 - Firebase Auth sends verification emails with custom redirect
 - Users cannot login until email is verified
 - Verification success message on login page
+- Automatic fallback for deployment domain issues
 
 #### 🎯 Enhanced Canvas Boundary
 - Red dashed boundary line for print area
 - Semi-transparent red shade outside boundary
 - Clear distinction between printable/non-printable areas
+
+#### 📱 Social Sharing
+- Share verified certificates on LinkedIn, Facebook, and X (Twitter)
+- Copy link to clipboard functionality
+- Add certificate directly to LinkedIn profile
+- Beautiful share dialog with multiple options
 
 ## 🚀 Quick Start
 
@@ -196,22 +206,24 @@ Privacy-preserving view counting:
 
 Two themes available via `next-themes`:
 
-### Neon Future (Dark)
-- Background: `#1c1c1c`
-- Primary: `#001eff` (Electric Blue)
-- Accent: `#ff008d` (Hot Pink)
+### Dark Theme
+- Background: Rich slate gradient
+- Primary: Indigo (`#6366f1`)
+- Secondary: Purple (`#a855f7`)
+- Accent: Pink (`#ec4899`)
 
-### Academic Gold (Light)
-- Background: `#ffffff`
-- Primary: `#b45309` (Dark Amber)
-- Accent: `#f59e0b` (Bright Amber)
+### Light Theme
+- Background: Clean white with subtle gradients
+- Primary: Indigo (`#4f46e5`)
+- Secondary: Purple (`#a855f7`)
+- Accent: Pink (`#ec4899`)
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
 ```env
-# Firebase
+# Firebase Client
 NEXT_PUBLIC_FIREBASE_API_KEY=
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=
@@ -219,7 +231,7 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
 
-# Firebase Admin
+# Firebase Admin (Server-side)
 FIREBASE_ADMIN_PROJECT_ID=
 FIREBASE_ADMIN_CLIENT_EMAIL=
 FIREBASE_ADMIN_PRIVATE_KEY=
@@ -227,12 +239,16 @@ FIREBASE_ADMIN_PRIVATE_KEY=
 # Vercel Blob (for media storage)
 BLOB_READ_WRITE_TOKEN=
 
-# Resend
+# Resend (for email)
 RESEND_API_KEY=
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 DAILY_IP_SALT=your-secret-salt
+
+# Rate Limiting
+DAILY_EMAIL_LIMIT=100
+FREE_BULK_EMAIL_LIMIT=5
 ```
 
 ## 📦 Dependencies

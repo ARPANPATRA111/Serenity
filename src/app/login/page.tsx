@@ -3,12 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome, AlertCircle, CheckCircle, Award } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Chrome, AlertCircle, CheckCircle, Award, Sparkles } from 'lucide-react';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
 import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, loginWithGithub, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { login, loginWithGoogle, isLoading: authLoading, isAuthenticated } = useAuth();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,17 +51,11 @@ export default function LoginPage() {
     setError('');
     try {
       await loginWithGoogle();
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message === 'Login cancelled') {
+        return;
+      }
       setError('Failed to sign in with Google. Please try again.');
-    }
-  };
-
-  const handleGithubLogin = async () => {
-    setError('');
-    try {
-      await loginWithGithub();
-    } catch (err) {
-      setError('Failed to sign in with GitHub. Please try again.');
     }
   };
 
@@ -128,17 +122,6 @@ export default function LoginPage() {
             >
               <Chrome className="h-5 w-5" />
               Continue with Google
-            </motion.button>
-            
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={handleGithubLogin}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 rounded-xl border border-border bg-card px-4 py-3 font-medium hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Github className="h-5 w-5" />
-              Continue with GitHub
             </motion.button>
           </div>
 
