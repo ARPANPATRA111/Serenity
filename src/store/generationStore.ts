@@ -1,9 +1,3 @@
-/**
- * Generation Store - Zustand State Management
- * 
- * Tracks the progress of batch certificate generation.
- */
-
 import { create } from 'zustand';
 import type { GenerationProgress } from '@/types/fabric.d';
 

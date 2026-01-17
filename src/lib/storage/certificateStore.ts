@@ -1,10 +1,3 @@
-/**
- * Certificate Storage Module
- * 
- * Local storage-based certificate tracking for verification.
- * In production, this would be replaced with a database (Firebase, PostgreSQL, etc.)
- */
-
 export interface CertificateRecord {
   id: string;
   recipientName: string;
@@ -20,9 +13,6 @@ export interface CertificateRecord {
 
 const STORAGE_KEY = 'serenity_certificates';
 
-/**
- * Get all stored certificates
- */
 export function getAllCertificates(): CertificateRecord[] {
   if (typeof window === 'undefined') return [];
   
@@ -37,9 +27,6 @@ export function getAllCertificates(): CertificateRecord[] {
   }
 }
 
-/**
- * Get a certificate by ID
- */
 export function getCertificate(id: string): CertificateRecord | null {
   const certificates = getAllCertificates();
   console.log(`[CertificateStore] Looking for certificate: ${id}`);
@@ -58,9 +45,6 @@ export function getCertificate(id: string): CertificateRecord | null {
   return found;
 }
 
-/**
- * Store a new certificate record
- */
 export function storeCertificate(certificate: Omit<CertificateRecord, 'createdAt' | 'viewCount' | 'isActive'>): CertificateRecord {
   const certificates = getAllCertificates();
   
@@ -80,9 +64,6 @@ export function storeCertificate(certificate: Omit<CertificateRecord, 'createdAt
   return newCert;
 }
 
-/**
- * Store multiple certificates at once (for batch generation)
- */
 export function storeCertificates(certificates: Omit<CertificateRecord, 'createdAt' | 'viewCount' | 'isActive'>[]): CertificateRecord[] {
   const existingCerts = getAllCertificates();
   
@@ -105,9 +86,6 @@ export function storeCertificates(certificates: Omit<CertificateRecord, 'created
   return newCerts;
 }
 
-/**
- * Increment view count for a certificate
- */
 export function incrementViewCount(id: string): number {
   const certificates = getAllCertificates();
   const index = certificates.findIndex(c => c.id === id);
@@ -123,9 +101,6 @@ export function incrementViewCount(id: string): number {
   return certificates[index].viewCount;
 }
 
-/**
- * Revoke a certificate
- */
 export function revokeCertificate(id: string): boolean {
   const certificates = getAllCertificates();
   const index = certificates.findIndex(c => c.id === id);
@@ -141,9 +116,6 @@ export function revokeCertificate(id: string): boolean {
   return true;
 }
 
-/**
- * Delete a certificate completely
- */
 export function deleteCertificate(id: string): boolean {
   const certificates = getAllCertificates();
   const index = certificates.findIndex(c => c.id === id);
@@ -159,9 +131,6 @@ export function deleteCertificate(id: string): boolean {
   return true;
 }
 
-/**
- * Clear all certificates (for testing)
- */
 export function clearAllCertificates(): void {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(STORAGE_KEY);

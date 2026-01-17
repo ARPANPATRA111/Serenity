@@ -1,15 +1,5 @@
 'use client';
 
-/**
- * EditorLayout - Main Editor Component
- * 
- * Assembles the complete editor interface:
- * - Toolbar (top)
- * - Left Sidebar (tools, templates)
- * - Canvas Area (center)
- * - Right Sidebar (properties, data)
- */
-
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { FabricCanvasWrapper } from './FabricCanvasWrapper';
 import { Toolbar } from './Toolbar';
@@ -17,6 +7,7 @@ import { PropertiesBar } from './PropertiesBar';
 import { LeftSidebar } from './LeftSidebar';
 import { RightSidebar } from './RightSidebar';
 import { GenerationModal } from './GenerationModal';
+import { CertificateInfoModal } from './CertificateInfoModal';
 import { useEditorStore } from '@/store/editorStore';
 import { useDataSourceStore } from '@/store/dataSourceStore';
 import { useFabricContext } from './FabricContext';
@@ -31,6 +22,7 @@ export function EditorLayout() {
   const [isResizingLeft, setIsResizingLeft] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [generationModalOpen, setGenerationModalOpen] = useState(false);
+  const [certificateInfoModalOpen, setCertificateInfoModalOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const hasLoadedTemplate = useRef(false);
@@ -79,22 +71,24 @@ export function EditorLayout() {
   }, [isResizingLeft, isResizingRight]);
 
   const searchParams = useSearchParams();
-  const { templateId, templateName, isDirty, isEditingText, setTemplateName, setTemplateInfo, setIsDirty, reset: resetEditorStore } = useEditorStore();
+  const { templateId, templateName, isDirty, isEditingText, setTemplateName, setTemplateInfo, setIsDirty, certificateMetadata, setCertificateMetadata, reset: resetEditorStore } = useEditorStore();
   const { dataSource } = useDataSourceStore();
   const { fabricInstance } = useFabricContext();
   const { user } = useAuth();
-  const hasResetForNewTemplate = useRef(false);
 
   // Track which template was last loaded
   const lastLoadedTemplateId = useRef<string | null>(null);
 
-  // Reset store when creating a new template
+  // Reset store when creating a new template (no template param in URL)
   useEffect(() => {
     const paramTemplateId = searchParams?.get('template');
-    if (!paramTemplateId && !hasResetForNewTemplate.current) {
+    // Only reset when:
+    // 1. No template param AND
+    // 2. We previously had a template loaded (or first load)
+    if (!paramTemplateId && lastLoadedTemplateId.current !== 'NEW') {
       resetEditorStore();
       setTemplateInfo(null, 'Untitled Template');
-      hasResetForNewTemplate.current = true;
+      lastLoadedTemplateId.current = 'NEW';
     }
   }, [searchParams, resetEditorStore, setTemplateInfo]);
 
@@ -120,6 +114,14 @@ export function EditorLayout() {
             }
             
             setTemplateName(isOwner ? data.template.name : `Copy of ${data.template.name}`);
+
+            // Load certificate metadata if available, otherwise reset to defaults
+            if (data.template.certificateMetadata) {
+              setCertificateMetadata(data.template.certificateMetadata);
+            } else {
+              // Reset to defaults if template has no metadata
+              setCertificateMetadata({ title: '', issuedBy: '', description: '' });
+            }
             
             if (data.template.canvasJSON) {
               try {
@@ -145,7 +147,7 @@ export function EditorLayout() {
           setLoadingTemplate(false);
         });
     }
-  }, [searchParams, fabricInstance, setTemplateInfo, setTemplateName, setIsDirty, user?.id]);
+  }, [searchParams, fabricInstance, setTemplateInfo, setTemplateName, setIsDirty, setCertificateMetadata, user?.id]);
 
 
   // Handle Save
@@ -169,7 +171,8 @@ export function EditorLayout() {
           name: templateName,
           canvasJSON,
           thumbnail: thumbnailRef,
-          userId: user.id, // Ensure userId is passed
+          userId: user.id,
+          certificateMetadata,
         }),
       });
       
@@ -193,7 +196,7 @@ export function EditorLayout() {
       console.error('Save failed', e);
       setSaveStatus('error');
     }
-  }, [fabricInstance, user, templateId, templateName, setTemplateInfo, setIsDirty]);
+  }, [fabricInstance, user, templateId, templateName, certificateMetadata, setTemplateInfo, setIsDirty]);
 
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">
@@ -203,6 +206,7 @@ export function EditorLayout() {
           onSave={handleSave} 
           saveStatus={saveStatus}
           onGenerate={() => setGenerationModalOpen(true)}
+          onOpenCertificateInfo={() => setCertificateInfoModalOpen(true)}
         />
       </div>
 
@@ -264,6 +268,11 @@ export function EditorLayout() {
         isOpen={generationModalOpen}
         onClose={() => setGenerationModalOpen(false)}
         onSave={handleSave}
+      />
+
+      <CertificateInfoModal
+        isOpen={certificateInfoModalOpen}
+        onClose={() => setCertificateInfoModalOpen(false)}
       />
     </div>
   );

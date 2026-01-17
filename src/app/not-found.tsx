@@ -1,7 +1,3 @@
-/**
- * 404 Not Found Page
- */
-
 import Link from 'next/link';
 
 export default function NotFound() {

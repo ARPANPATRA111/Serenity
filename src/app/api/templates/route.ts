@@ -1,11 +1,3 @@
-/**
- * Templates API Routes
- * 
- * Server-side API for template CRUD operations.
- * GET - List templates (user's own or public)
- * POST - Create a new template
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import {
   createTemplate,
@@ -18,14 +10,10 @@ import {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * GET /api/templates
- * 
- * Query params:
- * - userId: Get templates for specific user
- * - public: Get only public templates
- * - search: Search templates by name/tags
- */
+// In-memory cache for public templates (refreshes every 60 seconds)
+let publicTemplatesCache: { templates: Template[]; timestamp: number } | null = null;
+const CACHE_TTL = 60 * 1000; // 60 seconds
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -43,8 +31,18 @@ export async function GET(request: NextRequest) {
       } else if (userId && !isPublic) {
         // Get user's own templates
         templates = await getUserTemplates(userId);
+      } else if (isPublic) {
+        // Get public templates with caching
+        const now = Date.now();
+        if (publicTemplatesCache && (now - publicTemplatesCache.timestamp) < CACHE_TTL) {
+          // Use cached data
+          templates = publicTemplatesCache.templates.slice(0, limit);
+        } else {
+          // Fetch fresh data
+          templates = await getPublicTemplates(limit);
+          publicTemplatesCache = { templates, timestamp: now };
+        }
       } else {
-        // Get public templates
         templates = await getPublicTemplates(limit);
       }
     } catch {
@@ -52,11 +50,17 @@ export async function GET(request: NextRequest) {
       templates = [];
     }
 
+    // Add cache headers for public templates
+    const headers: HeadersInit = {};
+    if (isPublic && !searchQuery) {
+      headers['Cache-Control'] = 'public, s-maxage=60, stale-while-revalidate=120';
+    }
+
     return NextResponse.json({
       success: true,
       templates,
       count: templates.length,
-    });
+    }, { headers });
   } catch (error) {
     console.error('[Templates API] Error fetching templates:', error);
     return NextResponse.json(
@@ -66,16 +70,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * POST /api/templates
- * 
- * Create a new template
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    const { name, canvasJSON, thumbnail, userId, isPublic, creatorName, creatorEmail, tags } = body;
+    const { name, canvasJSON, thumbnail, userId, isPublic, creatorName, creatorEmail, tags, certificateMetadata } = body;
 
     if (!name || !canvasJSON) {
       return NextResponse.json(
@@ -101,6 +100,7 @@ export async function POST(request: NextRequest) {
       creatorName,
       creatorEmail,
       tags: tags || [],
+      certificateMetadata,
     });
 
     return NextResponse.json({

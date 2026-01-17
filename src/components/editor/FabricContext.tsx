@@ -1,12 +1,5 @@
 'use client';
 
-/**
- * FabricContext - Provides Fabric.js instance to child components
- * 
- * Allows toolbar and sidebars to access canvas methods without prop drilling.
- * Uses useCallback to prevent infinite re-renders when setFabricInstance is used in useEffect.
- */
-
 import { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
 import type { UseFabricReturn } from '@/lib/fabric';
 

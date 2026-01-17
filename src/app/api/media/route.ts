@@ -1,11 +1,3 @@
-/**
- * Media Upload API Route
- * 
- * Handles media file uploads to Vercel Blob Storage.
- * Uses Firestore to store metadata for user's media library.
- * Server-side validation and processing.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { put, del } from '@vercel/blob';
 import { getAdminFirestore } from '@/lib/firebase/admin';
@@ -14,7 +6,6 @@ import { nanoid } from 'nanoid';
 // Maximum file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-// Allowed MIME types
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
@@ -34,9 +25,6 @@ interface MediaAsset {
   blobPath: string;
 }
 
-/**
- * POST - Upload a new media file
- */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -126,9 +114,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET - Retrieve all media for a user
- */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -163,9 +148,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * DELETE - Remove a media asset
- */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

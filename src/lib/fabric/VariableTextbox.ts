@@ -1,21 +1,8 @@
-/**
- * VariableTextbox - Custom Fabric.js Textbox Subclass
- * 
- * Extends fabric.Textbox with dynamic data binding capabilities for certificate generation.
- * The `dynamicKey` property holds the Excel column header name for data substitution.
- * 
- * CRITICAL: This uses Fabric.js v5.3.0 syntax. Do NOT update to v6 alpha.
- */
-
 import { fabric } from 'fabric';
 
 // Custom property names to include in serialization
 const CUSTOM_PROPERTIES = ['dynamicKey', 'isPlaceholder'];
 
-/**
- * Register the VariableTextbox class with Fabric.js
- * Must be called once before using VariableTextbox
- */
 export function registerVariableTextbox(): void {
   if ((fabric as unknown as Record<string, unknown>).VariableTextbox) {
     // Already registered
@@ -30,9 +17,6 @@ export function registerVariableTextbox(): void {
     dynamicKey: '',
     isPlaceholder: false,
 
-    /**
-     * Initialize the VariableTextbox
-     */
     initialize: function (text: string, options?: fabric.ITextboxOptions & { dynamicKey?: string; isPlaceholder?: boolean }) {
       // Call parent constructor
       this.callSuper('initialize', text, options);
@@ -50,9 +34,6 @@ export function registerVariableTextbox(): void {
       }
     },
 
-    /**
-     * Apply visual styling to indicate this is a dynamic placeholder
-     */
     _applyPlaceholderStyle: function () {
       this.set({
         strokeWidth: 2,
@@ -62,9 +43,6 @@ export function registerVariableTextbox(): void {
       });
     },
 
-    /**
-     * Remove placeholder styling
-     */
     _removePlaceholderStyle: function () {
       this.set({
         strokeWidth: 0,
@@ -74,9 +52,6 @@ export function registerVariableTextbox(): void {
       });
     },
 
-    /**
-     * Set the dynamic key and update styling
-     */
     setDynamicKey: function (key: string) {
       this.dynamicKey = key;
       this.isPlaceholder = !!key;
@@ -92,17 +67,10 @@ export function registerVariableTextbox(): void {
       this.canvas?.requestRenderAll();
     },
 
-    /**
-     * Clear the dynamic key and reset styling
-     */
     clearDynamicKey: function () {
       this.setDynamicKey('');
     },
 
-    /**
-     * Override toObject to include custom properties in serialization
-     * CRITICAL: This ensures dynamicKey persists when saving/loading templates
-     */
     toObject: function (propertiesToInclude?: string[]) {
       return this.callSuper('toObject', [
         ...CUSTOM_PROPERTIES,
@@ -110,9 +78,6 @@ export function registerVariableTextbox(): void {
       ]);
     },
 
-    /**
-     * Custom rendering to show the dashed border for placeholders
-     */
     _render: function (ctx: CanvasRenderingContext2D) {
       this.callSuper('_render', ctx);
 
@@ -166,9 +131,6 @@ export function registerVariableTextbox(): void {
   (fabric as unknown as Record<string, unknown>).VariableTextbox = VariableTextbox;
 }
 
-/**
- * Type-safe factory function to create a VariableTextbox
- */
 export function createVariableTextbox(
   text: string,
   options?: fabric.ITextboxOptions & { dynamicKey?: string; isPlaceholder?: boolean }
@@ -186,24 +148,14 @@ export function createVariableTextbox(
   };
 }
 
-/**
- * Check if an object is a VariableTextbox
- */
 export function isVariableTextbox(obj: unknown): obj is fabric.Textbox & { dynamicKey: string; isPlaceholder: boolean } {
   return typeof obj === 'object' && obj !== null && (obj as { type?: string }).type === 'variableTextbox';
 }
 
-/**
- * Get all VariableTextbox objects from a canvas
- */
 export function getVariableTextboxes(canvas: fabric.Canvas | fabric.StaticCanvas): Array<fabric.Textbox & { dynamicKey: string }> {
   return canvas.getObjects().filter(isVariableTextbox) as Array<fabric.Textbox & { dynamicKey: string }>;
 }
 
-/**
- * Update all VariableTextbox instances with data from a row
- * Used during batch generation
- */
 export function updateVariableTextboxes(
   canvas: fabric.Canvas | fabric.StaticCanvas,
   data: Record<string, string | number | boolean | null>

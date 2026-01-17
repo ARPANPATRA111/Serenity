@@ -1,20 +1,11 @@
 'use client';
 
-/**
- * Skeleton Loading Components
- * 
- * Provides skeleton placeholders for loading states throughout the app.
- */
-
 import { cn } from '@/lib/utils';
 
 interface SkeletonProps {
   className?: string;
 }
 
-/**
- * Base Skeleton component
- */
 export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
@@ -26,9 +17,6 @@ export function Skeleton({ className }: SkeletonProps) {
   );
 }
 
-/**
- * Card Skeleton - for template cards, certificate cards, etc.
- */
 export function SkeletonCard({ className }: SkeletonProps) {
   return (
     <div className={cn('rounded-xl border border-border bg-card p-4 space-y-4', className)}>
@@ -45,9 +33,6 @@ export function SkeletonCard({ className }: SkeletonProps) {
   );
 }
 
-/**
- * Template Grid Skeleton - for the templates page
- */
 export function SkeletonTemplateGrid({ count = 4 }: { count?: number }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -58,9 +43,6 @@ export function SkeletonTemplateGrid({ count = 4 }: { count?: number }) {
   );
 }
 
-/**
- * Stats Skeleton - for dashboard statistics
- */
 export function SkeletonStats() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -80,9 +62,6 @@ export function SkeletonStats() {
   );
 }
 
-/**
- * Table Row Skeleton - for activity tables
- */
 export function SkeletonTableRow() {
   return (
     <div className="flex items-center gap-4 py-4 border-b border-border">
@@ -96,9 +75,6 @@ export function SkeletonTableRow() {
   );
 }
 
-/**
- * Activity List Skeleton
- */
 export function SkeletonActivityList({ count = 4 }: { count?: number }) {
   return (
     <div className="space-y-1">
@@ -109,9 +85,6 @@ export function SkeletonActivityList({ count = 4 }: { count?: number }) {
   );
 }
 
-/**
- * Dashboard Page Skeleton
- */
 export function SkeletonDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -154,9 +127,6 @@ export function SkeletonDashboard() {
   );
 }
 
-/**
- * Templates Page Skeleton
- */
 export function SkeletonTemplatesPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -182,9 +152,6 @@ export function SkeletonTemplatesPage() {
   );
 }
 
-/**
- * Certificate History Skeleton
- */
 export function SkeletonHistoryPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -220,9 +187,6 @@ export function SkeletonHistoryPage() {
   );
 }
 
-/**
- * Settings Page Skeleton
- */
 export function SkeletonSettingsPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

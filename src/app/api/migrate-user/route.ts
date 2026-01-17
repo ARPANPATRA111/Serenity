@@ -1,9 +1,3 @@
-/**
- * User Migration API Route
- * 
- * POST /api/migrate-user - Migrate templates and certificates from old user ID to new user ID
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 

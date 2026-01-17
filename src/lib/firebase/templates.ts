@@ -1,12 +1,11 @@
-/**
- * Firebase Templates Module
- * 
- * Server-side Firestore operations for template management.
- * Replaces localStorage-based template storage with cloud persistence.
- */
-
 import { getAdminFirestore } from './admin';
 import { FieldValue } from 'firebase-admin/firestore';
+
+export interface CertificateMetadata {
+  title: string;
+  issuedBy: string;
+  description: string;
+}
 
 export interface Template {
   id: string;
@@ -22,6 +21,7 @@ export interface Template {
   creatorEmail?: string;
   stars: number;
   tags?: string[];
+  certificateMetadata?: CertificateMetadata;
 }
 
 export interface CreateTemplateInput {
@@ -33,6 +33,7 @@ export interface CreateTemplateInput {
   creatorName?: string;
   creatorEmail?: string;
   tags?: string[];
+  certificateMetadata?: CertificateMetadata;
 }
 
 export interface UpdateTemplateInput {
@@ -41,20 +42,15 @@ export interface UpdateTemplateInput {
   thumbnail?: string;
   isPublic?: boolean;
   tags?: string[];
+  certificateMetadata?: CertificateMetadata;
 }
 
 const COLLECTION = 'templates';
 
-/**
- * Generate a unique template ID
- */
 function generateTemplateId(): string {
   return `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
-/**
- * Create a new template
- */
 export async function createTemplate(input: CreateTemplateInput): Promise<Template> {
   const db = getAdminFirestore();
   const now = new Date().toISOString();
@@ -74,6 +70,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
     creatorEmail: input.creatorEmail,
     stars: 0,
     tags: input.tags || [],
+    certificateMetadata: input.certificateMetadata,
   };
 
   // Remove undefined values to avoid Firestore issues
@@ -86,9 +83,6 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
   return template;
 }
 
-/**
- * Get a template by ID
- */
 export async function getTemplate(id: string): Promise<Template | null> {
   const db = getAdminFirestore();
   const doc = await db.collection(COLLECTION).doc(id).get();
@@ -100,9 +94,6 @@ export async function getTemplate(id: string): Promise<Template | null> {
   return doc.data() as Template;
 }
 
-/**
- * Update an existing template
- */
 export async function updateTemplate(id: string, updates: UpdateTemplateInput): Promise<Template | null> {
   const db = getAdminFirestore();
   const docRef = db.collection(COLLECTION).doc(id);
@@ -134,9 +125,6 @@ export async function updateTemplate(id: string, updates: UpdateTemplateInput): 
   return updated.data() as Template;
 }
 
-/**
- * Delete a template
- */
 export async function deleteTemplate(id: string): Promise<boolean> {
   const db = getAdminFirestore();
   const docRef = db.collection(COLLECTION).doc(id);
@@ -152,9 +140,6 @@ export async function deleteTemplate(id: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Get all templates for a specific user
- */
 export async function getUserTemplates(userId: string): Promise<Template[]> {
   const db = getAdminFirestore();
   
@@ -165,9 +150,13 @@ export async function getUserTemplates(userId: string): Promise<Template[]> {
       .where('userId', '==', userId)
       .get();
     
-    // Sort in memory
+    // Sort in memory, exclude canvasJSON for performance
     return snapshot.docs
-      .map(doc => doc.data() as Template)
+      .map(doc => {
+        const data = doc.data() as Template;
+        const { canvasJSON, ...rest } = data;
+        return { ...rest, canvasJSON: '' } as Template;
+      })
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   } catch (error) {
     console.error('[Firebase Templates] Error getting user templates:', error);
@@ -175,9 +164,6 @@ export async function getUserTemplates(userId: string): Promise<Template[]> {
   }
 }
 
-/**
- * Get all public templates
- */
 export async function getPublicTemplates(limit: number = 50): Promise<Template[]> {
   const db = getAdminFirestore();
   
@@ -190,8 +176,14 @@ export async function getPublicTemplates(limit: number = 50): Promise<Template[]
       .get();
     
     // Sort in memory by stars first, then by updatedAt
+    // Exclude canvasJSON to reduce payload size for listing
     return snapshot.docs
-      .map(doc => doc.data() as Template)
+      .map(doc => {
+        const data = doc.data() as Template;
+        // Return template without canvasJSON for listing (it's large)
+        const { canvasJSON, ...rest } = data;
+        return { ...rest, canvasJSON: '' } as Template;
+      })
       .sort((a, b) => {
         if (b.stars !== a.stars) return b.stars - a.stars;
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
@@ -203,9 +195,6 @@ export async function getPublicTemplates(limit: number = 50): Promise<Template[]
   }
 }
 
-/**
- * Search templates by name or tags
- */
 export async function searchTemplates(query: string, publicOnly: boolean = true): Promise<Template[]> {
   const db = getAdminFirestore();
   let baseQuery = db.collection(COLLECTION);
@@ -226,9 +215,6 @@ export async function searchTemplates(query: string, publicOnly: boolean = true)
     .sort((a, b) => b.stars - a.stars);
 }
 
-/**
- * Increment certificate count for a template
- */
 export async function incrementCertificateCount(id: string, count: number = 1): Promise<void> {
   const db = getAdminFirestore();
   const docRef = db.collection(COLLECTION).doc(id);
@@ -241,9 +227,6 @@ export async function incrementCertificateCount(id: string, count: number = 1): 
   console.log(`[Firebase Templates] Incremented certificate count for ${id} by ${count}`);
 }
 
-/**
- * Toggle star on a template
- */
 export async function toggleTemplateStar(templateId: string, userId: string): Promise<{ starred: boolean; stars: number }> {
   const db = getAdminFirestore();
   const templateRef = db.collection(COLLECTION).doc(templateId);
@@ -284,25 +267,16 @@ export async function toggleTemplateStar(templateId: string, userId: string): Pr
   return { starred: !isStarred, stars };
 }
 
-/**
- * Check if user has starred a template
- */
 export async function hasUserStarredTemplate(templateId: string, userId: string): Promise<boolean> {
   const db = getAdminFirestore();
   const starDoc = await db.collection('template_stars').doc(`${templateId}_${userId}`).get();
   return starDoc.exists;
 }
 
-/**
- * Make a template public or private
- */
 export async function setTemplateVisibility(id: string, isPublic: boolean): Promise<Template | null> {
   return updateTemplate(id, { isPublic });
 }
 
-/**
- * Save or update template (handles both create and update)
- */
 export async function saveOrUpdateTemplate(
   input: CreateTemplateInput & { existingId?: string }
 ): Promise<Template> {
@@ -328,6 +302,11 @@ export async function saveOrUpdateTemplate(
       // Only include tags if defined
       if (createInput.tags !== undefined) {
         updateData.tags = createInput.tags;
+      }
+
+      // Include certificateMetadata if defined
+      if (createInput.certificateMetadata !== undefined) {
+        updateData.certificateMetadata = createInput.certificateMetadata;
       }
       
       // Update existing template

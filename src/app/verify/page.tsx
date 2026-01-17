@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Search, ArrowRight, Loader2 } from 'lucide-react';
+import { ShieldCheck, Search, ArrowRight, Loader2, Award } from 'lucide-react';
 import Link from 'next/link';
 
 export default function VerifyPage() {
@@ -35,10 +35,12 @@ export default function VerifyPage() {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Navbar */}
       <header className="flex h-16 items-center border-b border-border bg-card px-6">
-        <div className="flex items-center gap-2 font-bold text-primary">
-          <ShieldCheck className="h-6 w-6" />
-          <span>Serenity Verify</span>
-        </div>
+        <Link href="/" className="flex items-center gap-2">
+          <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+            <Award className="h-4 w-4 text-white" />
+          </div>
+          <span className="font-display text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
+        </Link>
         <div className="ml-auto">
           <Link href="/" className="text-sm font-medium text-muted-foreground hover:text-foreground">
             Home

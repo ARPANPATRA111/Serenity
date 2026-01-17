@@ -1,9 +1,3 @@
-/**
- * useKeyboardShortcut Hook
- * 
- * Handle keyboard shortcuts with proper cleanup.
- */
-
 'use client';
 
 import { useEffect, useCallback } from 'react';

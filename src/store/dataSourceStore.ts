@@ -1,30 +1,13 @@
-/**
- * Data Source Store - Zustand State Management
- * 
- * Manages the parsed Excel/CSV data and column mappings.
- */
-
 import { create } from 'zustand';
 import type { ParsedDataSource, DataRow } from '@/types/fabric.d';
 
 export interface DataSourceState {
-  // Parsed data
   dataSource: ParsedDataSource | null;
-  
-  // Column headers (variable chips)
   headers: string[];
-  
-  // Data rows
   rows: DataRow[];
-  
-  // Preview
   previewRowIndex: number;
-  
-  // Loading state
   isLoading: boolean;
   error: string | null;
-  
-  // Actions
   setDataSource: (source: ParsedDataSource | null) => void;
   setPreviewRowIndex: (index: number) => void;
   clearDataSource: () => void;

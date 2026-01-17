@@ -1,11 +1,3 @@
-/**
- * Lead Capture API Route
- * 
- * POST /api/leads/capture
- * 
- * Captures leads when free users hit feature limits (Freemium "Fake Door").
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -33,13 +25,11 @@ export async function POST(request: NextRequest) {
       metadata,
     };
 
-    // Store lead capture event
     await db.collection('leads').add({
       ...leadEvent,
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    // If email provided, also add to waitlist
     if (email) {
       const waitlistRef = db.collection('waitlist').doc(email.toLowerCase());
       const existingDoc = await waitlistRef.get();
@@ -52,7 +42,6 @@ export async function POST(request: NextRequest) {
           source: 'feature_gate',
         });
       } else {
-        // Add feature to existing interests
         await waitlistRef.update({
           features: FieldValue.arrayUnion(feature),
           lastInteraction: FieldValue.serverTimestamp(),

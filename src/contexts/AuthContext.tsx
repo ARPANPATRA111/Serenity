@@ -1,20 +1,27 @@
 'use client';
 
-/**
- * Authentication Context
- * 
- * Provides authentication state and methods throughout the app.
- * Uses local storage for demo purposes - in production, use Firebase Auth.
- */
-
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  sendEmailVerification,
+  GoogleAuthProvider,
+  GithubAuthProvider,
+  signInWithPopup,
+  ActionCodeSettings,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import { auth, initializeFirebase } from '@/lib/firebase/client';
 
 interface User {
   id: string;
   email: string;
   name: string;
   avatar?: string;
+  emailVerified: boolean;
 }
 
 interface AuthContextValue {
@@ -26,37 +33,28 @@ interface AuthContextValue {
   logout: () => void;
   loginWithGoogle: () => Promise<void>;
   loginWithGithub: () => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
+  updateUser: (updates: { name?: string }) => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Routes that require authentication
-const PROTECTED_ROUTES = ['/dashboard', '/editor', '/history'];
-
-// Routes that should redirect to dashboard if authenticated
+const PROTECTED_ROUTES = ['/dashboard', '/editor', '/history', '/templates', '/settings'];
 const AUTH_ROUTES = ['/login', '/signup'];
 
-/**
- * Generate a consistent user ID from email
- * This ensures the same email always gets the same ID across devices
- */
-function generateUserIdFromEmail(email: string): string {
-  // Simple hash function for consistent ID generation
+function generateOldUserIdFromEmail(email: string): string {
   let hash = 0;
   const normalizedEmail = email.toLowerCase().trim();
   for (let i = 0; i < normalizedEmail.length; i++) {
     const char = normalizedEmail.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
+    hash = hash & hash;
   }
-  // Convert to positive number and base36
   const positiveHash = Math.abs(hash);
   return `user_${positiveHash.toString(36)}`;
 }
 
-/**
- * Migrate user data from old ID to new ID via API
- */
 async function migrateUserData(oldUserId: string, newUserId: string): Promise<void> {
   try {
     const response = await fetch('/api/migrate-user', {
@@ -66,56 +64,84 @@ async function migrateUserData(oldUserId: string, newUserId: string): Promise<vo
     });
     
     const data = await response.json();
-    if (data.success) {
-      console.log(`[Auth] ${data.message}`);
-    } else {
-      console.warn('[Auth] Migration failed:', data.error);
+    if (data.success && data.migratedTemplates > 0) {
+      console.log(`[Auth] Migrated ${data.migratedTemplates} templates and ${data.migratedCertificates} certificates`);
     }
   } catch (error) {
     console.error('[Auth] Error migrating user data:', error);
   }
 }
 
+async function saveUserViaAPI(user: {
+  id: string;
+  email: string;
+  name: string;
+  emailVerified: boolean;
+  avatar?: string;
+}): Promise<void> {
+  try {
+    const response = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      console.error('[Auth] Failed to save user via API:', data.error);
+    }
+  } catch (error) {
+    console.error('[Auth] Error saving user via API:', error);
+  }
+}
+
+function mapFirebaseUser(firebaseUser: FirebaseUser, displayName?: string): User {
+  return {
+    id: firebaseUser.uid,
+    email: firebaseUser.email || '',
+    name: displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+    avatar: firebaseUser.photoURL || undefined,
+    emailVerified: firebaseUser.emailVerified,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Check for existing session on mount AND migrate user ID if needed
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const savedUser = localStorage.getItem('serenity_user');
-        if (savedUser) {
-          const parsedUser = JSON.parse(savedUser);
-          
-          // Check if user ID needs migration to the new consistent format
-          const expectedId = generateUserIdFromEmail(parsedUser.email);
-          if (parsedUser.id !== expectedId) {
-            console.log(`[Auth] Migrating user ID from ${parsedUser.id} to ${expectedId}`);
-            
-            // Migrate data in Firebase from old ID to new ID
-            await migrateUserData(parsedUser.id, expectedId);
-            
-            // Update local user
-            parsedUser.id = expectedId;
-            localStorage.setItem('serenity_user', JSON.stringify(parsedUser));
-          }
-          
-          setUser(parsedUser);
-        }
-      } catch (error) {
-        console.error('Error checking auth:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkAuth();
+    if (typeof window !== 'undefined') {
+      initializeFirebase();
+    }
   }, []);
 
-  // Handle route protection
+  useEffect(() => {
+    if (!auth) return;
+
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        setFirebaseUser(fbUser);
+        
+        if (fbUser.emailVerified) {
+          const mappedUser = mapFirebaseUser(fbUser);
+          setUser(mappedUser);
+          await saveUserViaAPI(mappedUser);
+        } else {
+          setUser(null);
+        }
+      } else {
+        setFirebaseUser(null);
+        setUser(null);
+      }
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     if (isLoading) return;
 
@@ -123,36 +149,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isAuthRoute = AUTH_ROUTES.includes(pathname);
 
     if (isProtectedRoute && !user) {
-      // Redirect to login if trying to access protected route without auth
       router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
     } else if (isAuthRoute && user) {
-      // Redirect to dashboard if already authenticated
       router.push('/dashboard');
     }
   }, [pathname, user, isLoading, router]);
 
+  const getActionCodeSettings = (): ActionCodeSettings => {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    return {
+      url: `${baseUrl}/auth/action`,
+      handleCodeInApp: true,
+    };
+  };
+
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call - in production, use Firebase Auth
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      if (!userCredential.user.emailVerified) {
+        await signOut(auth);
+        throw new Error('Please verify your email before logging in. Check your inbox for the verification link.');
+      }
 
-      // Generate consistent user ID from email (same email = same ID across devices)
-      const newUser: User = {
-        id: generateUserIdFromEmail(email),
-        email,
-        name: email.split('@')[0],
-      };
+      const mappedUser = mapFirebaseUser(userCredential.user);
+      setUser(mappedUser);
+      await saveUserViaAPI(mappedUser);
 
-      localStorage.setItem('serenity_user', JSON.stringify(newUser));
-      setUser(newUser);
+      const oldUserId = generateOldUserIdFromEmail(email);
+      if (oldUserId !== mappedUser.id) {
+        await migrateUserData(oldUserId, mappedUser.id);
+      }
 
-      // Get redirect URL from query params
       const params = new URLSearchParams(window.location.search);
       const redirect = params.get('redirect') || '/dashboard';
       router.push(redirect);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        throw new Error('Invalid email or password');
+      }
+      if (error.code === 'auth/invalid-credential') {
+        throw new Error('Invalid email or password');
+      }
       throw error;
     } finally {
       setIsLoading(false);
@@ -162,51 +202,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call - in production, use Firebase Auth
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Generate consistent user ID from email (same email = same ID across devices)
-      const newUser: User = {
-        id: generateUserIdFromEmail(email),
-        email,
-        name,
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      await sendEmailVerification(userCredential.user, getActionCodeSettings());
+      
+      const userToSave = {
+        id: userCredential.user.uid,
+        email: userCredential.user.email || email,
+        name: name,
+        emailVerified: false,
       };
-
-      localStorage.setItem('serenity_user', JSON.stringify(newUser));
-      setUser(newUser);
-      router.push('/dashboard');
-    } catch (error) {
+      await saveUserViaAPI(userToSave);
+      
+      await signOut(auth);
+      
+      router.push('/login?message=verification-sent');
+    } catch (error: any) {
       console.error('Signup error:', error);
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error('This email is already registered. Please login instead.');
+      }
+      if (error.code === 'auth/weak-password') {
+        throw new Error('Password should be at least 6 characters');
+      }
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('serenity_user');
-    setUser(null);
-    router.push('/');
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setFirebaseUser(null);
+      router.push('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const loginWithGoogle = async () => {
     setIsLoading(true);
     try {
-      // Simulate OAuth - in production, use Firebase Auth with Google provider
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      
+      const mappedUser = mapFirebaseUser(userCredential.user);
+      setUser(mappedUser);
+      await saveUserViaAPI(mappedUser);
 
-      // For demo, use a consistent ID for demo@google.com
-      const newUser: User = {
-        id: generateUserIdFromEmail('demo@google.com'),
-        email: 'demo@google.com',
-        name: 'Google User',
-      };
-
-      localStorage.setItem('serenity_user', JSON.stringify(newUser));
-      setUser(newUser);
+      if (mappedUser.email) {
+        const oldUserId = generateOldUserIdFromEmail(mappedUser.email);
+        if (oldUserId !== mappedUser.id) {
+          await migrateUserData(oldUserId, mappedUser.id);
+        }
+      }
+      
       router.push('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Google login error:', error);
+      if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error('Login cancelled');
+      }
       throw error;
     } finally {
       setIsLoading(false);
@@ -216,24 +274,94 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGithub = async () => {
     setIsLoading(true);
     try {
-      // Simulate OAuth - in production, use Firebase Auth with GitHub provider
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const provider = new GithubAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      
+      const mappedUser = mapFirebaseUser(userCredential.user);
+      setUser(mappedUser);
+      await saveUserViaAPI(mappedUser);
 
-      // For demo, use a consistent ID for demo@github.com
-      const newUser: User = {
-        id: generateUserIdFromEmail('demo@github.com'),
-        email: 'demo@github.com',
-        name: 'GitHub User',
-      };
-
-      localStorage.setItem('serenity_user', JSON.stringify(newUser));
-      setUser(newUser);
+      if (mappedUser.email) {
+        const oldUserId = generateOldUserIdFromEmail(mappedUser.email);
+        if (oldUserId !== mappedUser.id) {
+          await migrateUserData(oldUserId, mappedUser.id);
+        }
+      }
+      
       router.push('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error('GitHub login error:', error);
+      if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error('Login cancelled');
+      }
       throw error;
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const resendVerificationEmail = async () => {
+    if (firebaseUser && !firebaseUser.emailVerified) {
+      await sendEmailVerification(firebaseUser, getActionCodeSettings());
+    } else {
+      throw new Error('No unverified user found');
+    }
+  };
+
+  const updateUser = async (updates: { name?: string }) => {
+    if (!user) {
+      throw new Error('No user logged in');
+    }
+
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: user.id, ...updates }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+
+      // Update local user state immediately
+      setUser(prev => prev ? { ...prev, ...updates } : null);
+    } catch (error) {
+      console.error('[Auth] Error updating user:', error);
+      throw error;
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (!user) {
+      throw new Error('No user logged in');
+    }
+
+    try {
+      // Delete user data from Firestore
+      const response = await fetch(`/api/users?id=${user.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete account data');
+      }
+
+      // Delete Firebase Auth account
+      if (firebaseUser) {
+        await firebaseUser.delete();
+      }
+
+      setUser(null);
+      setFirebaseUser(null);
+      router.push('/');
+    } catch (error: any) {
+      console.error('[Auth] Error deleting account:', error);
+      // If requires re-authentication
+      if (error.code === 'auth/requires-recent-login') {
+        throw new Error('Please log out and log back in before deleting your account for security reasons.');
+      }
+      throw error;
     }
   };
 
@@ -248,6 +376,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         loginWithGoogle,
         loginWithGithub,
+        resendVerificationEmail,
+        updateUser,
+        deleteAccount,
       }}
     >
       {children}
@@ -263,7 +394,6 @@ export function useAuth() {
   return context;
 }
 
-// Loading component for protected routes
 export function AuthLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

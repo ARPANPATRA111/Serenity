@@ -1,18 +1,5 @@
 'use client';
 
-/**
- * Editor Toolbar - Professional Certificate Editor
- * 
- * Provides comprehensive editing tools for certificate design:
- * - Element creation (text, images, shapes, links)
- * - Object manipulation (copy, delete, order)
- * - Alignment and distribution tools
- * - History (undo/redo)
- * - Preview mode
- * - Export/Import
- * - SAVE & GENERATE Actions
- */
-
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore } from '@/store/editorStore';
@@ -63,6 +50,7 @@ import {
   Frame,
   MoreHorizontal,
   RectangleHorizontal,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -153,9 +141,10 @@ interface ToolbarProps {
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   onGenerate?: () => void;
   onPreview?: () => void;
+  onOpenCertificateInfo?: () => void;
 }
 
-export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: ToolbarProps) {
+export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, onOpenCertificateInfo }: ToolbarProps) {
   const { fabricInstance } = useFabricContext();
   const { 
     canUndo, canRedo, 
@@ -784,6 +773,14 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview }: 
            
            <button onClick={toggleRightSidebar} className="toolbar-button" title="Data Source">
               <Database />
+           </button>
+
+           <button
+             onClick={onOpenCertificateInfo}
+             className="toolbar-button"
+             title="Certificate Info"
+           >
+              <Info />
            </button>
 
            <button

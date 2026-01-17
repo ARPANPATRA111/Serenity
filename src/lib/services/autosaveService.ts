@@ -1,9 +1,3 @@
-/**
- * Auto-save Service
- * 
- * Handles canvas auto-save operations using Firebase instead of localStorage
- */
-
 export interface AutosaveData {
   canvasJSON: string;
   templateId: string | null;
@@ -13,9 +7,6 @@ export interface AutosaveData {
 }
 
 export class AutosaveService {
-  /**
-   * Save canvas state to server
-   */
   static async save(
     userId: string,
     canvasJSON: string,
@@ -44,9 +35,6 @@ export class AutosaveService {
     }
   }
 
-  /**
-   * Load auto-saved canvas state from server
-   */
   static async load(userId: string): Promise<AutosaveData | null> {
     try {
       const response = await fetch('/api/autosave', {
@@ -67,9 +55,6 @@ export class AutosaveService {
     }
   }
 
-  /**
-   * Clear auto-saved state
-   */
   static async clear(userId: string): Promise<boolean> {
     try {
       const response = await fetch('/api/autosave', {
@@ -87,9 +72,6 @@ export class AutosaveService {
     }
   }
 
-  /**
-   * Check if there's an auto-saved state
-   */
   static async hasAutosave(userId: string): Promise<boolean> {
     const autosave = await this.load(userId);
     return autosave !== null;

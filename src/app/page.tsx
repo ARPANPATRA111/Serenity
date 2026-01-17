@@ -9,7 +9,6 @@ import {
   ChevronRight, Paintbrush, Check, Sparkles, Globe, Lock, Award, Users, Clock, MousePointer2
 } from 'lucide-react';
 
-// ============ INTERACTIVE ANIMATED DOTS BACKGROUND ============
 const InteractiveDotsBackground = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isMounted, setIsMounted] = useState(false);
@@ -35,7 +34,6 @@ const InteractiveDotsBackground = () => {
 
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden">
-      {/* Animated floating dots */}
       {dots.map((dot) => (
         <motion.div
           key={dot.id}
@@ -113,7 +111,6 @@ const InteractiveDotsBackground = () => {
   );
 };
 
-// ============ SERENITY LOGO ============
 const SerenityLogo = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect width="48" height="48" rx="12" className="fill-primary"/>
@@ -128,7 +125,6 @@ const SerenityLogo = ({ size = 24 }: { size?: number }) => (
   </svg>
 );
 
-// ============ ANIMATED COUNTER ============
 const Counter = ({ end, suffix = '' }: { end: number; suffix?: string }) => {
   const ref = useRef<HTMLSpanElement>(null);
   const isInView = useInView(ref, { once: true });
@@ -153,7 +149,6 @@ const Counter = ({ end, suffix = '' }: { end: number; suffix?: string }) => {
   return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
 };
 
-// ============ FEATURE CARD ============
 const FeatureCard = ({ feature, index }: { feature: typeof features[0]; index: number }) => {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, margin: "-50px" });
@@ -178,7 +173,6 @@ const FeatureCard = ({ feature, index }: { feature: typeof features[0]; index: n
   );
 };
 
-// ============ DATA ============
 const features = [
   { icon: Paintbrush, title: 'Visual Editor', description: 'Drag-and-drop interface with real-time preview.', gradient: 'from-violet-500 to-purple-600' },
   { icon: FileSpreadsheet, title: 'Smart Import', description: 'AI-powered Excel and CSV column detection.', gradient: 'from-blue-500 to-cyan-500' },
@@ -194,7 +188,6 @@ const testimonials = [
   { name: 'Emily Watson', role: 'HR Manager', company: 'StartupXYZ', content: 'Beautiful templates, privacy-first approach.', avatar: 'EW' },
 ];
 
-// ============ MAIN PAGE ============
 export default function HomePage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
@@ -205,7 +198,6 @@ export default function HomePage() {
     <div className="min-h-screen bg-background text-foreground">
       <InteractiveDotsBackground />
       
-      {/* ============ COMPACT NAVIGATION ============ */}
       <motion.header
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -215,8 +207,10 @@ export default function HomePage() {
         <nav className="max-w-5xl mx-auto px-4 py-2.5 rounded-xl bg-background/70 backdrop-blur-xl border border-border/50 shadow-lg shadow-black/5">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <SerenityLogo size={32} />
-              <span className="font-bold text-lg tracking-tight group-hover:text-primary transition-colors">Serenity</span>
+              <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+                <Award className="h-4 w-4 text-white" />
+              </div>
+              <span className="font-display text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent group-hover:opacity-80 transition-opacity">Serenity</span>
             </Link>
             <div className="flex items-center gap-2">
               <ThemeToggle />
@@ -231,7 +225,6 @@ export default function HomePage() {
         </nav>
       </motion.header>
 
-      {/* ============ HERO SECTION ============ */}
       <section ref={heroRef} className="min-h-screen flex items-center justify-center pt-20 pb-24 px-4">
         <motion.div style={{ opacity: heroOpacity, scale: heroScale }} className="max-w-5xl mx-auto text-center">
           {/* Badge */}
@@ -310,7 +303,6 @@ export default function HomePage() {
         </motion.div>
       </section>
 
-      {/* ============ STATS SECTION ============ */}
       <section className="py-20 border-y border-border/30 bg-muted/20">
         <div className="max-w-5xl mx-auto px-4">
           <div className="grid grid-cols-3 gap-8">
@@ -340,7 +332,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ============ FEATURES SECTION ============ */}
       <section className="py-28">
         <div className="max-w-5xl mx-auto px-4">
           <motion.div
@@ -364,7 +355,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ============ HOW IT WORKS ============ */}
       <section className="py-28 bg-muted/20 relative">
         <div className="max-w-5xl mx-auto px-4">
           <motion.div
@@ -409,7 +399,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ============ TESTIMONIALS ============ */}
       <section className="py-28">
         <div className="max-w-5xl mx-auto px-4">
           <motion.div
@@ -455,7 +444,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ============ CTA SECTION ============ */}
       <section className="py-28">
         <div className="max-w-3xl mx-auto px-4">
           <motion.div
@@ -485,13 +473,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ============ FOOTER ============ */}
       <footer className="py-10 border-t border-border/30">
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <SerenityLogo size={28} />
-              <span className="font-bold">Serenity</span>
+              <div className="relative h-7 w-7 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+                <Award className="h-3.5 w-3.5 text-white" />
+              </div>
+              <span className="font-display font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
             </Link>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
               <Link href="/templates" className="hover:text-foreground transition-colors">Templates</Link>

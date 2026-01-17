@@ -1,15 +1,5 @@
 'use client';
 
-/**
- * ColorPicker - Enhanced Color Selection Component
- * 
- * Features:
- * - Custom color input with native color picker
- * - Preset color palettes (categorized)
- * - Recent colors memory (persisted to localStorage)
- * - Quick access buttons for common colors
- */
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Palette, History, ChevronDown, Pipette, Check } from 'lucide-react';
 

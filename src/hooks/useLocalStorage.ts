@@ -1,9 +1,3 @@
-/**
- * useLocalStorage Hook
- * 
- * Persist state to localStorage with SSR safety.
- */
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';

@@ -1,15 +1,6 @@
-/**
- * Templates Gallery Page
- * 
- * /templates
- * 
- * Browse public certificate templates created by the community.
- * Uses Server Components for SEO and performance.
- */
-
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { ArrowLeft, Star } from 'lucide-react';
+import { ArrowLeft, Star, Award } from 'lucide-react';
 import { getPublicTemplates, type Template } from '@/lib/firebase/templates';
 import { TemplateCard } from '@/components/templates/TemplateCard';
 import { Suspense } from 'react';
@@ -81,8 +72,10 @@ export default async function TemplatesPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent" />
-            <span className="font-display text-xl font-bold">Serenity</span>
+            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+              <Award className="h-4 w-4 text-white" />
+            </div>
+            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
           </Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />

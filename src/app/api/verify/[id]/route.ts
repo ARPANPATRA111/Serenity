@@ -1,30 +1,14 @@
-/**
- * Certificate Verification API Route
- * 
- * GET /api/verify/[id]
- * 
- * Verifies certificates from Firebase Firestore.
- * Privacy-preserving view counting using IP hashing.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
-/**
- * Get daily rotating salt based on current date
- * This ensures the same IP can be counted again on a new day
- */
 function getDailySalt(): string {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const baseSalt = process.env.DAILY_IP_SALT || 'serenity-default-salt';
   return `${baseSalt}-${today}`;
 }
 
-/**
- * Hash IP address with daily rotating salt for privacy
- */
 function hashIP(ip: string): string {
   const salt = getDailySalt();
   return createHash('sha256')
@@ -33,9 +17,6 @@ function hashIP(ip: string): string {
     .substring(0, 32); // Truncate for storage efficiency
 }
 
-/**
- * Extract IP address from request
- */
 function getClientIP(request: NextRequest): string {
   // Check various headers for IP (supports proxies/load balancers)
   const forwarded = request.headers.get('x-forwarded-for');
@@ -168,10 +149,10 @@ export async function GET(
         recipientName: certificateData.recipientName,
         recipientEmail: certificateData.recipientEmail,
         title: certificateData.title,
+        description: certificateData.description || null,
         issuedAt: certificateData.issuedAt,
         issuerName: certificateData.issuerName,
         viewCount,
-        // Include certificate image if available
         certificateImage: certificateData.certificateImage || null,
         templateId: certificateData.templateId || null,
       },

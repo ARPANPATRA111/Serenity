@@ -1,9 +1,3 @@
-/**
- * Certificate Firestore Operations
- * 
- * CRUD operations for certificate records.
- */
-
 import {
   collection,
   doc,
@@ -24,9 +18,6 @@ import type { CertificateRecord } from '@/types/fabric.d';
 
 const CERTIFICATES_COLLECTION = 'certificates';
 
-/**
- * Create a new certificate record
- */
 export async function createCertificate(certificate: CertificateRecord): Promise<void> {
   const docRef = doc(db, CERTIFICATES_COLLECTION, certificate.id);
   await setDoc(docRef, {
@@ -36,9 +27,6 @@ export async function createCertificate(certificate: CertificateRecord): Promise
   });
 }
 
-/**
- * Get a certificate by ID
- */
 export async function getCertificate(id: string): Promise<CertificateRecord | null> {
   const docRef = doc(db, CERTIFICATES_COLLECTION, id);
   const docSnap = await getDoc(docRef);
@@ -50,9 +38,6 @@ export async function getCertificate(id: string): Promise<CertificateRecord | nu
   return docSnap.data() as CertificateRecord;
 }
 
-/**
- * Update a certificate
- */
 export async function updateCertificate(
   id: string,
   updates: Partial<CertificateRecord>
@@ -64,9 +49,6 @@ export async function updateCertificate(
   });
 }
 
-/**
- * Increment view count
- */
 export async function incrementViewCount(id: string): Promise<void> {
   const docRef = doc(db, CERTIFICATES_COLLECTION, id);
   await updateDoc(docRef, {
@@ -74,17 +56,11 @@ export async function incrementViewCount(id: string): Promise<void> {
   });
 }
 
-/**
- * Delete a certificate
- */
 export async function deleteCertificate(id: string): Promise<void> {
   const docRef = doc(db, CERTIFICATES_COLLECTION, id);
   await deleteDoc(docRef);
 }
 
-/**
- * Get certificates by template ID
- */
 export async function getCertificatesByTemplate(
   templateId: string,
   limitCount: number = 100
@@ -100,9 +76,6 @@ export async function getCertificatesByTemplate(
   return querySnapshot.docs.map((doc) => doc.data() as CertificateRecord);
 }
 
-/**
- * Get certificates by recipient email hash
- */
 export async function getCertificatesByRecipient(
   emailHash: string,
   limitCount: number = 100
@@ -118,9 +91,6 @@ export async function getCertificatesByRecipient(
   return querySnapshot.docs.map((doc) => doc.data() as CertificateRecord);
 }
 
-/**
- * Batch create certificates
- */
 export async function batchCreateCertificates(
   certificates: CertificateRecord[]
 ): Promise<void> {

@@ -1,10 +1,3 @@
-/**
- * Library Barrel Export
- * 
- * Main entry point for all library utilities.
- */
-
-// Utilities
 export * from './utils';
 
 // QR Code (exported with prefix to avoid conflicts)

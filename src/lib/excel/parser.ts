@@ -1,38 +1,18 @@
-/**
- * Excel Parser - Client-Side Data Ingestion
- * 
- * Parses Excel (.xlsx, .xls) and CSV files using SheetJS.
- * All processing happens in the browser - no server upload required.
- * Supports multiple sheets selection.
- */
-
 import * as XLSX from 'xlsx';
 import type { ParsedDataSource, DataRow } from '@/types/fabric.d';
 
-/**
- * Supported file extensions
- */
 export const SUPPORTED_EXTENSIONS = ['.xlsx', '.xls', '.csv', '.ods'];
 
-/**
- * Sheet info for multi-sheet support
- */
 export interface SheetInfo {
   name: string;
   rowCount: number;
 }
 
-/**
- * Check if a file is a supported spreadsheet format
- */
 export function isSupportedFile(file: File): boolean {
   const extension = '.' + file.name.split('.').pop()?.toLowerCase();
   return SUPPORTED_EXTENSIONS.includes(extension);
 }
 
-/**
- * Get list of sheets in a spreadsheet file
- */
 export async function getSheetNames(file: File): Promise<SheetInfo[]> {
   return new Promise((resolve, reject) => {
     if (!isSupportedFile(file)) {
@@ -72,9 +52,6 @@ export async function getSheetNames(file: File): Promise<SheetInfo[]> {
   });
 }
 
-/**
- * Parse a specific sheet from a spreadsheet file
- */
 export async function parseSpreadsheet(file: File, sheetName?: string): Promise<ParsedDataSource> {
   return new Promise((resolve, reject) => {
     if (!isSupportedFile(file)) {
@@ -152,9 +129,6 @@ export async function parseSpreadsheet(file: File, sheetName?: string): Promise<
   });
 }
 
-/**
- * Parse CSV string directly (useful for pasting data)
- */
 export function parseCSVString(csvString: string): ParsedDataSource {
   const workbook = XLSX.read(csvString, { type: 'string' });
   const firstSheetName = workbook.SheetNames[0];
@@ -186,9 +160,6 @@ export function parseCSVString(csvString: string): ParsedDataSource {
   };
 }
 
-/**
- * Validate data source for required fields
- */
 export function validateDataSource(
   dataSource: ParsedDataSource,
   requiredFields: string[]
@@ -203,9 +174,6 @@ export function validateDataSource(
   };
 }
 
-/**
- * Get a preview of the data (first N rows)
- */
 export function getDataPreview(
   dataSource: ParsedDataSource,
   limit: number = 5
@@ -213,9 +181,6 @@ export function getDataPreview(
   return dataSource.rows.slice(0, limit);
 }
 
-/**
- * Get unique values for a column (useful for filtering)
- */
 export function getUniqueColumnValues(
   dataSource: ParsedDataSource,
   column: string
@@ -232,9 +197,6 @@ export function getUniqueColumnValues(
   return Array.from(values).sort();
 }
 
-/**
- * Export data source back to Excel (useful for templates)
- */
 export function exportToExcel(dataSource: ParsedDataSource, filename: string = 'data.xlsx'): void {
   const worksheet = XLSX.utils.json_to_sheet(dataSource.rows, {
     header: dataSource.headers,
@@ -246,9 +208,6 @@ export function exportToExcel(dataSource: ParsedDataSource, filename: string = '
   XLSX.writeFile(workbook, filename);
 }
 
-/**
- * Generate sample data template (empty with headers)
- */
 export function generateSampleTemplate(headers: string[], filename: string = 'template.xlsx'): void {
   const sampleRow: Record<string, string> = {};
   headers.forEach((header) => {

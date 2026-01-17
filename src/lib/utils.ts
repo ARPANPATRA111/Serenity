@@ -1,17 +1,10 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-/**
- * Utility function to merge Tailwind CSS classes
- * Combines clsx for conditional classes and tailwind-merge for deduplication
- */
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-/**
- * Format bytes to human readable string
- */
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
@@ -21,23 +14,14 @@ export function formatBytes(bytes: number, decimals = 2): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-/**
- * Sleep utility for async operations
- */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Yield to main thread - prevents UI blocking during heavy operations
- */
 export function yieldToMain(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/**
- * Debounce function
- */
 export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
@@ -50,9 +34,6 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
   };
 }
 
-/**
- * Throttle function
- */
 export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
   limit: number
@@ -68,9 +49,6 @@ export function throttle<T extends (...args: unknown[]) => unknown>(
   };
 }
 
-/**
- * Generate a random ID
- */
 export function generateId(length = 8): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -80,9 +58,6 @@ export function generateId(length = 8): string {
   return result;
 }
 
-/**
- * Format date to locale string
- */
 export function formatDate(
   date: Date | number | string,
   options?: Intl.DateTimeFormatOptions
@@ -96,9 +71,6 @@ export function formatDate(
   });
 }
 
-/**
- * Download a blob as a file
- */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -110,14 +82,8 @@ export function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Check if we're in browser environment
- */
 export const isBrowser = typeof window !== 'undefined';
 
-/**
- * Hash a string using SHA-256
- */
 export async function hashString(str: string): Promise<string> {
   if (!isBrowser) return str;
   const encoder = new TextEncoder();
@@ -127,69 +93,42 @@ export async function hashString(str: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * Clamp a number between min and max
- */
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/**
- * Get today's date as YYYY-MM-DD string
- */
 export function getTodayDateString(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-/**
- * Generate a short certificate ID
- */
 export function generateCertificateId(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = generateId(4).toUpperCase();
   return `${timestamp}-${random}`;
 }
 
-/**
- * Validate email format
- */
 export function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
 
-/**
- * Truncate string with ellipsis
- */
 export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.slice(0, length - 3) + '...';
 }
 
-/**
- * Get file extension from filename
- */
 export function getFileExtension(filename: string): string {
   return filename.slice(((filename.lastIndexOf('.') - 1) >>> 0) + 2).toLowerCase();
 }
 
-/**
- * Format a number with thousands separators
- */
 export function formatNumber(num: number): string {
   return num.toLocaleString('en-US');
 }
 
-/**
- * Deep clone an object
- */
 export function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
-/**
- * Get contrast color (black or white) for a given background
- */
 export function getContrastColor(hexColor: string): 'black' | 'white' {
   const hex = hexColor.replace('#', '');
   const r = parseInt(hex.substring(0, 2), 16);

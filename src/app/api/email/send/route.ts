@@ -1,19 +1,9 @@
-/**
- * Email Sending API Route
- * 
- * POST /api/email/send
- * 
- * Sends certificate notification emails using Resend.
- * Implements rate limiting (100 emails/day for free tier).
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getTodayDateString } from '@/lib/utils';
 
-// Lazy initialize Resend to avoid build-time errors
 let resend: Resend | null = null;
 function getResend(): Resend {
   if (!resend) {
@@ -37,9 +27,6 @@ interface SendEmailRequest {
   verifyUrl: string;
 }
 
-/**
- * Check and update email rate limit
- */
 async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
   const db = getAdminFirestore();
   const today = getTodayDateString();
@@ -48,7 +35,6 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
   const rateLimitDoc = await rateLimitRef.get();
   
   if (!rateLimitDoc.exists) {
-    // First email of the day
     await rateLimitRef.set({
       count: 1,
       date: today,
@@ -64,7 +50,6 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
     return { allowed: false, remaining: 0 };
   }
   
-  // Increment count
   await rateLimitRef.update({
     count: FieldValue.increment(1),
     lastEmailAt: FieldValue.serverTimestamp(),
@@ -73,9 +58,6 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
   return { allowed: true, remaining: DAILY_EMAIL_LIMIT - currentCount - 1 };
 }
 
-/**
- * Generate email HTML template
- */
 function generateEmailHTML(data: SendEmailRequest): string {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity.app';
   
@@ -172,7 +154,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { to, recipientName, certificateId, certificateTitle, issuerName, userId } = body;
 
-    // Validate required fields
     if (!to || !recipientName || !certificateId) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
@@ -180,7 +161,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(to)) {
       return NextResponse.json(
@@ -189,7 +169,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check rate limit
     const rateLimit = await checkRateLimit(userId || 'anonymous');
     if (!rateLimit.allowed) {
       return NextResponse.json(
@@ -214,7 +193,6 @@ export async function POST(request: NextRequest) {
       verifyUrl,
     };
 
-    // Send email via Resend
     const { data, error } = await getResend().emails.send({
       from: 'Serenity <certificates@serenity.app>',
       to: [to],
@@ -230,7 +208,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log email sent to Firestore
     const db = getAdminFirestore();
     await db.collection('emailLogs').add({
       to,

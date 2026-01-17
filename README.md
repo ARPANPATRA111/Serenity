@@ -66,6 +66,19 @@ A production-ready, SaaS-grade Certificate Generator built with Next.js 14 and F
 - All editing functions disabled during preview
 - Toggle with eye icon in toolbar
 
+#### 📋 Certificate Info Modal
+- Add metadata to templates: title, issuer, description
+- Certificate info is saved with each template
+- Opens existing templates with their saved certificate info
+- Required before generating certificates
+- Displayed on the public verification page
+
+#### 🔐 Email Verification
+- New user registration requires email verification
+- Firebase Auth sends verification emails with custom redirect
+- Users cannot login until email is verified
+- Verification success message on login page
+
 #### 🎯 Enhanced Canvas Boundary
 - Red dashed boundary line for print area
 - Semi-transparent red shade outside boundary
@@ -114,7 +127,8 @@ src/
 │   │   ├── RightSidebar.tsx
 │   │   ├── PropertiesBar.tsx
 │   │   ├── Toolbar.tsx
-│   │   └── GenerationModal.tsx
+│   │   ├── GenerationModal.tsx
+│   │   └── CertificateInfoModal.tsx  # Certificate metadata
 │   ├── providers/         # Context providers
 │   ├── templates/         # Template components
 │   └── ui/                # Reusable UI components

@@ -1,12 +1,5 @@
 'use client';
 
-/**
- * FabricCanvasWrapper - Core Canvas Component
- * 
- * Wraps the Fabric.js canvas with React integration.
- * CRITICAL: Uses refs for canvas state, NOT React state.
- */
-
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useFabric, A4_LANDSCAPE, createVariableTextbox } from '@/lib/fabric';
 import { useFabricContext } from './FabricContext';

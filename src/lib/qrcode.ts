@@ -1,9 +1,3 @@
-/**
- * QR Code Generator Utility
- * 
- * Client-side QR code generation using the qrcode library.
- */
-
 import QRCode from 'qrcode';
 
 export interface QRCodeOptions {
@@ -26,9 +20,6 @@ const DEFAULT_OPTIONS: QRCodeOptions = {
   errorCorrectionLevel: 'M',
 };
 
-/**
- * Generate QR code as data URL
- */
 export async function generateQRCodeDataURL(
   data: string,
   options: QRCodeOptions = {}
@@ -43,17 +34,11 @@ export async function generateQRCodeDataURL(
   });
 }
 
-/**
- * Generate verification URL for a certificate
- */
 export function generateVerificationURL(certificateId: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   return `${baseUrl}/verify/${certificateId}`;
 }
 
-/**
- * Generate QR code for certificate verification
- */
 export async function generateCertificateQRCode(
   certificateId: string,
   options: QRCodeOptions = {}
@@ -62,9 +47,6 @@ export async function generateCertificateQRCode(
   return generateQRCodeDataURL(verificationUrl, options);
 }
 
-/**
- * Generate QR code as canvas element
- */
 export async function generateQRCodeCanvas(
   data: string,
   options: QRCodeOptions = {}

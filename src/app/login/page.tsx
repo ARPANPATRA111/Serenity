@@ -1,22 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome, AlertCircle } from 'lucide-react';
+import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome, AlertCircle, CheckCircle, Award } from 'lucide-react';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
+import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   const { login, loginWithGoogle, loginWithGithub, isLoading: authLoading, isAuthenticated } = useAuth();
+  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
 
-  // If already authenticated, show loading while redirecting
+  useEffect(() => {
+    const message = searchParams?.get('message');
+    if (message === 'verification-sent') {
+      setSuccessMessage('A verification email has been sent! Please check your inbox and verify your email before logging in.');
+    } else if (message === 'email-verified') {
+      setSuccessMessage('Your email has been verified! You can now log in.');
+    }
+  }, [searchParams]);
+
   if (isAuthenticated) {
     return <AuthLoading />;
   }
@@ -25,11 +36,12 @@ export default function LoginPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
+    setSuccessMessage('');
     
     try {
       await login(formData.email, formData.password);
-    } catch (err) {
-      setError('Invalid email or password. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -68,9 +80,9 @@ export default function LoginPage() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 mb-8">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-              <Sparkles className="h-5 w-5 text-white" />
+              <Award className="h-5 w-5 text-white" />
             </div>
-            <span className="font-display text-2xl font-bold">Serenity</span>
+            <span className="font-display text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
           </Link>
 
           {/* Header */}
@@ -80,6 +92,18 @@ export default function LoginPage() {
               Sign in to your account to continue creating certificates
             </p>
           </div>
+
+          {/* Success Message */}
+          {successMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-4 py-3 text-sm text-green-600 dark:text-green-400"
+            >
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              {successMessage}
+            </motion.div>
+          )}
 
           {/* Error Message */}
           {error && (

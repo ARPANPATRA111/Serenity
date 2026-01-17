@@ -1,18 +1,9 @@
-/**
- * Canvas Auto-save API Route
- * 
- * POST /api/autosave - Save canvas state for the current user
- * GET /api/autosave - Get saved canvas state for the current user
- * DELETE /api/autosave - Clear auto-saved canvas state
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET - Retrieve auto-saved canvas state
 export async function GET(request: NextRequest) {
   try {
     const userId = request.headers.get('x-user-id');
@@ -39,7 +30,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Save canvas state
 export async function POST(request: NextRequest) {
   try {
     const userId = request.headers.get('x-user-id');
@@ -73,7 +63,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE - Clear auto-saved state
 export async function DELETE(request: NextRequest) {
   try {
     const userId = request.headers.get('x-user-id');

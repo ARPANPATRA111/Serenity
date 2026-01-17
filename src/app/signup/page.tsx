@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome, User, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome, User, CheckCircle2, AlertCircle, Award } from 'lucide-react';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
 
 export default function SignupPage() {
@@ -31,7 +31,6 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check password requirements
     if (!passwordRequirements.every(req => req.met)) {
       setError('Please meet all password requirements.');
       return;
@@ -42,8 +41,8 @@ export default function SignupPage() {
     
     try {
       await signup(formData.name, formData.email, formData.password);
-    } catch (err) {
-      setError('Failed to create account. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to create account. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -135,9 +134,9 @@ export default function SignupPage() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3 mb-8">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-              <Sparkles className="h-5 w-5 text-white" />
+              <Award className="h-5 w-5 text-white" />
             </div>
-            <span className="font-display text-2xl font-bold">Serenity</span>
+            <span className="font-display text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
           </Link>
 
           {/* Header */}

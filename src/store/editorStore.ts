@@ -1,15 +1,6 @@
-/**
- * Editor Store - Zustand State Management
- * 
- * CRITICAL: This store is ONLY for low-frequency UI updates.
- * The Fabric.js canvas state is managed imperatively via refs.
- * DO NOT bind high-frequency operations (drag/resize) to this store.
- */
-
 import { create } from 'zustand';
 import { fabric } from 'fabric';
 
-// Media Asset type
 export interface MediaAsset {
   id: string;
   userId: string;
@@ -21,44 +12,34 @@ export interface MediaAsset {
   storagePath: string;
 }
 
+export interface CertificateMetadata {
+  title: string;
+  issuedBy: string;
+  description: string;
+}
+
 export interface EditorState {
-  // Selection state (updated on selection change)
   selectedObject: fabric.Object | null;
   selectedObjectType: string | null;
   isEditingText: boolean;
-  
-  // Canvas state
   zoomLevel: number;
   canvasDimensions: { width: number; height: number };
-  
-  // Sidebar state
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
-  
-  // History tracking (for UI indicators)
   historyIndex: number;
   historyLength: number;
   canUndo: boolean;
   canRedo: boolean;
-  
-  // Clipboard
   clipboard: fabric.Object | null;
-  
-  // Template state
   templateId: string | null;
   templateName: string;
   isDirty: boolean;
-  
-  // Preview mode
   isPreviewMode: boolean;
   previewData: Record<string, string> | null;
-  
-  // Media library
   mediaAssets: MediaAsset[];
   isLoadingMedia: boolean;
   isUploadingMedia: boolean;
-  
-  // Actions
+  certificateMetadata: CertificateMetadata;
   setSelectedObject: (obj: fabric.Object | null) => void;
   setIsEditingText: (editing: boolean) => void;
   setZoomLevel: (zoom: number) => void;
@@ -77,6 +58,7 @@ export interface EditorState {
   removeMediaAsset: (assetId: string) => void;
   setIsLoadingMedia: (loading: boolean) => void;
   setIsUploadingMedia: (uploading: boolean) => void;
+  setCertificateMetadata: (metadata: CertificateMetadata) => void;
   reset: () => void;
 }
 
@@ -101,6 +83,11 @@ const initialState = {
   mediaAssets: [] as MediaAsset[],
   isLoadingMedia: false,
   isUploadingMedia: false,
+  certificateMetadata: {
+    title: '',
+    issuedBy: '',
+    description: '',
+  } as CertificateMetadata,
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -162,6 +149,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setIsLoadingMedia: (loading) => set({ isLoadingMedia: loading }),
 
   setIsUploadingMedia: (uploading) => set({ isUploadingMedia: uploading }),
+
+  setCertificateMetadata: (metadata) => set({ certificateMetadata: metadata, isDirty: true }),
 
   reset: () => set(initialState),
 }));

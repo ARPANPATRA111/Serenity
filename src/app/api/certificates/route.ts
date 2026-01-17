@@ -1,23 +1,33 @@
-/**
- * Certificates API Route
- * 
- * GET /api/certificates - List all certificates for the current user
- * POST /api/certificates - Create new certificate(s) in Firebase
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const certificatesCache = new Map<string, { certificates: any[]; timestamp: number }>();
+const CACHE_TTL = 30 * 1000;
+
+function cleanCache() {
+  const now = Date.now();
+  for (const [key, value] of Array.from(certificatesCache.entries())) {
+    if (now - value.timestamp > CACHE_TTL * 2) {
+      certificatesCache.delete(key);
+    }
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userId = request.headers.get('x-user-id');
     
-    // If no user ID, return empty array (certificates require authentication)
     if (!userId) {
       return NextResponse.json({ success: true, certificates: [] });
+    }
+
+    const now = Date.now();
+    const cached = certificatesCache.get(userId);
+    if (cached && (now - cached.timestamp) < CACHE_TTL) {
+      return NextResponse.json({ success: true, certificates: cached.certificates });
     }
 
     let db;
@@ -28,40 +38,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, certificates: [], warning: 'Service unavailable' });
     }
     
-    // Query certificates - we need to get certificates created by this user
-    // Since we store templateId, we can filter by templates owned by this user
-    // OR we can add a userId field to certificates during generation
-    
-    // For now, get all certificates and filter by metadata or templateId
-    // In production, you'd add proper indexes and user ownership tracking
     const certificatesRef = db.collection('certificates');
     
-    // Filter by user ID if provided
-    let query: FirebaseFirestore.Query = certificatesRef;
-    if (userId) {
-      query = query.where('userId', '==', userId);
-    }
+    let query: FirebaseFirestore.Query = certificatesRef.where('userId', '==', userId);
     
-    // Safely attempt to fetch certificates
     let snapshot;
     try {
         snapshot = await query
         .orderBy('issuedAt', 'desc')
-        .limit(500)
+        .limit(100) 
         .get();
     } catch (e: any) {
-        // If it's a missing index error, try without ordering
         if (e.code === 9) {
           try {
             snapshot = await certificatesRef
               .where('userId', '==', userId)
-              .limit(500)
+              .limit(100)
               .get();
           } catch {
             return NextResponse.json({ success: true, certificates: [], error: 'Database unavailable' });
           }
         } else {
-          // Don't log full stack trace in dev
           console.warn('[Certificates API] Database query failed');
           return NextResponse.json({ success: true, certificates: [], error: 'Database unavailable' });
         }
@@ -84,6 +81,9 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    certificatesCache.set(userId, { certificates, timestamp: now });
+    cleanCache();
+
     return NextResponse.json({ success: true, certificates });
   } catch (error) {
     console.error('[API/certificates] Error:', error);
@@ -94,7 +94,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new certificate(s)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -111,30 +110,38 @@ export async function POST(request: NextRequest) {
     const results: string[] = [];
     const errors: { id: string; error: string }[] = [];
 
-    // Process certificates in batches
+    const batch = db.batch();
+    const timestamp = new Date().toISOString();
+    
     for (const cert of certificates) {
-      try {
-        const certRef = db.collection('certificates').doc(cert.id);
-        await certRef.set({
-          ...cert,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        results.push(cert.id);
-      } catch (error) {
-        console.error(`[API/certificates] Error saving certificate ${cert.id}:`, error);
-        errors.push({ 
-          id: cert.id, 
-          error: error instanceof Error ? error.message : 'Unknown error' 
-        });
-      }
+      const certRef = db.collection('certificates').doc(cert.id);
+      batch.set(certRef, {
+        ...cert,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      results.push(cert.id);
+    }
+    
+    try {
+      await batch.commit();
+    } catch (error) {
+      console.error('[API/certificates] Batch write failed:', error);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to save certificates',
+      }, { status: 500 });
+    }
+
+    const userId = certificates[0]?.userId;
+    if (userId) {
+      certificatesCache.delete(userId);
     }
 
     return NextResponse.json({
-      success: errors.length === 0,
+      success: true,
       created: results.length,
-      failed: errors.length,
-      errors: errors.length > 0 ? errors : undefined,
+      failed: 0,
     });
   } catch (error) {
     console.error('[API/certificates] POST Error:', error);

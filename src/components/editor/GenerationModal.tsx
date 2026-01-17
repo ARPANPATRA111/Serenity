@@ -1,11 +1,5 @@
 'use client';
 
-/**
- * Generation Modal
- * 
- * Handles the batch generation process with progress tracking.
- */
-
 import { useState, useCallback, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -16,7 +10,7 @@ import { useGenerationStore } from '@/store/generationStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateBatch, downloadZip } from '@/lib/generator';
-import { Download, FileText, Mail, CheckCircle, AlertCircle } from 'lucide-react';
+import { Download, FileText, Mail, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
 interface GenerationModalProps {
   isOpen: boolean;
@@ -29,7 +23,7 @@ type GenerationStep = 'configure' | 'generating' | 'complete';
 export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProps) {
   const { fabricInstance } = useFabricContext();
   const { dataSource, headers, rows } = useDataSourceStore();
-  const { templateId, templateName } = useEditorStore();
+  const { templateId, templateName, certificateMetadata } = useEditorStore();
   const { user } = useAuth();
   const {
     current,
@@ -69,10 +63,17 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     }
   }, [isOpen, headers, reset]);
 
+  const isCertificateInfoComplete = certificateMetadata.title.trim() && 
+    certificateMetadata.issuedBy.trim() && 
+    certificateMetadata.description.trim();
+
   const handleGenerate = useCallback(async () => {
     if (!fabricInstance || !dataSource) return;
 
-    // Auto-save the canvas before generating
+    if (!isCertificateInfoComplete) {
+      return;
+    }
+
     if (onSave) {
       try {
         await onSave();
@@ -95,8 +96,9 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       templateId: templateId || undefined,
       templateName: templateName || 'Untitled Template',
       userId: user?.id,
-      issuerName: user?.name || 'Serenity',
-      titleField: 'Certificate',
+      issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
+      certificateTitle: certificateMetadata.title || 'Certificate of Completion',
+      certificateDescription: certificateMetadata.description || '',
       onProgress: (current, total, status) => {
         updateProgress(current, status);
       },
@@ -132,6 +134,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     addGeneratedId,
     complete,
     onSave,
+    certificateMetadata,
+    isCertificateInfoComplete,
   ]);
 
   const handleDownload = useCallback(() => {
@@ -222,12 +226,30 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             </ul>
           </div>
 
+          {/* Certificate Info Warning */}
+          {!isCertificateInfoComplete && (
+            <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-4">
+              <Info className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-amber-600 dark:text-amber-400">Certificate Info Required</p>
+                <p className="text-muted-foreground mt-1">
+                  Please fill in the Certificate Information (Title, Issued By, Description) 
+                  before generating certificates. Click the <strong>Info</strong> button in the toolbar.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleClose} className="flex-1">
               Cancel
             </Button>
-            <Button onClick={handleGenerate} className="flex-1">
+            <Button 
+              onClick={handleGenerate} 
+              className="flex-1"
+              disabled={!isCertificateInfoComplete}
+            >
               Start Generation
             </Button>
           </div>

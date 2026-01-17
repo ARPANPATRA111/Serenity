@@ -1,11 +1,3 @@
-/**
- * User Settings Page
- * 
- * /settings
- * 
- * Allows users to manage their profile and preferences.
- */
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,7 +17,8 @@ import {
   Loader2,
   Camera,
   Globe,
-  Lock
+  Lock,
+  Award
 } from 'lucide-react';
 
 interface UserSettings {
@@ -43,10 +36,12 @@ interface UserSettings {
 }
 
 export default function SettingsPage() {
-  const { user, logout, isLoading: authLoading } = useAuth();
+  const { user, logout, isLoading: authLoading, updateUser, deleteAccount } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings>({
     name: '',
     email: '',
@@ -81,21 +76,20 @@ export default function SettingsPage() {
   }, [user, authLoading, router]);
 
   const handleSave = async () => {
+    if (!settings.name.trim()) {
+      setErrorMessage('Name cannot be empty');
+      return;
+    }
+    
     setLoading(true);
     setSaveStatus('saving');
+    setErrorMessage(null);
     
     try {
-      // Update user in localStorage (in production, save to Firebase)
-      const updatedUser = {
-        ...user,
-        name: settings.name,
-        email: settings.email,
-        avatar: settings.avatar,
-      };
+      // Update user profile via AuthContext (which calls the API)
+      await updateUser({ name: settings.name.trim() });
       
-      localStorage.setItem('serenity_user', JSON.stringify(updatedUser));
-      
-      // Also save settings preferences
+      // Also save settings preferences to localStorage
       localStorage.setItem('serenity_user_settings', JSON.stringify({
         notifications: settings.notifications,
         privacy: settings.privacy,
@@ -103,8 +97,9 @@ export default function SettingsPage() {
 
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving settings:', error);
+      setErrorMessage(error.message || 'Failed to save settings');
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } finally {
@@ -114,16 +109,27 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm(
-      'Are you sure you want to delete your account? This action cannot be undone.'
+      'Are you sure you want to delete your account? This will permanently delete all your templates and certificates. This action cannot be undone.'
     );
     
     if (confirmed) {
-      // In production, call API to delete account
-      localStorage.removeItem('serenity_user');
-      localStorage.removeItem('serenity_user_settings');
-      localStorage.removeItem('serenity_templates');
-      localStorage.removeItem('serenity_certificates');
-      logout();
+      const doubleConfirm = window.confirm(
+        'This is your final warning. All your data will be permanently deleted. Are you absolutely sure?'
+      );
+      
+      if (doubleConfirm) {
+        setDeleteLoading(true);
+        setErrorMessage(null);
+        
+        try {
+          await deleteAccount();
+          // deleteAccount already handles redirect to home
+        } catch (error: any) {
+          console.error('Error deleting account:', error);
+          setErrorMessage(error.message || 'Failed to delete account');
+          setDeleteLoading(false);
+        }
+      }
     }
   };
 
@@ -145,8 +151,10 @@ export default function SettingsPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent" />
-            <span className="font-display text-xl font-bold">Serenity</span>
+            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+              <Award className="h-4 w-4 text-white" />
+            </div>
+            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
           </Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -223,11 +231,22 @@ export default function SettingsPage() {
                 <input
                   type="email"
                   value={settings.email}
-                  onChange={(e) => setSettings(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-muted text-muted-foreground cursor-not-allowed"
                   placeholder="your@email.com"
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Email address cannot be changed for security reasons.
+                </p>
               </div>
+
+              {/* Error Message */}
+              {errorMessage && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-500">
+                  <Trash2 className="h-4 w-4 flex-shrink-0" />
+                  {errorMessage}
+                </div>
+              )}
             </div>
           </section>
 
@@ -377,9 +396,17 @@ export default function SettingsPage() {
 
             <button
               onClick={handleDeleteAccount}
-              className="px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+              disabled={deleteLoading}
+              className="px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Delete Account
+              {deleteLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Account'
+              )}
             </button>
             <p className="mt-2 text-xs text-muted-foreground">
               This will permanently delete your account and all associated data.

@@ -1,10 +1,3 @@
-/**
- * Template Card Component
- * 
- * Displays a template in the gallery with thumbnail,
- * creator info, star count, and use button.
- */
-
 'use client';
 
 import Link from 'next/link';

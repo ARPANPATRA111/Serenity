@@ -1,9 +1,3 @@
-/**
- * useMediaQuery Hook
- * 
- * React to viewport changes with SSR safety.
- */
-
 'use client';
 
 import { useState, useEffect } from 'react';

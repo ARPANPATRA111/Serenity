@@ -1,17 +1,9 @@
-/**
- * History Page
- * 
- * /history
- * 
- * View generation history and access previous batches.
- */
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { ArrowLeft, Download, Calendar, Users, Eye, Search } from 'lucide-react';
+import { ArrowLeft, Download, Calendar, Users, Eye, Search, Award } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Certificate interface for Firebase data
@@ -127,8 +119,10 @@ export default function HistoryPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent" />
-            <span className="font-display text-xl font-bold">Serenity</span>
+            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+              <Award className="h-4 w-4 text-white" />
+            </div>
+            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
           </Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />

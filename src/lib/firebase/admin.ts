@@ -1,15 +1,5 @@
-/**
- * Firebase Admin Configuration
- * 
- * Server-side Firebase Admin SDK for secure operations.
- * Used in API routes for:
- * - Certificate verification
- * - View counting with IP hashing
- * - Email rate limiting
- */
-
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
-import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { getFirestore, Firestore, Settings } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getStorage, Storage } from 'firebase-admin/storage';
 
@@ -17,8 +7,13 @@ let adminApp: App;
 let adminDb: Firestore;
 let adminAuth: Auth;
 let adminStorage: Storage;
+let isInitialized = false;
 
 function initializeAdmin() {
+  if (isInitialized) {
+    return { adminApp, adminDb, adminAuth, adminStorage };
+  }
+
   if (getApps().length === 0) {
     adminApp = initializeApp({
       credential: cert({
@@ -36,6 +31,13 @@ function initializeAdmin() {
   adminAuth = getAuth(adminApp);
   adminStorage = getStorage(adminApp);
 
+  try {
+    adminDb.settings({ ignoreUndefinedProperties: true } as Settings);
+  } catch (e) {
+    // Settings already applied, ignore
+  }
+
+  isInitialized = true;
   return { adminApp, adminDb, adminAuth, adminStorage };
 }
 

@@ -47,10 +47,6 @@ export function ProgressBar({
   );
 }
 
-/**
- * Generation Progress Component
- * Shows detailed progress during batch certificate generation
- */
 interface GenerationProgressProps {
   current: number;
   total: number;

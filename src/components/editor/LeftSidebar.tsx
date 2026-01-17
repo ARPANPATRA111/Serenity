@@ -1,13 +1,5 @@
 'use client';
 
-/**
- * Left Sidebar - Media Library
- * 
- * Provides media upload and management functionality.
- * All media must be uploaded before use in the editor.
- * Images are automatically compressed before upload for optimal performance.
- */
-
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore, MediaAsset } from '@/store/editorStore';

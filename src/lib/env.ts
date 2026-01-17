@@ -1,9 +1,3 @@
-/**
- * Environment Validation
- * 
- * Validates required environment variables at build/runtime.
- */
-
 const requiredEnvVars = [
   'NEXT_PUBLIC_FIREBASE_API_KEY',
   'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',

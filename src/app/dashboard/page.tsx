@@ -29,7 +29,8 @@ import {
   Globe,
   Lock,
   Settings,
-  Star
+  Star,
+  Award
 } from 'lucide-react';
 import { SkeletonDashboard, Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -418,9 +419,9 @@ export default function DashboardPage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-3 group">
             <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-              <Sparkles className="h-5 w-5 text-white" />
+              <Award className="h-5 w-5 text-white" />
             </div>
-            <span className="font-display text-xl font-bold">Serenity</span>
+            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
           </Link>
           
           {/* Search Bar */}
@@ -916,9 +917,6 @@ export default function DashboardPage() {
   );
 }
 
-/**
- * Format date to human-readable time ago string
- */
 function formatTimeAgo(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();

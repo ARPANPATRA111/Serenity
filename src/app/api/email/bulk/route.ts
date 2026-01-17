@@ -1,12 +1,3 @@
-/**
- * Bulk Email API Route
- * 
- * POST /api/email/bulk
- * 
- * Handles bulk email sending with freemium upsell logic.
- * Free users are limited to 5 bulk emails - beyond that, capture as lead.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -37,9 +28,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if free user is trying to send more than the limit
     if (userTier === 'free' && emails.length > FREE_BULK_LIMIT) {
-      // Log this as a lead capture opportunity
       const db = getAdminFirestore();
       
       await db.collection('leads').add({
@@ -77,15 +66,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // For pro/enterprise users or free users within limit,
-    // process emails (in production, this would queue them)
     const results = {
       queued: emails.length,
       estimatedDelivery: '5-10 minutes',
     };
-
-    // In a real implementation, you would queue these emails
-    // using a job queue like Bull or similar
     
     return NextResponse.json({
       success: true,

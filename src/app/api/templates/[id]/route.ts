@@ -1,12 +1,3 @@
-/**
- * Template by ID API Routes
- * 
- * Server-side API for individual template operations.
- * GET - Get template details
- * PUT - Update template
- * DELETE - Delete template
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getTemplate,
@@ -22,11 +13,6 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-/**
- * GET /api/templates/[id]
- * 
- * Get a single template by ID
- */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -55,17 +41,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-/**
- * PUT /api/templates/[id]
- * 
- * Update a template (supports both full update and partial update)
- */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
     
-    const { name, canvasJSON, thumbnail, isPublic, tags, userId, creatorName, creatorEmail, createIfNotExists } = body;
+    const { name, canvasJSON, thumbnail, isPublic, tags, userId, creatorName, creatorEmail, createIfNotExists, certificateMetadata } = body;
 
     console.log('[Template API] PUT template:', { id, name, isPublic, createIfNotExists });
 
@@ -81,6 +62,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         creatorName,
         creatorEmail,
         tags,
+        certificateMetadata,
       });
 
       return NextResponse.json({
@@ -97,6 +79,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (thumbnail !== undefined) updates.thumbnail = thumbnail;
     if (typeof isPublic === 'boolean') updates.isPublic = isPublic;
     if (tags !== undefined) updates.tags = tags;
+    if (certificateMetadata !== undefined) updates.certificateMetadata = certificateMetadata;
 
     // Ensure we have at least one field to update
     if (Object.keys(updates).length === 0) {
@@ -131,11 +114,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-/**
- * DELETE /api/templates/[id]
- * 
- * Delete a template
- */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;

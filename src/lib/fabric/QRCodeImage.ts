@@ -1,21 +1,9 @@
-/**
- * QR Code Generator for Certificate Verification
- * 
- * Generates QR codes that link to the verification page.
- * Uses a simple canvas-based QR code generation.
- */
-
 import { fabric } from 'fabric';
 
 // QR Code generation constants
 const QR_SIZE = 200;
 const QR_PADDING = 16;
 
-/**
- * Generate a QR code data URL for a verification ID
- * Uses a third-party QR code API for simplicity
- * In production, consider using a client-side library like qrcode.js
- */
 export async function generateQRCodeDataURL(
   verificationId: string,
   size: number = QR_SIZE
@@ -44,9 +32,6 @@ export async function generateQRCodeDataURL(
   }
 }
 
-/**
- * Create a placeholder QR code canvas
- */
 function createPlaceholderQR(size: number): string {
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -70,9 +55,6 @@ function createPlaceholderQR(size: number): string {
   return canvas.toDataURL('image/png');
 }
 
-/**
- * Create a QR code Fabric.js Image object
- */
 export async function createQRCodeImage(
   verificationId: string,
   options?: fabric.IImageOptions & { size?: number }
@@ -123,9 +105,6 @@ export async function createQRCodeImage(
   });
 }
 
-/**
- * Register QRCodeImage type for serialization
- */
 export function registerQRCodeImageType(): void {
   // Override toObject for QR code images to include verificationId
   const originalToObject = fabric.Image.prototype.toObject;
@@ -138,16 +117,10 @@ export function registerQRCodeImageType(): void {
   };
 }
 
-/**
- * Check if an object is a QR code image
- */
 export function isQRCodeImage(obj: fabric.Object): obj is fabric.Image & { verificationId: string; updateVerificationId?: (id: string) => Promise<void> } {
   return obj.type === 'image' && !!(obj as fabric.Image & { verificationId?: string }).verificationId;
 }
 
-/**
- * Find QR code image in canvas
- */
 export function findQRCodeImage(canvas: fabric.Canvas | fabric.StaticCanvas): (fabric.Image & { verificationId: string; updateVerificationId?: (id: string) => Promise<void> }) | null {
   const objects = canvas.getObjects();
   for (const obj of objects) {

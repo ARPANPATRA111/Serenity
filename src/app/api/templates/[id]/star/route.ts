@@ -1,9 +1,3 @@
-/**
- * Template Star API Route
- * 
- * Toggle star (favorite) on a template
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { toggleTemplateStar, hasUserStarredTemplate } from '@/lib/firebase/templates';
 
@@ -14,11 +8,6 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-/**
- * GET /api/templates/[id]/star
- * 
- * Check if current user has starred this template
- */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -47,11 +36,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-/**
- * POST /api/templates/[id]/star
- * 
- * Toggle star on a template
- */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;

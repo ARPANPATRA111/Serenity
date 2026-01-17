@@ -1,12 +1,3 @@
-/**
- * Certificate Verification Page
- * 
- * /verify/[id]
- * 
- * Public page for verifying certificate authenticity.
- * Displays certificate details and view count.
- */
-
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { VerificationClient } from './VerificationClient';

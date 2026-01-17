@@ -1,11 +1,3 @@
-/**
- * Local Media Storage Module
- * 
- * Handles media uploads using IndexedDB for local storage.
- * This is a fallback for when Firebase Storage is not available.
- * Supports images, SVGs, and GIFs with 5MB size limit.
- */
-
 // Maximum file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -43,9 +35,6 @@ export interface UploadResult {
   error?: string;
 }
 
-/**
- * Initialize IndexedDB
- */
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -69,9 +58,6 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-/**
- * Validate file before upload
- */
 export function validateMediaFile(file: File): { valid: boolean; error?: string } {
   // Check file size
   if (file.size > MAX_FILE_SIZE) {
@@ -102,16 +88,10 @@ export function validateMediaFile(file: File): { valid: boolean; error?: string 
   return { valid: true };
 }
 
-/**
- * Generate a unique asset ID
- */
 function generateAssetId(): string {
   return `asset_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
-/**
- * Convert file to base64 data URL
- */
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -121,9 +101,6 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-/**
- * Create a thumbnail from image
- */
 function createThumbnail(dataUrl: string, maxSize: number = 150): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -155,9 +132,6 @@ function createThumbnail(dataUrl: string, maxSize: number = 150): Promise<string
   });
 }
 
-/**
- * Upload a media file to local storage (IndexedDB)
- */
 export async function uploadLocalMedia(
   file: File,
   userId: string
@@ -210,9 +184,6 @@ export async function uploadLocalMedia(
   }
 }
 
-/**
- * Get all media for a user from local storage
- */
 export async function getUserLocalMedia(userId: string): Promise<LocalMediaAsset[]> {
   try {
     const db = await openDatabase();
@@ -241,9 +212,6 @@ export async function getUserLocalMedia(userId: string): Promise<LocalMediaAsset
   }
 }
 
-/**
- * Delete a media asset from local storage
- */
 export async function deleteLocalMedia(assetId: string, userId: string): Promise<boolean> {
   try {
     const db = await openDatabase();
@@ -274,9 +242,6 @@ export async function deleteLocalMedia(assetId: string, userId: string): Promise
   }
 }
 
-/**
- * Get storage usage info
- */
 export async function getStorageUsage(userId: string): Promise<{ used: number; count: number }> {
   try {
     const assets = await getUserLocalMedia(userId);
@@ -287,9 +252,6 @@ export async function getStorageUsage(userId: string): Promise<{ used: number; c
   }
 }
 
-/**
- * Clear all media for a user
- */
 export async function clearUserMedia(userId: string): Promise<boolean> {
   try {
     const assets = await getUserLocalMedia(userId);

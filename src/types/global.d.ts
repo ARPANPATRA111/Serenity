@@ -1,20 +1,13 @@
-/**
- * Global Type Declarations
- */
-
-// Ensure fabric is available globally for browser context
 declare global {
   interface Window {
     fabric: typeof import('fabric').fabric;
   }
 }
 
-// Module declarations for packages without types
 declare module 'file-saver' {
   export function saveAs(blob: Blob, filename: string): void;
 }
 
-// Extend process.env for type safety
 declare namespace NodeJS {
   interface ProcessEnv {
     NEXT_PUBLIC_FIREBASE_API_KEY: string;

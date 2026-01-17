@@ -1,17 +1,3 @@
-/**
- * BatchGenerator - The Heart of Certificate Generation
- * 
- * This module handles bulk certificate generation with:
- * - High-DPI canvas rasterization (72 DPI → 300 DPI)
- * - Non-blocking processing with setTimeout yielding
- * - Progress tracking and cancellation support
- * - PDF generation and ZIP packaging
- * - API-based storage for certificate verification
- * 
- * CRITICAL: All processing happens client-side to save server costs.
- * Certificates are stored via API for cross-device verification.
- */
-
 import { fabric } from 'fabric';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
@@ -27,45 +13,26 @@ import {
 import { yieldToMain } from '@/lib/utils';
 import type { DataRow, CertificateRecord as FirebaseCertificateRecord } from '@/types/fabric.d';
 
-/**
- * Generation options
- */
 export interface BatchGenerationOptions {
-  /** Template JSON string */
   templateJSON: string;
-  /** Data rows to process */
   dataRows: DataRow[];
-  /** Field to use for naming files (e.g., 'Name') */
   nameField?: string;
-  /** Whether to generate QR codes with verification IDs */
   generateQRCodes?: boolean;
-  /** Whether to save certificates to Firestore */
   saveToDB?: boolean;
-  /** Template ID for DB records */
   templateId?: string;
-  /** Template name for auto-save */
   templateName?: string;
-  /** User ID for template ownership */
   userId?: string;
-  /** Issuer name for certificates */
   issuerName?: string;
-  /** Certificate title field */
+  certificateTitle?: string;
+  certificateDescription?: string;
   titleField?: string;
-  /** Output format */
   outputFormat?: 'pdf' | 'png' | 'both';
-  /** Progress callback */
   onProgress?: (current: number, total: number, status: string) => void;
-  /** Error callback */
   onError?: (index: number, message: string) => void;
-  /** Certificate generated callback */
   onCertificateGenerated?: (id: string, record: Partial<FirebaseCertificateRecord>) => void;
-  /** Check if generation should be cancelled */
   isCancelled?: () => boolean;
 }
 
-/**
- * Generation result
- */
 export interface BatchGenerationResult {
   success: boolean;
   totalGenerated: number;
@@ -74,15 +41,8 @@ export interface BatchGenerationResult {
   zipBlob?: Blob;
 }
 
-/**
- * Yield interval - yield to main thread every N records
- */
 const YIELD_INTERVAL = 5;
 
-/**
- * Main batch generation function
- * Processes data rows and generates certificates without blocking the UI
- */
 export async function generateBatch(
   options: BatchGenerationOptions
 ): Promise<BatchGenerationResult> {
@@ -93,6 +53,8 @@ export async function generateBatch(
     generateQRCodes = true,
     templateId,
     issuerName = 'Serenity',
+    certificateTitle = 'Certificate of Completion',
+    certificateDescription = '',
     titleField = 'Certificate',
     templateName = 'Untitled Template',
     userId,
@@ -120,6 +82,8 @@ export async function generateBatch(
     templateName,
     userId,
     issuerName,
+    certificateTitle,
+    certificateDescription,
     titleField,
     outputFormat,
   });
@@ -251,7 +215,8 @@ export async function generateBatch(
         const record: Partial<FirebaseCertificateRecord> = {
           id: certificateId,
           recipientName,
-          title: String(row[titleField] || 'Certificate of Completion'),
+          title: certificateTitle || String(row[titleField] || 'Certificate of Completion'),
+          description: certificateDescription || '',
           issuedAt: Date.now(),
           issuerName,
           viewCount: 0,
@@ -321,7 +286,8 @@ export async function generateBatch(
         templateName: templateName, // Store template name for display
         recipientName,
         recipientEmail: String(row['Email'] || row['email'] || ''),
-        title: String(row[titleField] || 'Certificate of Completion'),
+        title: certificateTitle || 'Certificate of Completion',
+        description: certificateDescription || '',
         issuedAt: Date.now(),
         issuerName,
         viewCount: 0,
@@ -373,9 +339,6 @@ export async function generateBatch(
   return result;
 }
 
-/**
- * Load template JSON into a canvas
- */
 async function loadTemplateIntoCanvas(
   canvas: fabric.StaticCanvas,
   template: object
@@ -388,10 +351,6 @@ async function loadTemplateIntoCanvas(
   });
 }
 
-/**
- * Update all VariableTextbox instances with data from a row
- * Also removes the placeholder styling for clean PDF output
- */
 function updateTextboxesWithData(
   canvas: fabric.StaticCanvas,
   data: DataRow
@@ -417,9 +376,6 @@ function updateTextboxesWithData(
   }
 }
 
-/**
- * Clickable link info for PDF annotations
- */
 interface ClickableLinkInfo {
   url: string;
   x: number;
@@ -428,10 +384,6 @@ interface ClickableLinkInfo {
   height: number;
 }
 
-/**
- * Collect all clickable links from canvas objects
- * This includes verification URL placeholders and user-added link elements
- */
 function collectClickableLinks(
   canvas: fabric.StaticCanvas,
   certificateId: string
@@ -471,10 +423,6 @@ function collectClickableLinks(
   return links;
 }
 
-/**
- * Update verification URL placeholder with actual URL
- * Replaces {{VERIFICATION_URL}} with the actual verification link
- */
 function updateVerificationUrlPlaceholder(
   canvas: fabric.StaticCanvas,
   certificateId: string
@@ -510,9 +458,6 @@ function updateVerificationUrlPlaceholder(
   }
 }
 
-/**
- * Update QR code with verification ID
- */
 async function updateQRCode(
   canvas: fabric.StaticCanvas,
   certificateId: string
@@ -524,17 +469,11 @@ async function updateQRCode(
   }
 }
 
-/**
- * Convert data URL to Blob
- */
 async function dataURLToBlob(dataURL: string): Promise<Blob> {
   const response = await fetch(dataURL);
   return response.blob();
 }
 
-/**
- * Sanitize filename by removing invalid characters
- */
 function sanitizeFilename(name: string): string {
   return name
     .replace(/[<>:"/\\|?*]/g, '_')
@@ -542,16 +481,10 @@ function sanitizeFilename(name: string): string {
     .substring(0, 50);
 }
 
-/**
- * Download the generated ZIP file
- */
 export function downloadZip(blob: Blob, filename: string = 'certificates.zip'): void {
   saveAs(blob, filename);
 }
 
-/**
- * Generate a single certificate (for preview)
- */
 export async function generateSingleCertificate(
   templateJSON: string,
   data: DataRow,

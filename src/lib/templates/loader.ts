@@ -1,21 +1,9 @@
-/**
- * Template Loader Utility
- * 
- * Loads and applies certificate templates to the Fabric canvas.
- */
-
 import { fabric } from 'fabric';
 import type { CertificateTemplate } from '@/types/fabric';
 
-/**
- * Available built-in templates
- */
 export const TEMPLATE_IDS = ['classic', 'modern', 'course', 'workshop', 'achievement', 'corporate'] as const;
 export type TemplateId = typeof TEMPLATE_IDS[number];
 
-/**
- * Load a template JSON file
- */
 export async function loadTemplate(id: TemplateId): Promise<CertificateTemplate | null> {
   try {
     const response = await fetch(`/templates/${id}.json`);
@@ -29,9 +17,6 @@ export async function loadTemplate(id: TemplateId): Promise<CertificateTemplate 
   }
 }
 
-/**
- * Apply a template to a Fabric canvas
- */
 export async function applyTemplate(
   canvas: fabric.Canvas,
   template: CertificateTemplate,
@@ -91,9 +76,6 @@ export async function applyTemplate(
   canvas.renderAll();
 }
 
-/**
- * Extract template from current canvas state
- */
 export function extractTemplate(
   canvas: fabric.Canvas,
   name: string,
@@ -131,9 +113,6 @@ export function extractTemplate(
   };
 }
 
-/**
- * Download template as JSON file
- */
 export function downloadTemplate(template: CertificateTemplate, filename?: string): void {
   const json = JSON.stringify(template, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -148,9 +127,6 @@ export function downloadTemplate(template: CertificateTemplate, filename?: strin
   URL.revokeObjectURL(url);
 }
 
-/**
- * Import template from JSON file
- */
 export function importTemplate(file: File): Promise<CertificateTemplate> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Right Sidebar - Data Mapping
- */
-
 import { useCallback, useRef, useState } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useDataSourceStore } from '@/store/dataSourceStore';
@@ -102,7 +98,6 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
 
   return (
     <div className="flex h-full flex-col bg-card overflow-hidden">
-      {/* Title Bar with Toggle */}
       <div className="flex items-center justify-between border-b border-border p-4">
         <h2 className="font-semibold text-foreground">Data Source</h2>
         <button

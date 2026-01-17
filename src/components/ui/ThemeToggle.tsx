@@ -4,10 +4,6 @@ import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
-/**
- * Theme Toggle Button
- * Switches between "Neon Future" (dark) and "Academic Gold" (light) themes
- */
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();

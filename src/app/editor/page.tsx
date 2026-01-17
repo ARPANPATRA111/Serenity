@@ -1,12 +1,3 @@
-/**
- * Certificate Editor Page
- * 
- * /editor
- * 
- * Main application page with the Fabric.js canvas editor.
- * Protected route - requires authentication (handled by AuthContext).
- */
-
 'use client';
 
 import dynamic from 'next/dynamic';

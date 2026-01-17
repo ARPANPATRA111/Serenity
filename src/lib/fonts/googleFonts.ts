@@ -1,10 +1,3 @@
-/**
- * Google Fonts Loader
- * 
- * Loads Google Fonts dynamically for use in the certificate editor.
- * Fonts are loaded on-demand when needed.
- */
-
 // Popular Google Fonts for certificates
 export const GOOGLE_FONTS = [
   { name: 'Roboto', weights: [400, 500, 700] },
@@ -32,9 +25,6 @@ export const GOOGLE_FONTS = [
 // Track loaded fonts
 const loadedFonts = new Set<string>();
 
-/**
- * Load a Google Font dynamically
- */
 export async function loadGoogleFont(fontName: string, weights: number[] = [400, 700]): Promise<void> {
   if (loadedFonts.has(fontName)) {
     return;
@@ -68,9 +58,6 @@ export async function loadGoogleFont(fontName: string, weights: number[] = [400,
   });
 }
 
-/**
- * Load all popular fonts at once
- */
 export async function loadAllGoogleFonts(): Promise<void> {
   const fontPromises = GOOGLE_FONTS.map((font) => 
     loadGoogleFont(font.name, font.weights)
@@ -79,9 +66,6 @@ export async function loadAllGoogleFonts(): Promise<void> {
   await Promise.allSettled(fontPromises);
 }
 
-/**
- * Get list of all available fonts (system + Google)
- */
 export function getAllFonts(): string[] {
   const systemFonts = [
     'Arial',
@@ -107,9 +91,6 @@ export function getAllFonts(): string[] {
   return [...systemFonts, ...googleFontNames].sort();
 }
 
-/**
- * Check if a font is a Google Font
- */
 export function isGoogleFont(fontName: string): boolean {
   return GOOGLE_FONTS.some((f) => f.name === fontName);
 }

@@ -1,11 +1,3 @@
-/**
- * Vercel Blob Storage Module
- * 
- * Handles media uploads using Vercel Blob Storage.
- * Free tier includes 1GB storage which is perfect for user media.
- * Each user has their own media library stored in Firestore with Blob URLs.
- */
-
 import { put, del, list } from '@vercel/blob';
 import { db } from '../firebase/client';
 import {
@@ -51,9 +43,6 @@ export interface UploadResult {
   error?: string;
 }
 
-/**
- * Validate file before upload
- */
 export function validateMediaFile(file: File): { valid: boolean; error?: string } {
   // Check file size
   if (file.size > MAX_FILE_SIZE) {
@@ -84,17 +73,10 @@ export function validateMediaFile(file: File): { valid: boolean; error?: string 
   return { valid: true };
 }
 
-/**
- * Generate a unique asset ID
- */
 function generateAssetId(): string {
   return `asset_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
-/**
- * Upload a media file to Vercel Blob Storage
- * This function should be called from an API route, not directly from client
- */
 export async function uploadMediaToBlob(
   fileBuffer: Buffer,
   fileName: string,
@@ -137,9 +119,6 @@ export async function uploadMediaToBlob(
   }
 }
 
-/**
- * Get all media for a user
- */
 export async function getUserMedia(userId: string): Promise<MediaAsset[]> {
   try {
     const mediaRef = collection(db, 'media');
@@ -157,9 +136,6 @@ export async function getUserMedia(userId: string): Promise<MediaAsset[]> {
   }
 }
 
-/**
- * Delete a media asset
- */
 export async function deleteMedia(assetId: string, userId: string): Promise<boolean> {
   try {
     // Get the asset first
@@ -194,9 +170,6 @@ export async function deleteMedia(assetId: string, userId: string): Promise<bool
   }
 }
 
-/**
- * Get storage usage for a user
- */
 export async function getStorageUsage(userId: string): Promise<{ used: number; count: number }> {
   try {
     const assets = await getUserMedia(userId);

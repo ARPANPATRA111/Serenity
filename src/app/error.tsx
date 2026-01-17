@@ -1,7 +1,3 @@
-/**
- * Global Error Boundary
- */
-
 'use client';
 
 import { useEffect } from 'react';

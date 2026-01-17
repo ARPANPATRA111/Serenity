@@ -1,11 +1,3 @@
-/**
- * Firebase Storage Module
- * 
- * Handles media uploads to Firebase Storage for user assets.
- * Supports images, SVGs, and GIFs with 5MB size limit.
- * Each user has their own media library stored in Firestore.
- */
-
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import { storage, db } from './client';
 import { 
@@ -52,9 +44,6 @@ export interface UploadResult {
   error?: string;
 }
 
-/**
- * Validate file before upload
- */
 export function validateMediaFile(file: File): { valid: boolean; error?: string } {
   // Check file size
   if (file.size > MAX_FILE_SIZE) {
@@ -85,16 +74,10 @@ export function validateMediaFile(file: File): { valid: boolean; error?: string 
   return { valid: true };
 }
 
-/**
- * Generate a unique asset ID
- */
 function generateAssetId(): string {
   return `asset_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
-/**
- * Upload a media file to Firebase Storage
- */
 export async function uploadMedia(
   file: File, 
   userId: string
@@ -145,9 +128,6 @@ export async function uploadMedia(
   }
 }
 
-/**
- * Get all media assets for a user
- */
 export async function getUserMedia(userId: string): Promise<MediaAsset[]> {
   try {
     const q = query(
@@ -168,9 +148,6 @@ export async function getUserMedia(userId: string): Promise<MediaAsset[]> {
   }
 }
 
-/**
- * Delete a media asset
- */
 export async function deleteMedia(assetId: string, userId: string): Promise<boolean> {
   try {
     // Get the asset to verify ownership and get storage path
@@ -204,9 +181,6 @@ export async function deleteMedia(assetId: string, userId: string): Promise<bool
   }
 }
 
-/**
- * Get a single media asset by ID
- */
 export async function getMediaById(assetId: string): Promise<MediaAsset | null> {
   try {
     const assetDoc = await getDoc(doc(db, 'user-media', assetId));
@@ -222,9 +196,6 @@ export async function getMediaById(assetId: string): Promise<MediaAsset | null> 
   }
 }
 
-/**
- * Calculate total storage used by a user (in bytes)
- */
 export async function getUserStorageUsage(userId: string): Promise<number> {
   try {
     const assets = await getUserMedia(userId);
@@ -235,9 +206,6 @@ export async function getUserStorageUsage(userId: string): Promise<number> {
   }
 }
 
-/**
- * Format file size for display
- */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

@@ -1,14 +1,3 @@
-/**
- * useFabric Hook - Core Canvas Management
- * 
- * Manages the Fabric.js canvas lifecycle with imperative control.
- * CRITICAL: Canvas state is managed via refs, NOT React state, to avoid
- * re-renders during high-frequency operations (dragging, resizing).
- * 
- * Zustand store is only updated for low-frequency UI updates (selection changes).
- * Auto-saves canvas state to localStorage to prevent data loss on refresh.
- */
-
 'use client';
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
@@ -22,19 +11,12 @@ import { debounce } from '@/lib/utils';
 const CANVAS_AUTOSAVE_KEY = 'serenity_canvas_autosave';
 
 interface UseFabricOptions {
-  /** Canvas width in pixels */
   width?: number;
-  /** Canvas height in pixels */
   height?: number;
-  /** Background color */
   backgroundColor?: string;
-  /** Whether to enable selection */
   selection?: boolean;
-  /** Callback when canvas is ready */
   onReady?: (canvas: fabric.Canvas) => void;
-  /** Callback when an object is selected */
   onObjectSelected?: (obj: fabric.Object | null) => void;
-  /** Callback when canvas is modified */
   onModified?: () => void;
 }
 
@@ -78,9 +60,6 @@ export function useFabric(
     setHistoryState,
   } = useEditorStore();
 
-  /**
-   * Initialize the canvas
-   */
   useEffect(() => {
     if (!canvasRef.current || fabricRef.current) return;
 
@@ -387,9 +366,6 @@ export function useFabric(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasRef]);
 
-  /**
-   * Auto-save canvas state to localStorage
-   */
   const autoSaveToLocalStorage = useCallback((json: string) => {
     if (typeof window === 'undefined') return;
     try {
@@ -403,9 +379,6 @@ export function useFabric(
     }
   }, []);
 
-  /**
-   * Save current canvas state to history
-   */
   const saveToHistory = useCallback(() => {
     if (!fabricRef.current) return;
 
@@ -430,9 +403,6 @@ export function useFabric(
     autoSaveToLocalStorage(json);
   }, [pushHistory, autoSaveToLocalStorage]);
 
-  /**
-   * Restore canvas from auto-save in localStorage
-   */
   const restoreFromAutoSave = useCallback((canvas: fabric.Canvas) => {
     if (typeof window === 'undefined') return;
     try {
@@ -452,17 +422,11 @@ export function useFabric(
     }
   }, []);
 
-  /**
-   * Clear auto-saved canvas (call when starting new design)
-   */
   const clearAutoSave = useCallback(() => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(CANVAS_AUTOSAVE_KEY);
   }, []);
 
-  /**
-   * Undo the last action
-   */
   const undo = useCallback(() => {
     if (!fabricRef.current || historyIndexRef.current <= 0) return;
 
@@ -552,9 +516,6 @@ export function useFabric(
     });
   }, [width, height, backgroundColor, setHistoryState]);
 
-  /**
-   * Redo the last undone action
-   */
   const redo = useCallback(() => {
     if (!fabricRef.current || historyIndexRef.current >= historyRef.current.length - 1) return;
 
@@ -644,9 +605,6 @@ export function useFabric(
     });
   }, [width, height, backgroundColor, setHistoryState]);
 
-  /**
-   * Add a text object to the canvas
-   */
   const addText = useCallback((text: string = 'New Text', options?: fabric.ITextboxOptions) => {
     if (!fabricRef.current) return null;
 
@@ -670,9 +628,6 @@ export function useFabric(
     return textbox;
   }, [width, height]);
 
-  /**
-   * Add a variable textbox (for data binding)
-   */
   const addVariableTextbox = useCallback((dynamicKey: string, options?: fabric.ITextboxOptions) => {
     if (!fabricRef.current) return null;
 
@@ -698,9 +653,6 @@ export function useFabric(
     return textbox;
   }, [width, height]);
 
-  /**
-   * Add an image to the canvas
-   */
   const addImage = useCallback((url: string, options?: fabric.IImageOptions): Promise<fabric.Image> => {
     return new Promise((resolve, reject) => {
       if (!fabricRef.current) {
@@ -742,9 +694,6 @@ export function useFabric(
     });
   }, [width, height]);
 
-  /**
-   * Add a shape to the canvas
-   */
   const addShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond', options?: fabric.IObjectOptions) => {
     if (!fabricRef.current) return null;
 
@@ -944,10 +893,6 @@ export function useFabric(
     return shape;
   }, [width, height]);
 
-  /**
-   * Utility function to restore the correct z-order of helper objects
-   * Order should be: outerShade (back) -> innerClear -> boundaryRect -> user objects (front)
-   */
   const restoreHelperOrder = useCallback(() => {
     if (!fabricRef.current) return;
     
@@ -962,9 +907,6 @@ export function useFabric(
     if (outerShade) canvas.sendToBack(outerShade);
   }, []);
 
-  /**
-   * Add a decorative border to the certificate
-   */
   const addBorder = useCallback((style: 'simple' | 'double' | 'ornate' | 'gold' | 'corner', color: string = '#d4af37', options?: fabric.IObjectOptions) => {
     if (!fabricRef.current) return null;
 
@@ -1122,9 +1064,6 @@ export function useFabric(
     return result;
   }, [width, height, restoreHelperOrder]);
 
-  /**
-   * Delete selected objects
-   */
   const deleteSelected = useCallback(() => {
     if (!fabricRef.current) return;
 
@@ -1136,9 +1075,6 @@ export function useFabric(
     fabricRef.current.requestRenderAll();
   }, []);
 
-  /**
-   * Clone selected object
-   */
   const cloneSelected = useCallback(() => {
     if (!fabricRef.current) return;
 
@@ -1156,9 +1092,6 @@ export function useFabric(
     }, ['dynamicKey', 'isPlaceholder', 'verificationId']);
   }, []);
 
-  /**
-   * Bring selected object to front
-   */
   const bringToFront = useCallback(() => {
     if (!fabricRef.current) return;
     const activeObject = fabricRef.current.getActiveObject();
@@ -1168,9 +1101,6 @@ export function useFabric(
     }
   }, []);
 
-  /**
-   * Send selected object to back
-   */
   const sendToBack = useCallback(() => {
     if (!fabricRef.current) return;
     const activeObject = fabricRef.current.getActiveObject();
@@ -1180,9 +1110,6 @@ export function useFabric(
     }
   }, []);
 
-  /**
-   * Export canvas to JSON
-   */
   const toJSON = useCallback(() => {
     if (!fabricRef.current) return null;
     const json = fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isBoundary', 'isVerificationUrl', 'isClickableLink', 'isLocked']);
@@ -1200,9 +1127,6 @@ export function useFabric(
     return json;
   }, []);
 
-  /**
-   * Load canvas from JSON
-   */
   const loadFromJSON = useCallback((json: string | object): Promise<void> => {
     return new Promise((resolve) => {
       if (!fabricRef.current) {
@@ -1343,9 +1267,6 @@ export function useFabric(
     });
   }, [saveToHistory, width, height]);
 
-  /**
-   * Export canvas to high-DPI data URL for PDF generation
-   */
   const toHighDPIDataURL = useCallback((multiplier: number = HIGH_DPI_MULTIPLIER): string => {
     if (!fabricRef.current) return '';
     
@@ -1367,9 +1288,6 @@ export function useFabric(
     return dataUrl;
   }, []);
 
-  /**
-   * Clear the canvas
-   */
   const clear = useCallback(() => {
     if (!fabricRef.current) return;
     fabricRef.current.clear();
@@ -1432,10 +1350,6 @@ export function useFabric(
     saveToHistory();
   }, [backgroundColor, saveToHistory, width, height]);
 
-  /**
-   * Set canvas background color
-   * Updates both the canvas background and the inner clear rect
-   */
   const setBackgroundColor = useCallback((color: string) => {
     if (!fabricRef.current) return;
     
@@ -1452,17 +1366,11 @@ export function useFabric(
     saveToHistory();
   }, [saveToHistory]);
 
-  /**
-   * Get current canvas background color
-   */
   const getBackgroundColor = useCallback((): string => {
     if (!fabricRef.current) return backgroundColor;
     return (fabricRef.current.backgroundColor as string) || backgroundColor;
   }, [backgroundColor]);
 
-  /**
-   * Set background image
-   */
   const setBackgroundImage = useCallback((url: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (!fabricRef.current) {
@@ -1491,14 +1399,8 @@ export function useFabric(
     });
   }, [width, height]);
 
-  /**
-   * Get the canvas instance (for advanced usage)
-   */
   const getCanvas = useCallback(() => fabricRef.current, []);
 
-  /**
-   * Check if object is a variable textbox
-   */
   const isVariable = useCallback((obj: fabric.Object) => isVariableTextbox(obj), []);
 
   // Memoize the return value to prevent infinite re-renders in consumers
