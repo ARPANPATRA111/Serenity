@@ -217,33 +217,40 @@ export function useFabric(
 
     // Modification events - debounced to prevent spam
     const debouncedOnModified = debounce(() => {
-      if (!isHistoryActionRef.current) {
-        // Inline save to history
-        if (fabricRef.current) {
-          const json = JSON.stringify(fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isVerificationUrl', 'isClickableLink', 'isLocked']));
-          historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-          historyRef.current.push(json);
-          historyIndexRef.current = historyRef.current.length - 1;
-          if (historyRef.current.length > 3) {
-            historyRef.current.shift();
-            historyIndexRef.current--;
-          }
-          const canUndoNow = historyIndexRef.current > 0;
-          const canRedoNow = false; // After a new action, no redo available
-          setHistoryState(canUndoNow, canRedoNow);
-          // Auto-save to localStorage
-          if (typeof window !== 'undefined') {
-            try {
-              const saveData = { canvasJSON: json, savedAt: new Date().toISOString() };
-              localStorage.setItem(CANVAS_AUTOSAVE_KEY, JSON.stringify(saveData));
-            } catch (e) {
-              console.warn('Failed to auto-save:', e);
-            }
+      if (!isHistoryActionRef.current && fabricRef.current) {
+        const json = JSON.stringify(fabricRef.current.toJSON(['dynamicKey', 'isPlaceholder', 'verificationId', 'isVerificationUrl', 'isClickableLink', 'isLocked']));
+        
+        const lastState = historyRef.current[historyIndexRef.current];
+        if (lastState === json) {
+          onModified?.();
+          return;
+        }
+        
+        historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+        
+        historyRef.current.push(json);
+        historyIndexRef.current = historyRef.current.length - 1;
+        
+        if (historyRef.current.length > 50) {
+          historyRef.current.shift();
+          historyIndexRef.current--;
+        }
+        
+        const canUndoNow = historyIndexRef.current > 0;
+        const canRedoNow = false; // After a new action, no redo available
+        setHistoryState(canUndoNow, canRedoNow);
+        // Auto-save to localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            const saveData = { canvasJSON: json, savedAt: new Date().toISOString() };
+            localStorage.setItem(CANVAS_AUTOSAVE_KEY, JSON.stringify(saveData));
+          } catch (e) {
+            console.warn('Failed to auto-save:', e);
           }
         }
       }
       onModified?.();
-    }, 300);
+    }, 500);
 
     canvas.on('object:modified', debouncedOnModified);
     canvas.on('object:added', debouncedOnModified);
@@ -428,12 +435,17 @@ export function useFabric(
   }, []);
 
   const undo = useCallback(() => {
-    if (!fabricRef.current || historyIndexRef.current <= 0) return;
+    if (!fabricRef.current || historyIndexRef.current <= 0) {
+      console.log('[Undo] Cannot undo: no history or at start');
+      return;
+    }
 
     isHistoryActionRef.current = true;
     historyIndexRef.current--;
     const state = historyRef.current[historyIndexRef.current];
     
+    console.log('[Undo] Restoring state', historyIndexRef.current, 'of', historyRef.current.length - 1);
+    
     // Update store with new history state IMMEDIATELY (before async load)
     const canUndoNow = historyIndexRef.current > 0;
     const canRedoNow = historyIndexRef.current < historyRef.current.length - 1;
@@ -441,6 +453,8 @@ export function useFabric(
     
     fabricRef.current.loadFromJSON(JSON.parse(state), () => {
       if (!fabricRef.current) return;
+      
+      const restoredBgColor = (fabricRef.current.backgroundColor as string) || backgroundColor;
       
       // Re-add boundary elements (they are excluded from history via excludeFromExport)
       const hasOuterShade = fabricRef.current.getObjects().some((obj: any) => obj.isOuterShade);
@@ -470,7 +484,7 @@ export function useFabric(
           top: 0,
           width: width,
           height: height,
-          fill: backgroundColor,
+          fill: restoredBgColor,
           selectable: false,
           evented: false,
           excludeFromExport: true,
@@ -483,6 +497,11 @@ export function useFabric(
         if (outerShade) {
           fabricRef.current.sendToBack(innerClearRect);
           fabricRef.current.sendToBack(outerShade);
+        }
+      } else {
+        const innerClear = fabricRef.current.getObjects().find((obj: any) => obj.isInnerClear);
+        if (innerClear) {
+          innerClear.set('fill', restoredBgColor);
         }
       }
       
@@ -507,21 +526,27 @@ export function useFabric(
         fabricRef.current.add(boundaryRect);
       }
       
+      bringVerificationUrlToFront();
+      
       fabricRef.current.requestRenderAll();
       
-      // Delay resetting the flag longer than the debounce (300ms) to prevent trailing events
+      // Delay resetting the flag longer than the debounce (500ms) to prevent trailing events
       setTimeout(() => {
         isHistoryActionRef.current = false;
-      }, 400);
+      }, 600);
     });
   }, [width, height, backgroundColor, setHistoryState]);
 
   const redo = useCallback(() => {
-    if (!fabricRef.current || historyIndexRef.current >= historyRef.current.length - 1) return;
+    if (!fabricRef.current || historyIndexRef.current >= historyRef.current.length - 1) {
+      console.log('[Redo] Cannot redo: no future states');
+      return;
+    }
 
     isHistoryActionRef.current = true;
     historyIndexRef.current++;
     const state = historyRef.current[historyIndexRef.current];
+    console.log('[Redo] Restoring state', historyIndexRef.current, 'of', historyRef.current.length - 1);
     
     // Update store with new history state IMMEDIATELY (before async load)
     const canUndoNow = historyIndexRef.current > 0;
@@ -530,6 +555,8 @@ export function useFabric(
     
     fabricRef.current.loadFromJSON(JSON.parse(state), () => {
       if (!fabricRef.current) return;
+      
+      const restoredBgColor = (fabricRef.current.backgroundColor as string) || backgroundColor;
       
       // Re-add boundary elements (they are excluded from history via excludeFromExport)
       const hasOuterShade = fabricRef.current.getObjects().some((obj: any) => obj.isOuterShade);
@@ -559,7 +586,7 @@ export function useFabric(
           top: 0,
           width: width,
           height: height,
-          fill: backgroundColor,
+          fill: restoredBgColor,
           selectable: false,
           evented: false,
           excludeFromExport: true,
@@ -572,6 +599,11 @@ export function useFabric(
         if (outerShade) {
           fabricRef.current.sendToBack(innerClearRect);
           fabricRef.current.sendToBack(outerShade);
+        }
+      } else {
+        const innerClear = fabricRef.current.getObjects().find((obj: any) => obj.isInnerClear);
+        if (innerClear) {
+          innerClear.set('fill', restoredBgColor);
         }
       }
       
@@ -596,14 +628,24 @@ export function useFabric(
         fabricRef.current.add(boundaryRect);
       }
       
+      bringVerificationUrlToFront();
+      
       fabricRef.current.requestRenderAll();
       
-      // Delay resetting the flag longer than the debounce (300ms) to prevent trailing events
       setTimeout(() => {
         isHistoryActionRef.current = false;
-      }, 400);
+      }, 600);
     });
   }, [width, height, backgroundColor, setHistoryState]);
+
+  const bringVerificationUrlToFront = useCallback(() => {
+    if (!fabricRef.current) return;
+    
+    const verificationUrl = fabricRef.current.getObjects().find((obj: any) => obj.isVerificationUrl);
+    if (verificationUrl) {
+      fabricRef.current.bringToFront(verificationUrl);
+    }
+  }, []);
 
   const addText = useCallback((text: string = 'New Text', options?: fabric.ITextboxOptions) => {
     if (!fabricRef.current) return null;
@@ -687,12 +729,15 @@ export function useFabric(
 
         fabricRef.current?.add(img);
         fabricRef.current?.setActiveObject(img);
+        
+        bringVerificationUrlToFront();
+        
         fabricRef.current?.requestRenderAll();
 
         resolve(img);
       }, { crossOrigin: 'anonymous' });
     });
-  }, [width, height]);
+  }, [width, height, bringVerificationUrlToFront]);
 
   const addShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond', options?: fabric.IObjectOptions) => {
     if (!fabricRef.current) return null;
@@ -1419,6 +1464,7 @@ export function useFabric(
     cloneSelected,
     bringToFront,
     sendToBack,
+    bringVerificationUrlToFront,
     
     // History
     undo,
@@ -1449,6 +1495,7 @@ export function useFabric(
     cloneSelected,
     bringToFront,
     sendToBack,
+    bringVerificationUrlToFront,
     undo,
     redo,
     toJSON,

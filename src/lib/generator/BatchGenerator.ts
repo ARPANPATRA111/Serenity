@@ -38,10 +38,12 @@ export interface BatchGenerationResult {
   totalGenerated: number;
   errors: Array<{ index: number; message: string }>;
   certificateIds: string[];
+  certificateImageUrls: Map<string, string>;
+  certificatePdfBlobs: Map<string, Blob>;
   zipBlob?: Blob;
 }
 
-const YIELD_INTERVAL = 5;
+const YIELD_INTERVAL = 10;
 
 export async function generateBatch(
   options: BatchGenerationOptions
@@ -70,6 +72,8 @@ export async function generateBatch(
     totalGenerated: 0,
     errors: [],
     certificateIds: [],
+    certificateImageUrls: new Map(),
+    certificatePdfBlobs: new Map(),
   };
 
   const thumbnailMap: Map<string, string> = new Map();
@@ -155,8 +159,8 @@ export async function generateBatch(
 
         // Generate high-DPI image
         const dataURL = staticCanvas.toDataURL({
-          format: 'png',
-          quality: 1,
+          format: 'jpeg',
+          quality: 0.92,
           multiplier: HIGH_DPI_MULTIPLIER,
         });
 
@@ -177,7 +181,7 @@ export async function generateBatch(
           const pdfHeight = pdf.internal.pageSize.getHeight();
 
           // Add image to PDF (full page, scaled to fit)
-          pdf.addImage(dataURL, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+          pdf.addImage(dataURL, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
 
           const scaleX = pdfWidth / A4_LANDSCAPE.width;
           const scaleY = pdfHeight / A4_LANDSCAPE.height;
@@ -193,21 +197,51 @@ export async function generateBatch(
           // Get PDF blob
           const pdfBlob = pdf.output('blob');
 
+          result.certificatePdfBlobs.set(certificateId, pdfBlob);
+
           // Add to ZIP
           pdfFolder?.file(`${sanitizedName}_${certificateId}.pdf`, pdfBlob);
+        } else {
+          const pdf = new jsPDF({
+            orientation: 'landscape',
+            unit: 'pt',
+            format: 'a4',
+          });
+
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          pdf.addImage(dataURL, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+
+          const scaleX = pdfWidth / A4_LANDSCAPE.width;
+          const scaleY = pdfHeight / A4_LANDSCAPE.height;
+          
+          for (const link of clickableLinks) {
+            const linkX = link.x * scaleX;
+            const linkY = link.y * scaleY;
+            const linkWidth = link.width * scaleX;
+            const linkHeight = link.height * scaleY;
+            pdf.link(linkX, linkY, linkWidth, linkHeight, { url: link.url });
+          }
+
+          const pdfBlob = pdf.output('blob');
+          result.certificatePdfBlobs.set(certificateId, pdfBlob);
         }
 
         if (outputFormat === 'png' || outputFormat === 'both') {
-          // Convert data URL to blob for PNG
-          const pngBlob = await dataURLToBlob(dataURL);
+          const pngDataURL = staticCanvas.toDataURL({
+            format: 'png',
+            quality: 1,
+            multiplier: HIGH_DPI_MULTIPLIER,
+          });
+          const pngBlob = await dataURLToBlob(pngDataURL);
           pdfFolder?.file(`${sanitizedName}_${certificateId}.png`, pngBlob);
         }
 
         // Capture thumbnail NOW while canvas has THIS certificate's content
         const thumbnailDataURL = staticCanvas.toDataURL({
           format: 'png',
-          quality: 0.8,
-          multiplier: 1.5, // 1.5x for decent quality but not too large
+          quality: 1,
+          multiplier: 2.0, // 2x for good quality while keeping file size reasonable
         });
         thumbnailMap.set(certificateId, thumbnailDataURL);
 
@@ -248,7 +282,7 @@ export async function generateBatch(
     const zipBlob = await zip.generateAsync({ 
       type: 'blob',
       compression: 'DEFLATE',
-      compressionOptions: { level: 6 },
+      compressionOptions: { level: 4 },
     }, (metadata) => {
       onProgress?.(total, total, `Compressing... ${Math.round(metadata.percent)}%`);
     });
@@ -257,12 +291,56 @@ export async function generateBatch(
     result.success = result.errors.length === 0;
 
     // Store certificates via API (Firebase Admin SDK - server-side, no permission issues)
-    onProgress?.(total, total, 'Saving certificate records to cloud...');
+    onProgress?.(total, total, 'Uploading certificate images...');
     console.log('[BatchGenerator] Preparing to store certificates, total generated:', result.totalGenerated);
     console.log('[BatchGenerator] Certificate IDs generated:', result.certificateIds);
     
     // Build certificate records with their images (using thumbnails captured during generation)
     const certificatesToSave: FirebaseCertificateRecord[] = [];
+    
+    const imageUrlMap: Map<string, string> = new Map();
+    const UPLOAD_BATCH_SIZE = 10;
+    
+    const uploadImage = async (certId: string, thumbnailDataURL: string): Promise<void> => {
+      try {
+        const response = await fetch('/api/certificates/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            certificateId: certId,
+            imageBase64: thumbnailDataURL,
+            userId: userId,
+          }),
+        });
+        
+        const data = await response.json();
+        if (data.success && data.url) {
+          imageUrlMap.set(certId, data.url);
+        }
+      } catch (uploadError) {
+        console.warn(`[BatchGenerator] Failed to upload thumbnail for ${certId}:`, uploadError);
+      }
+    };
+    
+    const uploadTasks: Array<{ certId: string; thumbnailDataURL: string }> = [];
+    for (const certId of result.certificateIds) {
+      const thumbnailDataURL = thumbnailMap.get(certId);
+      if (thumbnailDataURL) {
+        uploadTasks.push({ certId, thumbnailDataURL });
+      }
+    }
+    
+    for (let i = 0; i < uploadTasks.length; i += UPLOAD_BATCH_SIZE) {
+      const batch = uploadTasks.slice(i, i + UPLOAD_BATCH_SIZE);
+      await Promise.all(batch.map(task => uploadImage(task.certId, task.thumbnailDataURL)));
+      onProgress?.(total, total, `Uploading images... ${Math.min(i + UPLOAD_BATCH_SIZE, uploadTasks.length)}/${uploadTasks.length}`);
+    }
+    
+    imageUrlMap.forEach((url, certId) => {
+      result.certificateImageUrls.set(certId, url);
+    });
+    
+    onProgress?.(total, total, 'Saving certificate records...');
     
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
@@ -274,10 +352,7 @@ export async function generateBatch(
       
       const recipientName = String(row[nameField] || `Certificate_${i + 1}`);
       
-      const thumbnailDataURL = thumbnailMap.get(certId) || '';
-      if (!thumbnailDataURL) {
-        console.warn(`[BatchGenerator] No thumbnail found for certificate ${certId}`);
-      }
+      const certificateImageUrl = imageUrlMap.get(certId) || '';
       
       certificatesToSave.push({
         id: certId,
@@ -293,7 +368,7 @@ export async function generateBatch(
         viewCount: 0,
         metadata: row as Record<string, string>,
         isActive: true,
-        certificateImage: thumbnailDataURL, // Store the certificate image
+        certificateImage: certificateImageUrl, // Store URL reference, not base64
       });
     }
 
@@ -389,7 +464,8 @@ function collectClickableLinks(
   certificateId: string
 ): ClickableLinkInfo[] {
   const links: ClickableLinkInfo[] = [];
-  const verificationURL = `${typeof window !== 'undefined' ? window.location.origin : 'https://serenity.app'}/verify/${certificateId}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity-three-kappa.vercel.app/';
+  const verificationURL = `${baseUrl}/verify/${certificateId}`;
   
   const objects = canvas.getObjects();
   for (const obj of objects) {
@@ -427,7 +503,8 @@ function updateVerificationUrlPlaceholder(
   canvas: fabric.StaticCanvas,
   certificateId: string
 ): void {
-  const verificationURL = `${typeof window !== 'undefined' ? window.location.origin : 'https://serenity.app'}/verify/${certificateId}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity-three-kappa.vercel.app/';
+  const verificationURL = `${baseUrl}/verify/${certificateId}`;
   
   const objects = canvas.getObjects();
   for (const obj of objects) {
