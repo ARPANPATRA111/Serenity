@@ -7,11 +7,16 @@ import './globals.css';
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
+  display: 'swap',
+  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
 });
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
   variable: '--font-display',
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
 });
 
 export const metadata: Metadata = {
