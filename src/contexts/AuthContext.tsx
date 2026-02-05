@@ -8,6 +8,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendEmailVerification,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   GithubAuthProvider,
   signInWithPopup,
@@ -34,6 +35,7 @@ interface AuthContextValue {
   loginWithGoogle: () => Promise<void>;
   loginWithGithub: () => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
   updateUser: (updates: { name?: string }) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
@@ -328,6 +330,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const forgotPassword = async (email: string) => {
+    if (!auth) throw new Error('Firebase not initialized');
+    
+    try {
+      await sendPasswordResetEmail(auth, email, getActionCodeSettings());
+    } catch (error: any) {
+      if (error.code === 'auth/unauthorized-continue-uri') {
+        await sendPasswordResetEmail(auth, email);
+      } else if (error.code === 'auth/user-not-found') {
+        return;
+      } else {
+        throw error;
+      }
+    }
+  };
+
   const updateUser = async (updates: { name?: string }) => {
     if (!user) {
       throw new Error('No user logged in');
@@ -397,6 +415,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithGoogle,
         loginWithGithub,
         resendVerificationEmail,
+        forgotPassword,
         updateUser,
         deleteAccount,
       }}
