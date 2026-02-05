@@ -1,19 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getTodayDateString } from '@/lib/utils';
 
-let resend: Resend | null = null;
-function getResend(): Resend {
-  if (!resend) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      throw new Error('RESEND_API_KEY environment variable is not set');
+let transporter: Transporter | null = null;
+
+function getTransporter(): Transporter {
+  if (!transporter) {
+    const user = process.env.GMAIL_USER;
+    const pass = process.env.GMAIL_APP_PASSWORD;
+    
+    if (!user || !pass) {
+      throw new Error('GMAIL_USER or GMAIL_APP_PASSWORD environment variables are not set');
     }
-    resend = new Resend(apiKey);
+    
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user,
+        pass,
+      },
+    });
   }
-  return resend;
+  return transporter;
 }
 
 const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || '100', 10);
@@ -110,6 +121,8 @@ function generateEmailHTML(data: SendEmailRequest): string {
               
               <p style="margin: 0 0 30px; color: #64748b; font-size: 16px; line-height: 1.6;">
                 Your certificate includes a unique QR code for verification. Anyone can scan it to confirm the authenticity of your achievement.
+                <br><br>
+                <strong style="color: #1e293b;">📎 Your certificate PDF is attached to this email</strong> for easy download and sharing.
               </p>
               
               <!-- CTA Button -->
@@ -152,7 +165,7 @@ function generateEmailHTML(data: SendEmailRequest): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { to, recipientName, certificateId, certificateTitle, issuerName, userId } = body;
+    const { to, recipientName, certificateId, certificateTitle, issuerName, userId, certificatePdfBase64 } = body;
 
     if (!to || !recipientName || !certificateId) {
       return NextResponse.json(
@@ -184,6 +197,11 @@ export async function POST(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity.app';
     const verifyUrl = `${appUrl}/verify/${certificateId}`;
 
+    let pdfBuffer: Buffer | null = null;
+    if (certificatePdfBase64) {
+      pdfBuffer = Buffer.from(certificatePdfBase64, 'base64');
+    }
+
     const emailData: SendEmailRequest = {
       to,
       recipientName,
@@ -193,35 +211,52 @@ export async function POST(request: NextRequest) {
       verifyUrl,
     };
 
-    const { data, error } = await getResend().emails.send({
-      from: 'Serenity <certificates@serenity.app>',
-      to: [to],
-      subject: `🎉 Your Certificate: ${emailData.certificateTitle}`,
-      html: generateEmailHTML(emailData),
-    });
+    const senderName = process.env.EMAIL_SENDER_NAME || 'Serenity Certificates';
+    const gmailUser = process.env.GMAIL_USER;
 
-    if (error) {
-      console.error('Resend error:', error);
+    try {
+      const mailOptions: nodemailer.SendMailOptions = {
+        from: `"${senderName}" <${gmailUser}>`,
+        to: to,
+        subject: `🎉 Your Certificate: ${emailData.certificateTitle}`,
+        html: generateEmailHTML(emailData),
+      };
+
+      if (pdfBuffer) {
+        const sanitizedName = recipientName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+        mailOptions.attachments = [
+          {
+            filename: `certificate_${sanitizedName}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf',
+          },
+        ];
+      }
+
+      const info = await getTransporter().sendMail(mailOptions);
+
+      const db = getAdminFirestore();
+      await db.collection('emailLogs').add({
+        to,
+        certificateId,
+        messageId: info.messageId,
+        sentAt: FieldValue.serverTimestamp(),
+        userId: userId || 'anonymous',
+        hasAttachment: !!pdfBuffer,
+      });
+
+      return NextResponse.json({
+        success: true,
+        messageId: info.messageId,
+        remaining: rateLimit.remaining,
+      });
+    } catch (emailError) {
+      console.error('Nodemailer error:', emailError);
       return NextResponse.json(
-        { success: false, error: 'Failed to send email' },
+        { success: false, error: 'Failed to send email. Please check Gmail credentials.' },
         { status: 500 }
       );
     }
-
-    const db = getAdminFirestore();
-    await db.collection('emailLogs').add({
-      to,
-      certificateId,
-      messageId: data?.id,
-      sentAt: FieldValue.serverTimestamp(),
-      userId: userId || 'anonymous',
-    });
-
-    return NextResponse.json({
-      success: true,
-      messageId: data?.id,
-      remaining: rateLimit.remaining,
-    });
 
   } catch (error) {
     console.error('Email API error:', error);
