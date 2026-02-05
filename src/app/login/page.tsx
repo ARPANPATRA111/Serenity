@@ -25,6 +25,8 @@ export default function LoginPage() {
       setSuccessMessage('A verification email has been sent! Please check your inbox and verify your email before logging in.');
     } else if (message === 'email-verified') {
       setSuccessMessage('Your email has been verified! You can now log in.');
+    } else if (message === 'password-reset') {
+      setSuccessMessage('Your password has been reset successfully! You can now log in with your new password.');
     }
   }, [searchParams]);
 

@@ -625,6 +625,7 @@ export default function DashboardPage() {
                 <p className="text-sm text-muted-foreground">Upload JSON file</p>
               </div>
               <input
+                aria-label="Import Template"
                 ref={fileInputRef}
                 type="file"
                 accept=".json"
