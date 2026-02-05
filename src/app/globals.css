@@ -299,6 +299,30 @@
                   0 0 90px rgb(var(--glow-color) / 0.1);
     }
   }
+
+  /* Animated color shifting gradient text - slow wipe */
+  .text-gradient-shift {
+    background: linear-gradient(
+      90deg,
+      rgb(var(--color-primary)) 0%,
+      rgb(var(--color-accent)) 50%,
+      rgb(168 85 247) 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 8s linear infinite;
+  }
+  
+  @keyframes gradient-shift {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
+  }
   
   /* Shimmer effect */
   .shimmer {

@@ -1,13 +1,35 @@
 'use client';
 
 import Link from 'next/link';
-import { motion, useScroll, useTransform, useInView, useMotionValue, useSpring } from 'framer-motion';
+import { motion, useScroll, useTransform, useInView } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { 
   FileSpreadsheet, Shield, Zap, Download, QrCode, ArrowRight, Star,
-  ChevronRight, Paintbrush, Check, Sparkles, Globe, Lock, Award, Users, Clock, MousePointer2
+  ChevronRight, Paintbrush, Check, Sparkles, Globe, Lock, Award, Users, Clock,
+  Mail, Verified, BadgeCheck, Layers, Palette, Database, CloudUpload, FileCheck
 } from 'lucide-react';
+
+function useStats() {
+  const [stats, setStats] = useState({
+    certificatesGenerated: 10000,
+    usersRegistered: 5000,
+  });
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.stats) {
+          setStats(data.stats);
+        }
+      })
+      .catch(() => {
+      });
+  }, []);
+
+  return stats;
+}
 
 const AnimatedBackground = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -130,25 +152,72 @@ const FeatureCard = ({ feature, index }: { feature: typeof features[0]; index: n
 };
 
 const features = [
-  { icon: Paintbrush, title: 'Visual Editor', description: 'Drag-and-drop interface with real-time preview.', gradient: 'from-violet-500 to-purple-600' },
-  { icon: FileSpreadsheet, title: 'Smart Import', description: 'AI-powered Excel and CSV column detection.', gradient: 'from-blue-500 to-cyan-500' },
-  { icon: Zap, title: 'Lightning Fast', description: 'Generate thousands of certificates in seconds.', gradient: 'from-amber-500 to-orange-500' },
-  { icon: QrCode, title: 'QR Verification', description: 'Unique QR codes for instant verification.', gradient: 'from-emerald-500 to-teal-500' },
-  { icon: Download, title: 'Multi-Format', description: 'Export as PDF, PNG, or bulk ZIP files.', gradient: 'from-pink-500 to-rose-500' },
-  { icon: Shield, title: 'Privacy First', description: '100% local processing. Your data stays secure.', gradient: 'from-indigo-500 to-blue-600' },
+  { icon: Paintbrush, title: 'Visual Editor', description: 'Intuitive drag-and-drop interface with real-time preview and pixel-perfect control.', gradient: 'from-violet-500 to-purple-600' },
+  { icon: FileSpreadsheet, title: 'Smart Data Import', description: 'AI-powered Excel and CSV parsing with automatic column detection.', gradient: 'from-blue-500 to-cyan-500' },
+  { icon: Zap, title: 'Blazing Fast', description: 'Generate 10,000+ certificates in under a minute with parallel processing.', gradient: 'from-amber-500 to-orange-500' },
+  { icon: QrCode, title: 'QR Verification', description: 'Unique QR codes that link to secure verification pages instantly.', gradient: 'from-emerald-500 to-teal-500' },
+  { icon: Mail, title: 'Email Delivery', description: 'Auto-send certificates with PDF attachments to recipients.', gradient: 'from-pink-500 to-rose-500' },
+  { icon: Shield, title: 'Privacy First', description: '100% client-side processing. Your data never leaves your browser.', gradient: 'from-indigo-500 to-blue-600' },
+];
+
+const comparisonData = [
+  { feature: 'Visual drag-and-drop editor', serenity: true, others: false },
+  { feature: 'QR code verification', serenity: true, others: false },
+  { feature: 'Bulk email delivery', serenity: true, others: 'Premium' },
+  { feature: 'Data stays on device', serenity: true, others: false },
+  { feature: 'Free tier', serenity: 'Unlimited', others: 'Limited' },
+  { feature: 'PDF attachments in emails', serenity: true, others: false },
 ];
 
 const testimonials = [
-  { name: 'Sarah Chen', role: 'Training Director', company: 'TechCorp', content: 'Generated 5,000 certificates in under 2 minutes.', avatar: 'SC' },
-  { name: 'Michael R.', role: 'Event Manager', company: 'Global Events', content: 'QR verification is a game changer.', avatar: 'MR' },
-  { name: 'Emily Watson', role: 'HR Manager', company: 'StartupXYZ', content: 'Beautiful templates, privacy-first approach.', avatar: 'EW' },
+  { name: 'Sarah Chen', role: 'Training Director', company: 'TechCorp', content: 'Generated 5,000 certificates in under 2 minutes. The QR verification feature saved us hours of manual work.', avatar: 'SC', rating: 5 },
+  { name: 'Michael Rivera', role: 'Event Manager', company: 'Global Events', content: 'The email delivery with PDF attachments is incredible. Our attendees love getting their certificates instantly.', avatar: 'MR', rating: 5 },
+  { name: 'Emily Watson', role: 'HR Lead', company: 'StartupXYZ', content: 'Beautiful templates, intuitive editor, and zero learning curve. We switched from three other tools to Serenity.', avatar: 'EW', rating: 5 },
 ];
+
+const typingWords = ['Certificates', 'Awards', 'Badges'];
+
+const TypingText = () => {
+  const [currentWord, setCurrentWord] = useState(0);
+  const [displayText, setDisplayText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  useEffect(() => {
+    const word = typingWords[currentWord];
+    const timeout = setTimeout(() => {
+      if (!isDeleting) {
+        if (displayText.length < word.length) {
+          setDisplayText(word.slice(0, displayText.length + 1));
+        } else {
+          setTimeout(() => setIsDeleting(true), 1500);
+        }
+      } else {
+        if (displayText.length > 0) {
+          setDisplayText(word.slice(0, displayText.length - 1));
+        } else {
+          setIsDeleting(false);
+          setCurrentWord((prev) => (prev + 1) % typingWords.length);
+        }
+      }
+    }, isDeleting ? 50 : 100);
+    
+    return () => clearTimeout(timeout);
+  }, [displayText, isDeleting, currentWord]);
+  
+  return (
+    <span className="inline">
+      {displayText}
+      <span className="animate-pulse text-primary">|</span>
+    </span>
+  );
+};
 
 export default function HomePage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroOpacity = useTransform(scrollYProgress, [0, 0.4], [1, 0]);
   const heroScale = useTransform(scrollYProgress, [0, 0.4], [1, 0.95]);
+  const stats = useStats();
 
   return (
     <div className="min-h-screen text-foreground overflow-x-hidden">
@@ -204,22 +273,22 @@ export default function HomePage() {
             </span>
           </motion.div>
 
-          {/* Headline with animated gradient */}
+          {/* Headline with typing animation - inline layout */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.8, type: "spring" }}
-            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight mb-6 leading-tight"
+            className="font-display text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight mb-6 leading-tight"
           >
-            <span className="block text-foreground drop-shadow-sm">Create Certificates</span>
-            <motion.span 
-              className="block bg-gradient-to-r from-primary via-purple-500 to-accent bg-clip-text text-transparent bg-[length:200%_auto] pb-2"
-              animate={{ backgroundPosition: ['0% center', '200% center'] }}
-              transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-              style={{ lineHeight: 1.2 }}
-            >
+            <span className="text-foreground drop-shadow-sm">Create Certificates</span>
+            <span className="bg-gradient-to-r from-primary via-purple-500 to-accent bg-clip-text text-transparent">
+              {/* <TypingText /> */}
+              
+            </span>
+            <br />
+            <span className="text-gradient-shift">
               at Lightning Speed
-            </motion.span>
+            </span>
           </motion.h1>
 
           {/* Subheadline */}
@@ -365,8 +434,8 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
             {[
-              { value: 1000000, suffix: '+', label: 'Certificates Generated', icon: Award },
-              { value: 10000, suffix: '+', label: 'Happy Users', icon: Users },
+              { value: stats.certificatesGenerated, suffix: '+', label: 'Certificates Generated', icon: Award },
+              { value: stats.usersRegistered, suffix: '+', label: 'Happy Users', icon: Users },
               { value: 99, suffix: '%', label: 'Uptime Guarantee', icon: Clock },
             ].map((stat, index) => (
               <motion.div
@@ -479,16 +548,16 @@ export default function HomePage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="p-5 sm:p-6 rounded-2xl bg-card backdrop-blur-sm border border-border hover:border-primary/40 transition-all shadow-sm hover:shadow-md"
+                className="p-5 sm:p-6 rounded-2xl bg-card backdrop-blur-sm border border-border hover:border-primary/40 transition-all shadow-sm hover:shadow-md group"
               >
                 <div className="flex gap-0.5 mb-4">
-                  {[...Array(5)].map((_, i) => (
+                  {[...Array(t.rating)].map((_, i) => (
                     <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   ))}
                 </div>
                 <p className="text-sm sm:text-base mb-5 text-foreground leading-relaxed">&ldquo;{t.content}&rdquo;</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shadow-md">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shadow-md group-hover:scale-105 transition-transform">
                     {t.avatar}
                   </div>
                   <div>
@@ -499,6 +568,64 @@ export default function HomePage() {
               </motion.div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="py-16 sm:py-28 bg-muted/30">
+        <div className="max-w-4xl mx-auto px-5 sm:px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/15 text-primary text-xs font-semibold mb-4 uppercase tracking-wide">
+              Why Serenity
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-foreground mb-4">The smarter choice</h2>
+            <p className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto">See how Serenity compares to traditional certificate tools</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-border bg-card overflow-hidden shadow-lg"
+          >
+            <div className="grid grid-cols-3 gap-px bg-border">
+              <div className="p-4 sm:p-5 bg-card font-semibold text-foreground">Feature</div>
+              <div className="p-4 sm:p-5 bg-gradient-to-br from-primary/10 to-accent/10 text-center">
+                <span className="font-bold text-primary">Serenity</span>
+              </div>
+              <div className="p-4 sm:p-5 bg-card text-center text-muted-foreground font-medium">Others</div>
+            </div>
+            {comparisonData.map((row, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05 }}
+                className="grid grid-cols-3 gap-px bg-border"
+              >
+                <div className="p-4 sm:p-5 bg-card text-sm text-foreground">{row.feature}</div>
+                <div className="p-4 sm:p-5 bg-gradient-to-br from-primary/5 to-accent/5 text-center">
+                  {row.serenity === true ? (
+                    <BadgeCheck className="w-5 h-5 mx-auto text-green-500" />
+                  ) : (
+                    <span className="text-sm font-semibold text-green-600">{row.serenity}</span>
+                  )}
+                </div>
+                <div className="p-4 sm:p-5 bg-card text-center">
+                  {row.others === false ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">{row.others}</span>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
         </div>
       </section>
 
@@ -535,15 +662,17 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-5 sm:px-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="relative h-7 w-7 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-                <Award className="h-3.5 w-3.5 text-white" />
+              <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+                <Award className="h-4 w-4 text-white" />
               </div>
               <span className="font-display font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
             </Link>
-            <div className="flex items-center gap-6 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-muted-foreground">
+              <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
               <Link href="/templates" className="hover:text-foreground transition-colors">Templates</Link>
               <Link href="/verify" className="hover:text-foreground transition-colors">Verify</Link>
-              <span>© 2024 Serenity</span>
+              <span className="hidden sm:inline">•</span>
+              <span>© 2026 Serenity</span>
             </div>
           </div>
         </div>
