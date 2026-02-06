@@ -239,7 +239,7 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
                         className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                       >
                         <Download className="h-3.5 w-3.5" />
-                        Download
+                        Download PNG
                       </a>
                     </div>
                   </div>
