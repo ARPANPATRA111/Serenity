@@ -464,7 +464,7 @@ function collectClickableLinks(
   certificateId: string
 ): ClickableLinkInfo[] {
   const links: ClickableLinkInfo[] = [];
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity-three-kappa.vercel.app/';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity-three-kappa.vercel.app/';
   const verificationURL = `${baseUrl}/verify/${certificateId}`;
   
   const objects = canvas.getObjects();
@@ -503,7 +503,7 @@ function updateVerificationUrlPlaceholder(
   canvas: fabric.StaticCanvas,
   certificateId: string
 ): void {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity-three-kappa.vercel.app/';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity-three-kappa.vercel.app/';
   const verificationURL = `${baseUrl}/verify/${certificateId}`;
   
   const objects = canvas.getObjects();

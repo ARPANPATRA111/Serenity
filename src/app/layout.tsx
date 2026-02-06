@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
+import { FirebaseProvider } from '@/components/providers/FirebaseProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
+import type { FirebaseConfig } from '@/lib/firebase/client';
 import './globals.css';
 
 const inter = Inter({
@@ -36,6 +38,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const firebaseConfig: FirebaseConfig = {
+    apiKey: process.env.FB_CREDENTIAL || '',
+    authDomain: process.env.FB_AUTH_DOMAIN || '',
+    projectId: process.env.FB_PROJECT || '',
+    storageBucket: process.env.FB_BUCKET || '',
+    messagingSenderId: process.env.FB_SENDER || '',
+    appId: process.env.FB_APP || '',
+  };
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans antialiased`}>
@@ -45,9 +56,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange={false}
         >
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          <FirebaseProvider config={firebaseConfig}>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </FirebaseProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [pathname, user, isLoading, router]);
 
   const getActionCodeSettings = (): ActionCodeSettings => {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 
       (typeof window !== 'undefined' ? window.location.origin : '');
     return {
       url: `${baseUrl}/auth/action`,

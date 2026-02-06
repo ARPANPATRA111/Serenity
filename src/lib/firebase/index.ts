@@ -1,5 +1,6 @@
 // Firebase module exports
-export { app, auth, db, storage, initializeFirebase } from './client';
+export { app, auth, db, storage, initializeFirebase, isFirebaseInitialized } from './client';
+export type { FirebaseConfig } from './client';
 export { getAdminFirestore, getAdminAuth, getAdminStorage, initializeAdmin } from './admin';
 export {
   createCertificate,

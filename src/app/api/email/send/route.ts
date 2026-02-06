@@ -70,7 +70,7 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
 }
 
 function generateEmailHTML(data: SendEmailRequest): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity.app';
+  const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
   
   return `
 <!DOCTYPE html>
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity.app';
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
     const verifyUrl = `${appUrl}/verify/${certificateId}`;
 
     let pdfBuffer: Buffer | null = null;

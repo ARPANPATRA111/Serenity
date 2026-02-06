@@ -3,38 +3,52 @@ import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+}
 
 // Initialize Firebase (singleton pattern)
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 let storage: FirebaseStorage;
+let _isInitialized = false;
 
-function initializeFirebase() {
-  if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
+function initializeFirebase(config?: FirebaseConfig) {
+  if (_isInitialized && getApps().length > 0) {
+    app = getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+    return { app, auth, db, storage };
+  }
+
+  if (!config && getApps().length === 0) {
+    console.warn('[Firebase] No config provided and no existing app. Firebase will not initialize.');
+    return { app, auth, db, storage };
+  }
+
+  if (getApps().length === 0 && config) {
+    app = initializeApp(config);
   } else {
     app = getApp();
   }
-  
+
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
-  
+  _isInitialized = true;
+
   return { app, auth, db, storage };
 }
 
-// Initialize on module load
-if (typeof window !== 'undefined') {
-  initializeFirebase();
+export function isFirebaseInitialized() {
+  return _isInitialized;
 }
 
 export { app, auth, db, storage, initializeFirebase };

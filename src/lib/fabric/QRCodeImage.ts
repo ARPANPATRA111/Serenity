@@ -8,7 +8,7 @@ export async function generateQRCodeDataURL(
   verificationId: string,
   size: number = QR_SIZE
 ): Promise<string> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://serenity.app';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
   const verifyUrl = `${baseUrl}/verify/${verificationId}`;
   
   // Use QR code API (free, no auth required)
