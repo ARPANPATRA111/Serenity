@@ -153,13 +153,18 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     pushHistory,
     isPreviewMode,
     setPreviewMode,
+    certificateMetadata,
   } = useEditorStore();
+  
+  const isCertificateInfoComplete = certificateMetadata.title.trim() && 
+    certificateMetadata.issuedBy.trim() && 
+    certificateMetadata.description.trim();
   
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [previewOriginalTexts, setPreviewOriginalTexts] = useState<Map<string, string>>(new Map());
   const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#ffffff');
   const [borderColor, setBorderColor] = useState('#d4af37');
-  const { rows, getPreviewRow } = useDataSourceStore();
+  const { rows, getPreviewRow, previewRowIndex } = useDataSourceStore();
 
   // Sync canvas background color with fabric instance
   useEffect(() => {
@@ -168,6 +173,41 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       setCanvasBackgroundColor(currentBg);
     }
   }, [fabricInstance]);
+
+  useEffect(() => {
+    if (!isPreviewMode || !fabricInstance) return;
+    
+    const canvas = fabricInstance.getCanvas();
+    if (!canvas) return;
+    
+    const previewRow = getPreviewRow();
+    if (!previewRow) return;
+    
+    const objects = canvas.getObjects();
+    
+    objects.forEach((obj: any, index: number) => {
+      const objId = `obj_${index}`;
+      const originalText = previewOriginalTexts.get(objId);
+      const objType = obj.type?.toLowerCase() || '';
+      const isTextObj = objType === 'textbox' || objType === 'variabletextbox' || objType === 'i-text';
+      
+      if (isTextObj && obj.dynamicKey && originalText !== undefined) {
+        if (previewRow[obj.dynamicKey] !== undefined) {
+          obj.set('text', String(previewRow[obj.dynamicKey]));
+        }
+      }
+      else if (isTextObj && originalText !== undefined && originalText.includes('{{')) {
+        let newText = originalText;
+        Object.entries(previewRow).forEach(([dataKey, dataValue]) => {
+          const regex = new RegExp(`\\{\\{${dataKey}\\}\\}`, 'gi');
+          newText = newText.replace(regex, String(dataValue || ''));
+        });
+        obj.set('text', newText);
+      }
+    });
+    
+    canvas.requestRenderAll();
+  }, [previewRowIndex, isPreviewMode, fabricInstance, getPreviewRow, previewOriginalTexts]);
 
   const handleBackgroundColorChange = useCallback((color: string) => {
     setCanvasBackgroundColor(color);
@@ -467,8 +507,22 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         const objType = obj.type?.toLowerCase() || '';
         const isTextObj = objType === 'textbox' || objType === 'variabletextbox' || objType === 'i-text';
         
-        // Restore original texts for variable textboxes
-        if (isTextObj && originalText !== undefined) {
+        // Restore verification URL placeholder first (before general text handling)
+        if (obj.isVerificationUrl) {
+          const originalVerifyText = previewOriginalTexts.get(`verify_${index}`);
+          if (originalVerifyText !== undefined) {
+            obj.set('text', originalVerifyText);
+            // Restore verification URL original styling (red border, no stroke)
+            obj.set({
+              borderColor: '#dc2626',
+              borderDashArray: [4, 2],
+              strokeWidth: 0,
+              stroke: undefined,
+              strokeDashArray: undefined,
+            });
+          }
+        }
+        else if (isTextObj && originalText !== undefined) {
           obj.set('text', originalText);
           // Restore placeholder styling if it was a placeholder
           if (obj.dynamicKey || originalText.includes('{{')) {
@@ -477,14 +531,6 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
               stroke: '#3b82f6',
               strokeDashArray: [4, 2],
             });
-          }
-        }
-        
-        // Restore verification URL placeholder
-        if (obj.isVerificationUrl) {
-          const originalVerifyText = previewOriginalTexts.get(`verify_${index}`);
-          if (originalVerifyText !== undefined) {
-            obj.set('text', originalVerifyText);
           }
         }
         
@@ -777,10 +823,13 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
 
            <button
              onClick={onOpenCertificateInfo}
-             className="toolbar-button"
+             className="toolbar-button relative"
              title="Certificate Info"
            >
               <Info />
+              {!isCertificateInfoComplete && (
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-orange-500 border border-background" />
+              )}
            </button>
 
            <button

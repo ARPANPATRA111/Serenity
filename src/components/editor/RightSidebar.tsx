@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useDataSourceStore } from '@/store/dataSourceStore';
 import { useEditorStore } from '@/store/editorStore';
@@ -26,10 +26,11 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
     rows,
     headers,
     setDataSource,
+    previewRowIndex,
+    setPreviewRowIndex,
   } = useDataSourceStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [currentPage, setCurrentPage] = useState(0);
 
   // Toggle button handler
   const handleToggle = () => {
@@ -186,16 +187,16 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
                <div className="rounded-md border border-border bg-muted/50 p-2 text-xs font-mono">
                   <div className="flex justify-between items-center mb-2 pb-2 border-b border-border">
                      <button 
-                       disabled={currentPage === 0}
-                       onClick={() => setCurrentPage(c => Math.max(0, c - 1))}
+                       disabled={previewRowIndex === 0}
+                       onClick={() => setPreviewRowIndex(Math.max(0, previewRowIndex - 1))}
                        className="p-1 hover:bg-background rounded disabled:opacity-20"
                      >
                        <ChevronLeft className="h-3 w-3" />
                      </button>
-                     <span>Record {currentPage + 1} of {rows.length}</span>
+                     <span>Record {previewRowIndex + 1} of {rows.length}</span>
                      <button
-                        disabled={currentPage >= rows.length - 1}
-                        onClick={() => setCurrentPage(c => Math.min(rows.length - 1, c + 1))}
+                        disabled={previewRowIndex >= rows.length - 1}
+                        onClick={() => setPreviewRowIndex(Math.min(rows.length - 1, previewRowIndex + 1))}
                         className="p-1 hover:bg-background rounded disabled:opacity-20"
                      >
                        <ChevronRight className="h-3 w-3" />
@@ -205,7 +206,7 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
                      {headers.map(h => (
                         <div key={h} className="flex gap-2">
                            <span className="font-semibold text-muted-foreground">{h}:</span>
-                           <span className="truncate">{String((rows[currentPage] as any)[h] || '')}</span>
+                           <span className="truncate">{String((rows[previewRowIndex] as any)[h] || '')}</span>
                         </div>
                      ))}
                   </div>

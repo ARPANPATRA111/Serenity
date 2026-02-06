@@ -3,10 +3,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useFabricContext } from './FabricContext';
-import { isVariableTextbox } from '@/lib/fabric';
-import { getAllFonts, loadGoogleFont, isGoogleFont, loadAllGoogleFonts } from '@/lib/fonts/googleFonts';
-import { Input } from '@/components/ui/Input';
+import { loadGoogleFont, isGoogleFont, loadAllGoogleFonts } from '@/lib/fonts/googleFonts';
 import { ColorPicker } from '@/components/ui/ColorPicker';
+import { StyleSidebar } from './StyleSidebar';
 import {
   AlignLeft,
   AlignCenter,
@@ -15,11 +14,6 @@ import {
   Italic,
   Underline,
   Type as TypeIcon,
-  Palette,
-  Minus,
-  QrCode,
-  RefreshCw,
-  ChevronDown,
 } from 'lucide-react';
 
 // Generic Fabric object type
@@ -51,18 +45,14 @@ type FabricObject = Record<string, unknown> & {
 export function PropertiesBar() {
   const { selectedObject, selectedObjectType } = useEditorStore();
   const { fabricInstance } = useFabricContext();
-  const [availableFonts, setAvailableFonts] = useState<string[]>([]);
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [, setForceUpdate] = useState(0);
   
-  // Font dropdown state
-  const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
-  const [fontDropdownPosition, setFontDropdownPosition] = useState({ top: 0, left: 0 });
-  const fontTriggerRef = useRef<HTMLButtonElement>(null);
-  const fontDropdownRef = useRef<HTMLDivElement>(null);
+  // Style sidebar state (replaces font dropdown)
+  const [styleSidebarMode, setStyleSidebarMode] = useState<'font' | 'color' | null>(null);
+  const [colorProperty, setColorProperty] = useState<'fill' | 'stroke'>('fill');
   
   // Preview state for hover effects
-  const [originalFont, setOriginalFont] = useState<string | null>(null);
   const originalColorsRef = useRef<Record<string, string>>({});
 
   // Force re-render helper
@@ -92,51 +82,27 @@ export function PropertiesBar() {
   useEffect(() => {
     const loadFonts = async () => {
       await loadAllGoogleFonts();
-      setAvailableFonts(getAllFonts());
       setFontsLoaded(true);
     };
     loadFonts();
   }, []);
   
-  // Close font dropdown when clicking outside
+  // Close sidebar when clicking the main canvas area
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (fontDropdownOpen && 
-          fontDropdownRef.current && !fontDropdownRef.current.contains(event.target as Node) &&
-          fontTriggerRef.current && !fontTriggerRef.current.contains(event.target as Node)) {
-        setFontDropdownOpen(false);
-        // Restore original font on close if was previewing
-        if (originalFont && selectedObject) {
-          (selectedObject as unknown as FabricObject).set('fontFamily', originalFont);
-          fabricInstance?.getCanvas()?.requestRenderAll();
-          setOriginalFont(null);
-        }
+    const handleCanvasClick = () => {
+      if (styleSidebarMode) {
+        setStyleSidebarMode(null);
       }
     };
     
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [fontDropdownOpen, originalFont, selectedObject, fabricInstance]);
-  
-  // Calculate font dropdown position
-  const updateFontDropdownPosition = useCallback(() => {
-    if (!fontTriggerRef.current) return;
-    const rect = fontTriggerRef.current.getBoundingClientRect();
-    const dropdownWidth = 200;
-    const dropdownHeight = 300;
-    
-    let left = rect.left;
-    let top = rect.bottom + 4;
-    
-    if (left + dropdownWidth > window.innerWidth) {
-      left = window.innerWidth - dropdownWidth - 16;
+    const canvas = fabricInstance?.getCanvas();
+    if (canvas) {
+      canvas.on('mouse:down', handleCanvasClick);
+      return () => {
+        canvas.off('mouse:down', handleCanvasClick);
+      };
     }
-    if (top + dropdownHeight > window.innerHeight) {
-      top = rect.top - dropdownHeight - 4;
-    }
-    
-    setFontDropdownPosition({ top, left });
-  }, []);
+  }, [styleSidebarMode, fabricInstance]);
 
   if (!selectedObject) {
     return (
@@ -165,32 +131,6 @@ export function PropertiesBar() {
     }
     object.set(property, value);
     handleUpdate();
-  };
-  
-  // Font preview handlers
-  const handleFontHover = async (font: string) => {
-    if (!originalFont) {
-      setOriginalFont(object.fontFamily || 'Arial');
-    }
-    if (isGoogleFont(font)) {
-      await loadGoogleFont(font);
-    }
-    object.set('fontFamily', font);
-    handleUpdate();
-  };
-  
-  const handleFontLeave = () => {
-    if (originalFont) {
-      object.set('fontFamily', originalFont);
-      handleUpdate();
-      setOriginalFont(null);
-    }
-  };
-  
-  const handleFontSelect = async (font: string) => {
-    setOriginalFont(null);
-    await handleChange('fontFamily', font);
-    setFontDropdownOpen(false);
   };
   
   // Color preview handlers
@@ -301,66 +241,25 @@ export function PropertiesBar() {
         <>
           <div className="h-6 w-px bg-border mx-1 shrink-0" />
           
-          {/* Font Family - Custom dropdown with hover preview */}
+          {/* Font Family - Opens sidebar for selection */}
           {fontsLoaded ? (
-            <div className="relative">
-              <button
-                ref={fontTriggerRef}
-                onClick={() => {
-                  if (!fontDropdownOpen) {
-                    updateFontDropdownPosition();
-                  }
-                  setFontDropdownOpen(!fontDropdownOpen);
-                }}
-                className="flex items-center justify-between h-8 w-36 rounded border border-border bg-background px-2 text-xs hover:border-primary/50 transition-colors"
-                title="Font Family"
+            <button
+              onClick={() => setStyleSidebarMode(styleSidebarMode === 'font' ? null : 'font')}
+              className={`flex items-center justify-between h-8 w-36 rounded border px-2 text-xs transition-colors ${
+                styleSidebarMode === 'font' 
+                  ? 'border-primary bg-primary/10' 
+                  : 'border-border bg-background hover:border-primary/50'
+              }`}
+              title="Font Family (opens sidebar)"
+            >
+              <span 
+                className="truncate" 
+                style={{ fontFamily: object.fontFamily || 'Arial' }}
               >
-                <span 
-                  className="truncate" 
-                  style={{ fontFamily: object.fontFamily || 'Arial' }}
-                >
-                  {object.fontFamily || 'Arial'}
-                </span>
-                <ChevronDown className="h-3 w-3 ml-1 text-muted-foreground" />
-              </button>
-              
-              {/* Font Dropdown */}
-              {fontDropdownOpen && (
-                <div
-                  ref={fontDropdownRef}
-                  className="fixed z-[100] w-52 max-h-72 overflow-y-auto bg-white dark:bg-gray-900 border border-border rounded-lg shadow-xl"
-                  style={{ top: fontDropdownPosition.top, left: fontDropdownPosition.left }}
-                  onMouseLeave={handleFontLeave}
-                >
-                  <div className="p-1">
-                    <button
-                      key="Arial"
-                      onClick={() => handleFontSelect('Arial')}
-                      onMouseEnter={() => handleFontHover('Arial')}
-                      className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-primary/10 transition-colors ${
-                        (object.fontFamily || 'Arial') === 'Arial' ? 'bg-primary/20 font-medium' : ''
-                      }`}
-                      style={{ fontFamily: 'Arial' }}
-                    >
-                      Arial
-                    </button>
-                    {availableFonts.map((font) => (
-                      <button
-                        key={font}
-                        onClick={() => handleFontSelect(font)}
-                        onMouseEnter={() => handleFontHover(font)}
-                        className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-primary/10 transition-colors ${
-                          object.fontFamily === font ? 'bg-primary/20 font-medium' : ''
-                        }`}
-                        style={{ fontFamily: font }}
-                      >
-                        {font}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+                {object.fontFamily || 'Arial'}
+              </span>
+              <TypeIcon className="h-3 w-3 ml-1 text-muted-foreground" />
+            </button>
           ) : (
              <div className="h-8 w-36 animate-pulse rounded bg-muted" />
           )}
@@ -468,6 +367,15 @@ export function PropertiesBar() {
           className="w-20"
          />
        </div>
+       
+       {/* Style Sidebar for font/color selection */}
+       {styleSidebarMode && (
+         <StyleSidebar
+           mode={styleSidebarMode}
+           onClose={() => setStyleSidebarMode(null)}
+           colorProperty={colorProperty}
+         />
+       )}
     </div>
   );
 }
