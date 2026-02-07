@@ -13,6 +13,7 @@ import {
   Bold,
   Italic,
   Underline,
+  Strikethrough,
   Type as TypeIcon,
 } from 'lucide-react';
 
@@ -34,6 +35,10 @@ type FabricObject = Record<string, unknown> & {
   fontWeight?: string | number;
   fontStyle?: string;
   underline?: boolean;
+  linethrough?: boolean;
+  charSpacing?: number;
+  lineHeight?: number;
+  shadow?: { color: string; blur: number; offsetX: number; offsetY: number } | string | null;
   textAlign?: string;
   text?: string;
   backgroundColor?: string;
@@ -43,7 +48,7 @@ type FabricObject = Record<string, unknown> & {
 };
 
 export function PropertiesBar() {
-  const { selectedObject, selectedObjectType } = useEditorStore();
+  const { selectedObject, selectedObjectType, isPreviewMode } = useEditorStore();
   const { fabricInstance } = useFabricContext();
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [, setForceUpdate] = useState(0);
@@ -104,10 +109,10 @@ export function PropertiesBar() {
     }
   }, [styleSidebarMode, fabricInstance]);
 
-  if (!selectedObject) {
+  if (!selectedObject || isPreviewMode) {
     return (
       <div className="flex h-12 w-full items-center border-b border-border bg-card px-4 text-sm text-muted-foreground">
-        Select an element to edit its properties
+        {isPreviewMode ? 'Preview mode — editing disabled' : 'Select an element to edit its properties'}
       </div>
     );
   }
@@ -157,6 +162,7 @@ export function PropertiesBar() {
   const isBold = object.fontWeight === 'bold' || object.fontWeight === 700 || object.fontWeight === '700';
   const isItalic = object.fontStyle === 'italic';
   const isUnderline = !!object.underline;
+  const isStrike = !!object.linethrough;
   const textAlign = object.textAlign || 'left';
 
   return (
@@ -310,6 +316,17 @@ export function PropertiesBar() {
             >
               <Underline className="h-4 w-4" />
             </button>
+            <button
+              onClick={() => handleChange('linethrough', !isStrike)}
+              className={`rounded p-1.5 transition-colors ${
+                isStrike
+                  ? 'bg-primary text-primary-foreground shadow-sm' 
+                  : 'hover:bg-muted text-muted-foreground'
+              }`}
+              title="Strikethrough"
+            >
+              <Strikethrough className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="h-6 w-px bg-border mx-1 shrink-0" />
@@ -348,6 +365,65 @@ export function PropertiesBar() {
               title="Align Right"
             >
               <AlignRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="h-6 w-px bg-border mx-1 shrink-0" />
+
+          {/* Letter Spacing */}
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-xs text-muted-foreground">Spacing:</span>
+            <input
+              type="number"
+              value={Math.round((object.charSpacing || 0))}
+              onChange={(e) => handleChange('charSpacing', parseInt(e.target.value) || 0)}
+              className="h-6 w-14 rounded border border-border px-1 text-xs"
+              min="-200"
+              max="800"
+              step="10"
+              title="Letter Spacing"
+            />
+          </div>
+
+          {/* Line Height */}
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-xs text-muted-foreground">Line H:</span>
+            <input
+              type="number"
+              step="0.1"
+              value={(object.lineHeight || 1.16).toFixed(1)}
+              onChange={(e) => handleChange('lineHeight', parseFloat(e.target.value) || 1.16)}
+              className="h-6 w-14 rounded border border-border px-1 text-xs"
+              min="0.5"
+              max="3"
+              title="Line Height"
+            />
+          </div>
+
+          {/* Text Shadow Toggle */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => {
+                const hasShadow = !!object.shadow;
+                if (hasShadow) {
+                  handleChange('shadow', null);
+                } else {
+                  handleChange('shadow', new (window as any).fabric.Shadow({
+                    color: 'rgba(0,0,0,0.3)',
+                    blur: 5,
+                    offsetX: 2,
+                    offsetY: 2,
+                  }));
+                }
+              }}
+              className={`rounded p-1.5 text-xs transition-colors ${
+                object.shadow 
+                  ? 'bg-primary text-primary-foreground shadow-sm' 
+                  : 'hover:bg-muted text-muted-foreground'
+              }`}
+              title="Text Shadow"
+            >
+              Aa
             </button>
           </div>
         </>

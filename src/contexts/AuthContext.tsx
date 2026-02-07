@@ -376,7 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Delete user data from Firestore
+      // Soft delete: mark user as deleted in Firestore (data is preserved)
       const response = await fetch(`/api/users?id=${user.id}`, {
         method: 'DELETE',
       });
@@ -385,20 +385,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Failed to delete account data');
       }
 
-      // Delete Firebase Auth account
-      if (firebaseUser) {
-        await firebaseUser.delete();
-      }
-
-      setUser(null);
-      setFirebaseUser(null);
-      router.push('/');
+      // Sign out the user (account data is preserved but marked as deleted)
+      await logout();
     } catch (error: any) {
       console.error('[Auth] Error deleting account:', error);
-      // If requires re-authentication
-      if (error.code === 'auth/requires-recent-login') {
-        throw new Error('Please log out and log back in before deleting your account for security reasons.');
-      }
       throw error;
     }
   };

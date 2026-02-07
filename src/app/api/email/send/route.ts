@@ -4,6 +4,9 @@ import type { Transporter } from 'nodemailer';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getTodayDateString } from '@/lib/utils';
+import { createLogger, getErrorDetails, createErrorResponse } from '@/lib/logger';
+
+const logger = createLogger('Email.Send');
 
 let transporter: Transporter | null = null;
 
@@ -27,7 +30,7 @@ function getTransporter(): Transporter {
   return transporter;
 }
 
-const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || '100', 10);
+const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || '200', 10);
 
 interface SendEmailRequest {
   to: string;
@@ -120,7 +123,7 @@ function generateEmailHTML(data: SendEmailRequest): string {
               </table>
               
               <p style="margin: 0 0 30px; color: #64748b; font-size: 16px; line-height: 1.6;">
-                Your certificate includes a unique QR code for verification. Anyone can scan it to confirm the authenticity of your achievement.
+                Your certificate includes a unique verification link. Anyone can use it to confirm the authenticity of your achievement.
                 <br><br>
                 <strong style="color: #1e293b;">📎 Your certificate PDF is attached to this email</strong> for easy download and sharing.
               </p>
@@ -163,31 +166,38 @@ function generateEmailHTML(data: SendEmailRequest): string {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = Math.random().toString(36).substring(7);
+  
   try {
     const body = await request.json();
-    const { to, recipientName, certificateId, certificateTitle, issuerName, userId, certificatePdfBase64 } = body;
+    const { to, recipientName, certificateId, certificateTitle, issuerName, userId, certificatePdfBase64, certificateImageUrl } = body;
+
+    logger.debug('Processing email send request', { requestId, to, certificateId, userId });
 
     if (!to || !recipientName || !certificateId) {
+      logger.warn('Missing required fields', { requestId, to: !!to, recipientName: !!recipientName, certificateId: !!certificateId });
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Missing required fields: to, recipientName, and certificateId are required' },
         { status: 400 }
       );
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(to)) {
+      logger.warn('Invalid email format', { requestId, to });
       return NextResponse.json(
-        { success: false, error: 'Invalid email address' },
+        { success: false, error: 'Invalid email address format' },
         { status: 400 }
       );
     }
 
     const rateLimit = await checkRateLimit(userId || 'anonymous');
     if (!rateLimit.allowed) {
+      logger.info('Rate limit exceeded', { requestId, userId, limit: DAILY_EMAIL_LIMIT });
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Daily email limit reached. Upgrade to Pro for unlimited emails.',
+          error: `Daily email limit (${DAILY_EMAIL_LIMIT}) reached. Please try again tomorrow.`,
           code: 'RATE_LIMIT_EXCEEDED',
         },
         { status: 429 }
@@ -222,8 +232,10 @@ export async function POST(request: NextRequest) {
         html: generateEmailHTML(emailData),
       };
 
+      const sanitizedName = recipientName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      
       if (pdfBuffer) {
-        const sanitizedName = recipientName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+        // Attach PDF if provided
         mailOptions.attachments = [
           {
             filename: `certificate_${sanitizedName}.pdf`,
@@ -231,6 +243,40 @@ export async function POST(request: NextRequest) {
             contentType: 'application/pdf',
           },
         ];
+      } else if (certificateImageUrl) {
+        // If no PDF but image URL is provided, fetch and attach the image
+        try {
+          let imageBuffer: Buffer;
+          
+          if (certificateImageUrl.startsWith('data:')) {
+            // Handle data URL (base64)
+            const base64Data = certificateImageUrl.split(',')[1];
+            imageBuffer = Buffer.from(base64Data, 'base64');
+          } else {
+            // Fetch image from URL
+            const imageResponse = await fetch(certificateImageUrl);
+            if (imageResponse.ok) {
+              const arrayBuffer = await imageResponse.arrayBuffer();
+              imageBuffer = Buffer.from(arrayBuffer);
+            } else {
+              logger.warn('Failed to fetch certificate image', { requestId, imageUrl: certificateImageUrl.substring(0, 50) });
+              imageBuffer = Buffer.alloc(0);
+            }
+          }
+          
+          if (imageBuffer.length > 0) {
+            mailOptions.attachments = [
+              {
+                filename: `certificate_${sanitizedName}.png`,
+                content: imageBuffer,
+                contentType: 'image/png',
+              },
+            ];
+          }
+        } catch (imageError) {
+          logger.warn('Error attaching certificate image', { requestId }, imageError as Error);
+          // Continue without attachment
+        }
       }
 
       const info = await getTransporter().sendMail(mailOptions);
@@ -242,8 +288,24 @@ export async function POST(request: NextRequest) {
         messageId: info.messageId,
         sentAt: FieldValue.serverTimestamp(),
         userId: userId || 'anonymous',
-        hasAttachment: !!pdfBuffer,
+        hasAttachment: !!(pdfBuffer || (certificateImageUrl && mailOptions.attachments)),
       });
+
+      // Update certificate with email status
+      if (certificateId) {
+        try {
+          await db.collection('certificates').doc(certificateId).update({
+            emailStatus: 'sent',
+            emailSentAt: FieldValue.serverTimestamp(),
+            recipientEmail: to,
+            emailError: null,
+          });
+        } catch (updateError) {
+          logger.warn('Failed to update certificate email status', { requestId, certificateId }, updateError as Error);
+        }
+      }
+
+      logger.info('Email sent successfully', { requestId, to, certificateId, messageId: info.messageId, remaining: rateLimit.remaining });
 
       return NextResponse.json({
         success: true,
@@ -251,17 +313,33 @@ export async function POST(request: NextRequest) {
         remaining: rateLimit.remaining,
       });
     } catch (emailError) {
-      console.error('Nodemailer error:', emailError);
+      const errorDetails = getErrorDetails(emailError);
+      logger.error('Failed to send email', { requestId, to, certificateId, error: errorDetails });
+      
+      // Update certificate with failed status
+      if (certificateId) {
+        try {
+          const db = getAdminFirestore();
+          await db.collection('certificates').doc(certificateId).update({
+            emailStatus: 'failed',
+            emailError: errorDetails.message,
+          });
+        } catch (updateError) {
+          logger.warn('Failed to update certificate failed status', { requestId, certificateId }, updateError as Error);
+        }
+      }
+      
       return NextResponse.json(
-        { success: false, error: 'Failed to send email. Please check Gmail credentials.' },
+        { success: false, error: 'Failed to send email. Please check your email configuration and try again.' },
         { status: 500 }
       );
     }
 
   } catch (error) {
-    console.error('Email API error:', error);
+    const errorDetails = getErrorDetails(error);
+    logger.error('Email API unexpected error', { error: errorDetails });
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'An unexpected error occurred while sending the email' },
       { status: 500 }
     );
   }

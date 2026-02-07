@@ -8,16 +8,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   ArrowLeft, 
   User, 
-  Mail, 
-  Bell, 
-  Shield, 
   Trash2, 
   Save,
   Check,
   Loader2,
   Camera,
-  Globe,
-  Lock,
   Award
 } from 'lucide-react';
 
@@ -25,14 +20,6 @@ interface UserSettings {
   name: string;
   email: string;
   avatar?: string;
-  notifications: {
-    email: boolean;
-    marketing: boolean;
-  };
-  privacy: {
-    publicProfile: boolean;
-    showEmail: boolean;
-  };
 }
 
 export default function SettingsPage() {
@@ -46,14 +33,6 @@ export default function SettingsPage() {
     name: '',
     email: '',
     avatar: '',
-    notifications: {
-      email: true,
-      marketing: false,
-    },
-    privacy: {
-      publicProfile: false,
-      showEmail: false,
-    },
   });
 
   // Load user data
@@ -89,12 +68,6 @@ export default function SettingsPage() {
       // Update user profile via AuthContext (which calls the API)
       await updateUser({ name: settings.name.trim() });
       
-      // Also save settings preferences to localStorage
-      localStorage.setItem('serenity_user_settings', JSON.stringify({
-        notifications: settings.notifications,
-        privacy: settings.privacy,
-      }));
-
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error: any) {
@@ -109,12 +82,12 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm(
-      'Are you sure you want to delete your account? This will permanently delete all your templates and certificates. This action cannot be undone.'
+      'Are you sure you want to delete your account? Your account will be deactivated and you will be logged out.'
     );
     
     if (confirmed) {
       const doubleConfirm = window.confirm(
-        'This is your final warning. All your data will be permanently deleted. Are you absolutely sure?'
+        'This is your final confirmation. Your account will be deactivated. Contact support to restore it later. Continue?'
       );
       
       if (doubleConfirm) {
@@ -250,138 +223,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Notifications Section */}
-          <section className="card">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-                <Bell className="h-5 w-5 text-blue-500" />
-              </div>
-              <div>
-                <h2 className="font-display text-lg font-semibold">Notifications</h2>
-                <p className="text-sm text-muted-foreground">Configure email notifications</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="flex items-center justify-between py-2">
-                <div>
-                  <p className="font-medium">Email Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications about certificate views and activity
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSettings(prev => ({
-                    ...prev,
-                    notifications: { ...prev.notifications, email: !prev.notifications.email }
-                  }))}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${
-                    settings.notifications.email ? 'bg-primary' : 'bg-muted'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      settings.notifications.email ? 'translate-x-5' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </label>
-
-              <label className="flex items-center justify-between py-2">
-                <div>
-                  <p className="font-medium">Marketing Emails</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive updates about new features and tips
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSettings(prev => ({
-                    ...prev,
-                    notifications: { ...prev.notifications, marketing: !prev.notifications.marketing }
-                  }))}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${
-                    settings.notifications.marketing ? 'bg-primary' : 'bg-muted'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      settings.notifications.marketing ? 'translate-x-5' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </label>
-            </div>
-          </section>
-
-          {/* Privacy Section */}
-          <section className="card">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-                <Shield className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <h2 className="font-display text-lg font-semibold">Privacy</h2>
-                <p className="text-sm text-muted-foreground">Control your privacy settings</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="flex items-center justify-between py-2">
-                <div className="flex items-center gap-3">
-                  <Globe className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Public Profile</p>
-                    <p className="text-sm text-muted-foreground">
-                      Show your name on public templates
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSettings(prev => ({
-                    ...prev,
-                    privacy: { ...prev.privacy, publicProfile: !prev.privacy.publicProfile }
-                  }))}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${
-                    settings.privacy.publicProfile ? 'bg-primary' : 'bg-muted'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      settings.privacy.publicProfile ? 'translate-x-5' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </label>
-
-              <label className="flex items-center justify-between py-2">
-                <div className="flex items-center gap-3">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">Show Email</p>
-                    <p className="text-sm text-muted-foreground">
-                      Display email on your public profile
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSettings(prev => ({
-                    ...prev,
-                    privacy: { ...prev.privacy, showEmail: !prev.privacy.showEmail }
-                  }))}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${
-                    settings.privacy.showEmail ? 'bg-primary' : 'bg-muted'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      settings.privacy.showEmail ? 'translate-x-5' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </label>
-            </div>
-          </section>
-
           {/* Danger Zone */}
           <section className="card border-red-500/20">
             <div className="flex items-center gap-3 mb-6">
@@ -409,7 +250,7 @@ export default function SettingsPage() {
               )}
             </button>
             <p className="mt-2 text-xs text-muted-foreground">
-              This will permanently delete your account and all associated data.
+              This will deactivate your account. Contact support to restore it.
             </p>
           </section>
 

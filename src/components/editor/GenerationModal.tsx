@@ -10,7 +10,7 @@ import { useGenerationStore } from '@/store/generationStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateBatch, downloadZip } from '@/lib/generator';
-import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2 } from 'lucide-react';
+import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight } from 'lucide-react';
 
 interface GenerationModalProps {
   isOpen: boolean;
@@ -110,11 +110,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
         setEmailField(emailColumns[0]);
       }
     }
-  }, [isOpen, headers, reset, emailColumns]);
+  }, [isOpen, headers, reset, emailColumns, nameField, emailField]);
 
+  // Only title and issuedBy are required - description is optional
   const isCertificateInfoComplete = certificateMetadata.title.trim() && 
-    certificateMetadata.issuedBy.trim() && 
-    certificateMetadata.description.trim();
+    certificateMetadata.issuedBy.trim();
 
   const handleGenerate = useCallback(async () => {
     if (!fabricInstance || !dataSource) return;
@@ -312,7 +312,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           ? 'Sending Emails...'
           : 'Generation Complete'
       }
-      className="max-w-lg"
+      className="max-w-lg w-full"
     >
       {step === 'configure' && (
         <div className="space-y-6">
@@ -514,29 +514,29 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       )}
 
       {step === 'complete' && (
-        <div className="space-y-6 py-4">
+        <div className="space-y-4 sm:space-y-6 py-2 sm:py-4">
           {/* Success/Partial Success */}
           <div className="text-center">
             {errors.length === 0 ? (
               <>
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
-                  <CheckCircle className="h-8 w-8 text-green-500" />
+                <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-green-500/20">
+                  <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
                 </div>
-                <h3 className="text-xl font-semibold">All Done!</h3>
-                <p className="mt-2 text-muted-foreground">
+                <h3 className="text-lg sm:text-xl font-semibold">All Done!</h3>
+                <p className="mt-1 sm:mt-2 text-sm text-muted-foreground">
                   Successfully generated {generatedIds.length} certificates
                 </p>
               </>
             ) : (
               <>
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-500/20">
-                  <AlertCircle className="h-8 w-8 text-yellow-500" />
+                <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-yellow-500/20">
+                  <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500" />
                 </div>
-                <h3 className="text-xl font-semibold">Completed with Errors</h3>
-                <p className="mt-2 text-muted-foreground">
+                <h3 className="text-lg sm:text-xl font-semibold">Completed with Errors</h3>
+                <p className="mt-1 sm:mt-2 text-sm text-muted-foreground">
                   Generated {generatedIds.length} of {total} certificates
                 </p>
-                <p className="text-sm text-red-500">
+                <p className="text-xs sm:text-sm text-red-500">
                   {errors.length} errors occurred
                 </p>
               </>
@@ -545,33 +545,58 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
 
           {/* Email Results Summary */}
           {emailResults.length > 0 && (
-            <div className="rounded-lg border border-border p-4 space-y-3">
-              <h4 className="font-medium flex items-center gap-2">
+            <div className="rounded-lg border border-border p-3 sm:p-4 space-y-2 sm:space-y-3">
+              <h4 className="text-sm sm:text-base font-medium flex items-center gap-2">
                 <Mail className="h-4 w-4" />
                 Email Delivery Results
               </h4>
-              <div className="flex gap-4 text-sm">
+              <div className="flex gap-3 sm:gap-4 text-xs sm:text-sm">
                 <div className="flex items-center gap-1">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-500" />
                   <span>{emailResults.filter(r => r.success).length} sent</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
                   <span>{emailResults.filter(r => !r.success).length} failed</span>
                 </div>
               </div>
               
+              {/* Show successful emails */}
+              {emailResults.filter(r => r.success).length > 0 && (
+                <details className="group">
+                  <summary className="text-xs font-medium text-green-600 dark:text-green-400 cursor-pointer hover:underline flex items-center gap-1">
+                    <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                    View {emailResults.filter(r => r.success).length} successful emails
+                  </summary>
+                  <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
+                    {emailResults.filter(r => r.success).map((result, i) => (
+                      <div key={i} className="text-xs p-2 bg-green-50 dark:bg-green-900/20 rounded flex items-center gap-2">
+                        <CheckCircle className="h-3 w-3 text-green-500 shrink-0" />
+                        <span className="font-medium">{result.recipientName}</span>
+                        <span className="text-muted-foreground">({result.email})</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+              
               {/* Show failed emails */}
               {emailResults.filter(r => !r.success).length > 0 && (
-                <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
-                  {emailResults.filter(r => !r.success).map((result, i) => (
-                    <div key={i} className="text-xs p-2 bg-red-50 dark:bg-red-900/20 rounded">
-                      <span className="font-medium">{result.recipientName}</span>
-                      <span className="text-muted-foreground ml-1">({result.email})</span>
-                      <span className="text-red-500 ml-2">- {result.error}</span>
-                    </div>
-                  ))}
-                </div>
+                <details className="group" open>
+                  <summary className="text-xs font-medium text-red-600 dark:text-red-400 cursor-pointer hover:underline flex items-center gap-1">
+                    <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+                    View {emailResults.filter(r => !r.success).length} failed emails
+                  </summary>
+                  <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
+                    {emailResults.filter(r => !r.success).map((result, i) => (
+                      <div key={i} className="text-xs p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                        <span className="font-medium">{result.recipientName}</span>
+                        <span className="text-muted-foreground ml-1">({result.email})</span>
+                        <span className="text-red-500 ml-2">- {result.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               )}
             </div>
           )}
@@ -583,13 +608,13 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               className="w-full"
               size="lg"
             >
-              <Download className="mr-2 h-5 w-5" />
-              Re-download ZIP ({(resultBlob.size / 1024 / 1024).toFixed(1)} MB)
+              <Download className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="text-sm sm:text-base">Re-download ZIP ({(resultBlob.size / 1024 / 1024).toFixed(1)} MB)</span>
             </Button>
           )}
 
           {/* Info about auto-download */}
-          <div className="flex items-start gap-3 rounded-lg bg-blue-500/10 border border-blue-500/20 p-3">
+          <div className="flex items-start gap-2 sm:gap-3 rounded-lg bg-blue-500/10 border border-blue-500/20 p-2.5 sm:p-3">
             <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
             <div className="text-xs text-muted-foreground">
               The ZIP file with all certificates was automatically downloaded. 

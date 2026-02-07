@@ -17,6 +17,7 @@ import {
   Clock,
   Sparkles,
   TrendingUp,
+  TrendingDown,
   Calendar,
   MoreVertical,
   Download,
@@ -30,7 +31,12 @@ import {
   Lock,
   Settings,
   Star,
-  Award
+  Award,
+  Mail,
+  MailCheck,
+  MailX,
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 import { SkeletonDashboard, Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -47,6 +53,9 @@ interface CertificateRecord {
   isActive: boolean;
   viewCount: number;
   createdAt: string;
+  emailStatus?: 'not_sent' | 'sent' | 'failed';
+  emailSentAt?: string;
+  emailError?: string;
 }
 
 // Template interface matching Firebase schema
@@ -280,10 +289,26 @@ export default function DashboardPage() {
   const totalCertificates = certificates.length;
   const totalViews = certificates.reduce((sum, cert) => sum + cert.viewCount, 0);
   
+  // Calculate email stats
+  const emailsSent = certificates.filter(c => c.emailStatus === 'sent').length;
+  const emailsFailed = certificates.filter(c => c.emailStatus === 'failed').length;
+  const emailSuccessRate = emailsSent + emailsFailed > 0 
+    ? Math.round((emailsSent / (emailsSent + emailsFailed)) * 100) 
+    : 100;
+  
   // Calculate monthly stats (certificates created in last 30 days)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const thisMonthCerts = certificates.filter(c => new Date(c.createdAt) >= thirtyDaysAgo).length;
+  
+  // Calculate previous month stats for comparison
+  const sixtyDaysAgo = new Date();
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+  const lastMonthCerts = certificates.filter(c => {
+    const date = new Date(c.createdAt);
+    return date >= sixtyDaysAgo && date < thirtyDaysAgo;
+  }).length;
+  const certGrowth = lastMonthCerts > 0 ? Math.round(((thisMonthCerts - lastMonthCerts) / lastMonthCerts) * 100) : 0;
 
   const stats = [
     { 
@@ -294,17 +319,34 @@ export default function DashboardPage() {
       icon: FileText, 
       color: 'from-violet-500 to-purple-600',
       bgColor: 'bg-violet-500/10',
-      textColor: 'text-violet-600 dark:text-violet-400'
+      textColor: 'text-violet-600 dark:text-violet-400',
+      isPositive: true
     },
     { 
       id: 'generated', 
       label: 'Certificates Generated', 
       value: totalCertificates, 
-      change: thisMonthCerts > 0 ? `+${thisMonthCerts} this month` : 'Start generating!',
+      change: thisMonthCerts > 0 
+        ? `+${thisMonthCerts} this month${certGrowth !== 0 ? ` (${certGrowth > 0 ? '+' : ''}${certGrowth}%)` : ''}`
+        : 'Start generating!',
       icon: Users, 
       color: 'from-blue-500 to-cyan-500',
       bgColor: 'bg-blue-500/10',
-      textColor: 'text-blue-600 dark:text-blue-400'
+      textColor: 'text-blue-600 dark:text-blue-400',
+      isPositive: certGrowth >= 0
+    },
+    { 
+      id: 'emails', 
+      label: 'Emails Sent', 
+      value: emailsSent, 
+      change: emailsFailed > 0 
+        ? `${emailSuccessRate}% success rate (${emailsFailed} failed)`
+        : emailsSent > 0 ? '100% success rate' : 'No emails sent yet',
+      icon: Mail, 
+      color: 'from-orange-500 to-amber-500',
+      bgColor: 'bg-orange-500/10',
+      textColor: 'text-orange-600 dark:text-orange-400',
+      isPositive: emailSuccessRate >= 90
     },
     { 
       id: 'views', 
@@ -314,7 +356,8 @@ export default function DashboardPage() {
       icon: Eye, 
       color: 'from-emerald-500 to-teal-500',
       bgColor: 'bg-emerald-500/10',
-      textColor: 'text-emerald-600 dark:text-emerald-400'
+      textColor: 'text-emerald-600 dark:text-emerald-400',
+      isPositive: true
     },
   ];
 
@@ -331,11 +374,13 @@ export default function DashboardPage() {
     userId: tmpl.userId,
   }));
 
-  const recentActivity = sortedCertificates.slice(0, 4).map((cert, i) => ({
+  const recentActivity = sortedCertificates.slice(0, 5).map((cert, i) => ({
     id: i + 1,
-    action: `Certificate generated for ${cert.recipientName}`,
+    action: `Certificate for ${cert.recipientName}`,
     template: cert.templateName || 'Unknown Template',
     time: formatTimeAgo(new Date(cert.createdAt)),
+    emailStatus: cert.emailStatus || 'not_sent',
+    recipientEmail: cert.recipientEmail,
   }));
 
   const handleImportClick = () => {
@@ -506,12 +551,36 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="font-display text-3xl sm:text-4xl font-bold">
-            Welcome back, {user?.name?.split(' ')[0] || 'there'}! 👋
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Here&apos;s what&apos;s happening with your certificates today.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="font-display text-3xl sm:text-4xl font-bold">
+                Welcome back, {user?.name?.split(' ')[0] || 'there'}! 👋
+              </h1>
+              <p className="mt-2 text-muted-foreground">
+                {totalCertificates === 0 
+                  ? "Get started by creating your first certificate template."
+                  : thisMonthCerts > 0 
+                    ? `You've generated ${thisMonthCerts} certificate${thisMonthCerts > 1 ? 's' : ''} this month. Keep it up!`
+                    : "Here's what's happening with your certificates today."
+                }
+              </p>
+            </div>
+            {/* Quick stats for today */}
+            {!isDataLoading && totalCertificates > 0 && (
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-success/10 text-success">
+                  <MailCheck className="h-4 w-4" />
+                  <span className="font-medium">{emailsSent} sent</span>
+                </div>
+                {emailsFailed > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive">
+                    <MailX className="h-4 w-4" />
+                    <span className="font-medium">{emailsFailed} failed</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </motion.div>
 
         {/* Stats Grid */}
@@ -519,11 +588,11 @@ export default function DashboardPage() {
           initial="initial"
           animate="animate"
           variants={staggerContainer}
-          className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-8"
+          className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4 mb-8"
         >
           {isDataLoading ? (
             // Skeleton loading state for stats
-            [1, 2, 3].map((i) => (
+            [1, 2, 3, 4].map((i) => (
               <div key={i} className="relative overflow-hidden rounded-2xl border border-border bg-card p-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
@@ -541,28 +610,32 @@ export default function DashboardPage() {
               key={stat.id}
               variants={fadeInUp}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
-              className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-lg transition-all duration-300"
+              className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-300"
             >
               {/* Background gradient */}
               <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.color} opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2`} />
               
               <div className="relative flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">
                     {stat.label}
                   </p>
-                  <p className="text-3xl font-bold tracking-tight">
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight">
                     {stat.value.toLocaleString()}
                   </p>
                   <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className="h-3 w-3 text-success" />
-                    <span className="text-xs text-success font-medium">
+                    {stat.isPositive ? (
+                      <TrendingUp className="h-3 w-3 text-success" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3 text-destructive" />
+                    )}
+                    <span className={`text-xs font-medium ${stat.isPositive ? 'text-success' : 'text-destructive'}`}>
                       {stat.change}
                     </span>
                   </div>
                 </div>
-                <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${stat.bgColor}`}>
-                  <stat.icon className={`h-6 w-6 ${stat.textColor}`} />
+                <div className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl ${stat.bgColor}`}>
+                  <stat.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${stat.textColor}`} />
                 </div>
               </div>
             </motion.div>
@@ -743,6 +816,7 @@ export default function DashboardPage() {
                     {/* Thumbnail */}
                     <div className="h-28 relative">
                       {template.thumbnail?.startsWith('data:') ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img 
                           src={template.thumbnail} 
                           alt={template.name}
@@ -882,11 +956,35 @@ export default function DashboardPage() {
                     transition={{ delay: 0.4 + index * 0.1 }}
                     className="flex items-start gap-3 p-4 hover:bg-muted/50 transition-colors"
                   >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0 mt-0.5">
-                      <Calendar className="h-4 w-4" />
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full shrink-0 mt-0.5 ${
+                      activity.emailStatus === 'sent' 
+                        ? 'bg-success/10 text-success' 
+                        : activity.emailStatus === 'failed'
+                          ? 'bg-destructive/10 text-destructive'
+                          : 'bg-primary/10 text-primary'
+                    }`}>
+                      {activity.emailStatus === 'sent' ? (
+                        <MailCheck className="h-4 w-4" />
+                      ) : activity.emailStatus === 'failed' ? (
+                        <MailX className="h-4 w-4" />
+                      ) : (
+                        <Calendar className="h-4 w-4" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{activity.action}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium truncate">{activity.action}</p>
+                        {activity.emailStatus === 'sent' && (
+                          <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success">
+                            Sent
+                          </span>
+                        )}
+                        {activity.emailStatus === 'failed' && (
+                          <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-destructive/10 text-destructive">
+                            Failed
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">
                         {activity.template} • {activity.time}
                       </p>

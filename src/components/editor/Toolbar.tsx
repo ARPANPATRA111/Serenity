@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
@@ -36,7 +36,6 @@ import {
   Wand2,
   Loader2,
   Database,
-  ChevronDown,
   ChevronLeft,
   Link2,
   Eye,
@@ -51,90 +50,13 @@ import {
   MoreHorizontal,
   RectangleHorizontal,
   Info,
+  Heart,
+  Plus,
+  Pencil,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ColorPicker } from '@/components/ui/ColorPicker';
-
-interface ToolbarDropdownProps {
-  trigger: React.ReactNode;
-  children: React.ReactNode;
-  isOpen: boolean;
-  onToggle: () => void;
-}
-
-function ToolbarDropdown({ trigger, children, isOpen, onToggle }: ToolbarDropdownProps) {
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      
-      // Position below the trigger
-      let top = rect.bottom + 4;
-      let left = rect.left;
-      
-      // If dropdown would go off the right edge, align to right side of trigger
-      if (left + 180 > viewportWidth) {
-        left = rect.right - 180;
-      }
-      
-      // Ensure minimum left position
-      if (left < 8) left = 8;
-      
-      setDropdownPosition({ top, left });
-    }
-  }, [isOpen]);
-
-  return (
-    <div className="relative">
-      <button ref={triggerRef} onClick={onToggle} className="toolbar-button flex items-center gap-1">
-        {trigger}
-        <ChevronDown className="h-3 w-3" />
-      </button>
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={onToggle} />
-          <div 
-            className="fixed z-[100] min-w-[180px] rounded-lg border border-border bg-card shadow-lg p-1"
-            style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            {children}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-interface DropdownItemProps {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-  shortcut?: string;
-  disabled?: boolean;
-}
-
-function DropdownItem({ icon: Icon, label, onClick, shortcut, disabled }: DropdownItemProps) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center justify-between w-full gap-2 px-3 py-2 text-sm rounded hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span>{label}</span>
-      </div>
-      {shortcut && (
-        <span className="text-xs text-muted-foreground">{shortcut}</span>
-      )}
-    </button>
-  );
-}
+import { ToolPanel, ToolPanelItem, ToolPanelDivider, ToolPanelSection } from './ToolPanel';
 
 interface ToolbarProps {
   onSave?: () => Promise<void>;
@@ -156,9 +78,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     certificateMetadata,
   } = useEditorStore();
   
+  // Only title and issuedBy are required - description is optional
   const isCertificateInfoComplete = certificateMetadata.title.trim() && 
-    certificateMetadata.issuedBy.trim() && 
-    certificateMetadata.description.trim();
+    certificateMetadata.issuedBy.trim();
   
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [previewOriginalTexts, setPreviewOriginalTexts] = useState<Map<string, string>>(new Map());
@@ -224,6 +146,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
   const handleRedoRef = useRef<() => void>();
   const handleDeleteRef = useRef<() => void>();
   const handleTogglePreviewRef = useRef<() => void>();
+  const handleCloneRef = useRef<() => void>();
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -231,19 +154,19 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       // Ctrl+S for Save
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        onSave?.();
+        if (!isPreviewMode) onSave?.();
       }
       
       // Ctrl+Z for Undo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
-        if (canUndo) handleUndoRef.current?.();
+        if (!isPreviewMode && canUndo) handleUndoRef.current?.();
       }
 
       // Ctrl+Y for Redo
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault();
-        if (canRedo) handleRedoRef.current?.();
+        if (!isPreviewMode && canRedo) handleRedoRef.current?.();
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'q') {
@@ -251,10 +174,18 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         handleTogglePreviewRef.current?.();
       }
 
+      // Ctrl+D for Duplicate
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        if (!isPreviewMode && selectedObject) {
+          handleCloneRef.current?.();
+        }
+      }
+
       // Del/Backspace for Delete
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Only if canvas is active and not editing text
-        if (fabricInstance && selectedObject && !useEditorStore.getState().isEditingText) {
+        if (!isPreviewMode && fabricInstance && selectedObject && !useEditorStore.getState().isEditingText) {
           handleDeleteRef.current?.();
         }
       }
@@ -262,19 +193,19 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onSave, canUndo, canRedo, selectedObject, fabricInstance]);
+  }, [onSave, canUndo, canRedo, selectedObject, fabricInstance, isPreviewMode]);
 
-  const toggleDropdown = (name: string) => {
+  const togglePanel = (name: string) => {
     setOpenDropdown(openDropdown === name ? null : name);
   };
 
-  const closeDropdowns = () => setOpenDropdown(null);
+  const closePanels = () => setOpenDropdown(null);
 
   // Text variations
   const handleAddText = useCallback(() => {
     if (isPreviewMode) return;
     fabricInstance?.addText('Double-click to edit');
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, isPreviewMode]);
 
   const handleAddHeading = useCallback(() => {
@@ -283,7 +214,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       fontSize: 48,
       fontWeight: 'bold',
     });
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, isPreviewMode]);
 
   const handleAddSubheading = useCallback(() => {
@@ -292,7 +223,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       fontSize: 32,
       fontWeight: '600',
     });
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, isPreviewMode]);
 
   // Add clickable link element
@@ -319,7 +250,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     canvas.add(linkText);
     canvas.setActiveObject(linkText);
     canvas.requestRenderAll();
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, isPreviewMode]);
 
   const handleAddImage = useCallback(() => {
@@ -341,16 +272,37 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     input.click();
   }, [fabricInstance, isPreviewMode]);
 
-  const handleAddShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond') => {
+  const handleAddShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond' | 'ellipse' | 'heart' | 'cross') => {
     if (isPreviewMode) return;
     fabricInstance?.addShape(type);
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, isPreviewMode]);
+
+  // Drawing mode
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [brushColor, setBrushColor] = useState('#000000');
+  const [brushWidth, setBrushWidth] = useState(3);
+
+  const handleToggleDrawing = useCallback(() => {
+    if (isPreviewMode) return;
+    const newMode = !isDrawingMode;
+    setIsDrawingMode(newMode);
+    fabricInstance?.setDrawingMode(newMode);
+    if (newMode) {
+      fabricInstance?.setDrawingBrush({ color: brushColor, width: brushWidth });
+    }
+  }, [isPreviewMode, isDrawingMode, fabricInstance, brushColor, brushWidth]);
+
+  useEffect(() => {
+    if (isDrawingMode && fabricInstance) {
+      fabricInstance.setDrawingBrush({ color: brushColor, width: brushWidth });
+    }
+  }, [brushColor, brushWidth, isDrawingMode, fabricInstance]);
 
   const handleAddBorder = useCallback((style: 'simple' | 'double' | 'ornate' | 'gold' | 'corner') => {
     if (isPreviewMode) return;
     fabricInstance?.addBorder?.(style, borderColor);
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, isPreviewMode, borderColor]);
 
   const handleUndo = useCallback(() => {
@@ -427,6 +379,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
   }, [fabricInstance, pushHistory, isPreviewMode]);
 
   handleDeleteRef.current = handleDelete;
+  handleCloneRef.current = handleClone;
 
   // Toggle preview mode
   const handleTogglePreview = useCallback(() => {
@@ -587,7 +540,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     
     activeObject.setCoords();
     canvas.requestRenderAll();
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, isPreviewMode]);
 
   const handleBringToFront = useCallback(() => {
@@ -669,7 +622,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     a.href = url;
     a.download = `${templateName || 'template'}.json`;
     a.click();
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, templateName]);
 
   // Import JSON
@@ -689,7 +642,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       reader.readAsText(file);
     };
     input.click();
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance]);
 
   // Export as image
@@ -707,7 +660,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     a.href = dataUrl;
     a.download = `${templateName || 'certificate'}.png`;
     a.click();
-    closeDropdowns();
+    closePanels();
   }, [fabricInstance, templateName]);
 
   const isObjectSelected = !!selectedObject;
@@ -746,34 +699,36 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         <div className="toolbar-divider" />
 
         {/* Core Tools - Always visible */}
-        <ToolbarDropdown
-          trigger={<Type />}
-          isOpen={openDropdown === 'text'}
-          onToggle={() => toggleDropdown('text')}
+        <button
+          onClick={() => togglePanel('text')}
+          className={`toolbar-button ${openDropdown === 'text' ? 'bg-primary/10 text-primary' : ''}`}
+          title="Add Text"
+          disabled={isPreviewMode}
         >
-          <DropdownItem icon={Type} label="Heading" onClick={handleAddHeading} disabled={isPreviewMode} />
-          <DropdownItem icon={Type} label="Subheading" onClick={handleAddSubheading} disabled={isPreviewMode} />
-          <DropdownItem icon={Type} label="Body Text" onClick={handleAddText} disabled={isPreviewMode} />
-        </ToolbarDropdown>
+          <Type />
+        </button>
 
         <button onClick={handleAddImage} className="toolbar-button" title="Add Image" disabled={isPreviewMode}>
           <ImageIcon />
         </button>
 
-        <ToolbarDropdown
-          trigger={<Square />}
-          isOpen={openDropdown === 'shapes'}
-          onToggle={() => toggleDropdown('shapes')}
+        <button
+          onClick={() => togglePanel('shapes')}
+          className={`toolbar-button ${openDropdown === 'shapes' ? 'bg-primary/10 text-primary' : ''}`}
+          title="Add Shape"
+          disabled={isPreviewMode}
         >
-          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Basic Shapes</div>
-          <DropdownItem icon={Square} label="Rectangle" onClick={() => handleAddShape('rect')} disabled={isPreviewMode} />
-          <DropdownItem icon={RectangleHorizontal} label="Rounded Rectangle" onClick={() => handleAddShape('roundedRect')} disabled={isPreviewMode} />
-          <DropdownItem icon={Circle} label="Circle" onClick={() => handleAddShape('circle')} disabled={isPreviewMode} />
-          <DropdownItem icon={Triangle} label="Triangle" onClick={() => handleAddShape('triangle')} disabled={isPreviewMode} />
-          <div className="my-1 border-t border-border" />
-          <DropdownItem icon={Minus} label="Line" onClick={() => handleAddShape('line')} disabled={isPreviewMode} />
-          <DropdownItem icon={ArrowRight} label="Arrow" onClick={() => handleAddShape('arrowLine')} disabled={isPreviewMode} />
-        </ToolbarDropdown>
+          <Square />
+        </button>
+
+        <button
+          onClick={handleToggleDrawing}
+          className={`toolbar-button ${isDrawingMode ? 'bg-primary/10 text-primary ring-2 ring-primary/40' : ''}`}
+          title={isDrawingMode ? 'Exit Drawing Mode' : 'Freehand Draw'}
+          disabled={isPreviewMode}
+        >
+          <Pencil />
+        </button>
 
         <div className="toolbar-divider" />
 
@@ -806,7 +761,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         {/* Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
            {saveStatus === 'saved' && (
-             <span className="text-xs text-green-600 hidden sm:block">✓</span>
+             <span className="text-xs text-green-600 hidden sm:block">âœ“</span>
            )}
            
            <button
@@ -851,16 +806,13 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
              <span className="hidden sm:inline">Generate</span>
            </button>
 
-           <ToolbarDropdown
-             trigger={<Download />}
-             isOpen={openDropdown === 'export'}
-             onToggle={() => toggleDropdown('export')}
+           <button
+             onClick={() => togglePanel('export')}
+             className={`toolbar-button ${openDropdown === 'export' ? 'bg-primary/10 text-primary' : ''}`}
+             title="Export / Import"
            >
-             <DropdownItem icon={Download} label="Export JSON" onClick={handleExport} />
-             <DropdownItem icon={ImageIcon} label="Export PNG" onClick={handleExportImage} />
-             <div className="my-1 border-t border-border" />
-             <DropdownItem icon={Upload} label="Import" onClick={handleImport} disabled={isPreviewMode} />
-           </ToolbarDropdown>
+             <Download />
+           </button>
         </div>
       </div>
 
@@ -872,21 +824,14 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         </button>
 
         {/* Borders */}
-        <ToolbarDropdown
-          trigger={<Frame />}
-          isOpen={openDropdown === 'borders'}
-          onToggle={() => toggleDropdown('borders')}
+        <button
+          onClick={() => togglePanel('borders')}
+          className={`toolbar-button ${openDropdown === 'borders' ? 'bg-primary/10 text-primary' : ''}`}
+          title="Borders"
+          disabled={isPreviewMode}
         >
-          <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Borders</div>
-          <div className="px-2 py-2 flex items-center gap-2 border-b border-border mb-1">
-            <span className="text-xs text-muted-foreground">Color:</span>
-            <ColorPicker value={borderColor} onChange={setBorderColor} showLabel={false} size="sm" />
-          </div>
-          <DropdownItem icon={Square} label="Simple" onClick={() => handleAddBorder('simple')} disabled={isPreviewMode} />
-          <DropdownItem icon={Square} label="Double" onClick={() => handleAddBorder('double')} disabled={isPreviewMode} />
-          <DropdownItem icon={Square} label="Ornate" onClick={() => handleAddBorder('ornate')} disabled={isPreviewMode} />
-          <DropdownItem icon={Square} label="Gold Frame" onClick={() => handleAddBorder('gold')} disabled={isPreviewMode} />
-        </ToolbarDropdown>
+          <Frame />
+        </button>
 
         {/* Background Color */}
         <div className="flex items-center" title="Background Color">
@@ -901,19 +846,14 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         <div className="toolbar-divider" />
 
         {/* Alignment */}
-        <ToolbarDropdown
-          trigger={<AlignHorizontalJustifyCenter />}
-          isOpen={openDropdown === 'align'}
-          onToggle={() => toggleDropdown('align')}
+        <button
+          onClick={() => togglePanel('align')}
+          className={`toolbar-button ${openDropdown === 'align' ? 'bg-primary/10 text-primary' : ''}`}
+          title="Alignment"
+          disabled={!isObjectSelected}
         >
-          <DropdownItem icon={AlignLeft} label="Align Left" onClick={() => handleAlign('left')} disabled={!isObjectSelected} />
-          <DropdownItem icon={AlignCenterHorizontal} label="Center H" onClick={() => handleAlign('center')} disabled={!isObjectSelected} />
-          <DropdownItem icon={AlignRight} label="Align Right" onClick={() => handleAlign('right')} disabled={!isObjectSelected} />
-          <div className="my-1 border-t border-border" />
-          <DropdownItem icon={AlignStartVertical} label="Align Top" onClick={() => handleAlign('top')} disabled={!isObjectSelected} />
-          <DropdownItem icon={AlignCenterVertical} label="Center V" onClick={() => handleAlign('middle')} disabled={!isObjectSelected} />
-          <DropdownItem icon={AlignEndVertical} label="Align Bottom" onClick={() => handleAlign('bottom')} disabled={!isObjectSelected} />
-        </ToolbarDropdown>
+          <AlignHorizontalJustifyCenter />
+        </button>
 
         {/* Layer Operations */}
         <button onClick={handleBringToFront} className="toolbar-button" title="Bring to Front" disabled={!isObjectSelected}>
@@ -926,25 +866,109 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         <div className="toolbar-divider" />
 
         {/* Transform */}
-        <ToolbarDropdown
-          trigger={<FlipHorizontal />}
-          isOpen={openDropdown === 'transform'}
-          onToggle={() => toggleDropdown('transform')}
+        <button
+          onClick={() => togglePanel('transform')}
+          className={`toolbar-button ${openDropdown === 'transform' ? 'bg-primary/10 text-primary' : ''}`}
+          title="Transform"
+          disabled={!isObjectSelected}
         >
-          <DropdownItem icon={FlipHorizontal} label="Flip H" onClick={handleFlipHorizontal} disabled={!isObjectSelected} />
-          <DropdownItem icon={FlipVertical} label="Flip V" onClick={handleFlipVertical} disabled={!isObjectSelected} />
-          <div className="my-1 border-t border-border" />
-          <DropdownItem icon={RotateCcw} label="Rotate -90°" onClick={() => handleRotate(-90)} disabled={!isObjectSelected} />
-          <DropdownItem icon={RotateCw} label="Rotate +90°" onClick={() => handleRotate(90)} disabled={!isObjectSelected} />
-          <div className="my-1 border-t border-border" />
-          <DropdownItem 
-            icon={isLocked ? Unlock : Lock} 
-            label={isLocked ? "Unlock" : "Lock"} 
-            onClick={handleToggleLock} 
-            disabled={!isObjectSelected}
-          />
-        </ToolbarDropdown>
+          <FlipHorizontal />
+        </button>
       </div>
+
+      {/* Tool Panels (sidebar replacements for dropdown menus) */}
+      <ToolPanel title="Text" isOpen={openDropdown === 'text'} onClose={closePanels}>
+        <ToolPanelItem icon={Type} label="Heading" onClick={handleAddHeading} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Type} label="Subheading" onClick={handleAddSubheading} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Type} label="Body Text" onClick={handleAddText} disabled={isPreviewMode} />
+      </ToolPanel>
+
+      <ToolPanel title="Shapes" isOpen={openDropdown === 'shapes'} onClose={closePanels}>
+        <ToolPanelSection title="Basic Shapes" />
+        <ToolPanelItem icon={Square} label="Rectangle" onClick={() => handleAddShape('rect')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={RectangleHorizontal} label="Rounded Rect" onClick={() => handleAddShape('roundedRect')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Circle} label="Circle" onClick={() => handleAddShape('circle')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Triangle} label="Triangle" onClick={() => handleAddShape('triangle')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Star} label="Star" onClick={() => handleAddShape('star')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Pentagon} label="Pentagon" onClick={() => handleAddShape('pentagon')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Hexagon} label="Hexagon" onClick={() => handleAddShape('hexagon')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Diamond} label="Diamond" onClick={() => handleAddShape('diamond')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Circle} label="Ellipse" onClick={() => handleAddShape('ellipse')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Heart} label="Heart" onClick={() => handleAddShape('heart')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Plus} label="Cross" onClick={() => handleAddShape('cross')} disabled={isPreviewMode} />
+        <ToolPanelDivider />
+        <ToolPanelSection title="Lines" />
+        <ToolPanelItem icon={Minus} label="Line" onClick={() => handleAddShape('line')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Minus} label="Dashed Line" onClick={() => handleAddShape('dashedLine')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={ArrowRight} label="Arrow" onClick={() => handleAddShape('arrowLine')} disabled={isPreviewMode} />
+      </ToolPanel>
+
+      <ToolPanel title="Borders" isOpen={openDropdown === 'borders'} onClose={closePanels}>
+        <div className="px-3 py-2 flex items-center gap-2 border-b border-border mb-1">
+          <span className="text-xs text-muted-foreground">Color:</span>
+          <ColorPicker value={borderColor} onChange={setBorderColor} showLabel={false} size="sm" />
+        </div>
+        <ToolPanelItem icon={Square} label="Simple" onClick={() => handleAddBorder('simple')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Square} label="Double" onClick={() => handleAddBorder('double')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Square} label="Ornate" onClick={() => handleAddBorder('ornate')} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Square} label="Gold Frame" onClick={() => handleAddBorder('gold')} disabled={isPreviewMode} />
+      </ToolPanel>
+
+      <ToolPanel title="Alignment" isOpen={openDropdown === 'align'} onClose={closePanels}>
+        <ToolPanelSection title="Horizontal" />
+        <ToolPanelItem icon={AlignLeft} label="Align Left" onClick={() => handleAlign('left')} disabled={!isObjectSelected} />
+        <ToolPanelItem icon={AlignCenterHorizontal} label="Center Horizontal" onClick={() => handleAlign('center')} disabled={!isObjectSelected} />
+        <ToolPanelItem icon={AlignRight} label="Align Right" onClick={() => handleAlign('right')} disabled={!isObjectSelected} />
+        <ToolPanelDivider />
+        <ToolPanelSection title="Vertical" />
+        <ToolPanelItem icon={AlignStartVertical} label="Align Top" onClick={() => handleAlign('top')} disabled={!isObjectSelected} />
+        <ToolPanelItem icon={AlignCenterVertical} label="Center Vertical" onClick={() => handleAlign('middle')} disabled={!isObjectSelected} />
+        <ToolPanelItem icon={AlignEndVertical} label="Align Bottom" onClick={() => handleAlign('bottom')} disabled={!isObjectSelected} />
+      </ToolPanel>
+
+      <ToolPanel title="Transform" isOpen={openDropdown === 'transform'} onClose={closePanels}>
+        <ToolPanelItem icon={FlipHorizontal} label="Flip Horizontal" onClick={handleFlipHorizontal} disabled={!isObjectSelected} />
+        <ToolPanelItem icon={FlipVertical} label="Flip Vertical" onClick={handleFlipVertical} disabled={!isObjectSelected} />
+        <ToolPanelDivider />
+        <ToolPanelItem icon={RotateCcw} label="Rotate -90°" onClick={() => handleRotate(-90)} disabled={!isObjectSelected} />
+        <ToolPanelItem icon={RotateCw} label="Rotate +90°" onClick={() => handleRotate(90)} disabled={!isObjectSelected} />
+        <ToolPanelDivider />
+        <ToolPanelItem 
+          icon={isLocked ? Unlock : Lock} 
+          label={isLocked ? "Unlock" : "Lock"} 
+          onClick={handleToggleLock} 
+          disabled={!isObjectSelected}
+        />
+      </ToolPanel>
+
+      <ToolPanel title="Export / Import" isOpen={openDropdown === 'export'} onClose={closePanels}>
+        <ToolPanelItem icon={Download} label="Export JSON" onClick={handleExport} />
+        <ToolPanelItem icon={ImageIcon} label="Export PNG" onClick={handleExportImage} />
+        <ToolPanelDivider />
+        <ToolPanelItem icon={Upload} label="Import JSON" onClick={handleImport} disabled={isPreviewMode} />
+      </ToolPanel>
+
+      {/* Drawing mode floating controls */}
+      {isDrawingMode && (
+        <div className="fixed left-4 top-40 z-50 w-48 rounded-xl border border-border bg-card p-3 shadow-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground">Drawing Mode</span>
+            <button onClick={handleToggleDrawing} className="text-xs text-muted-foreground hover:text-foreground">✕</button>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Brush Color</label>
+            <ColorPicker value={brushColor} onChange={setBrushColor} showLabel={false} size="sm" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Brush Size: {brushWidth}px</label>
+            <input
+              type="range" min="1" max="30" value={brushWidth}
+              onChange={(e) => setBrushWidth(parseInt(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

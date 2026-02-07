@@ -62,6 +62,7 @@ export function StyleSidebar({ mode, onClose, colorProperty = 'fill' }: StyleSid
         fabricInstance?.getCanvas()?.requestRenderAll();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   // Handle click outside to close

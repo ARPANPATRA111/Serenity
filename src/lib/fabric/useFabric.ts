@@ -178,10 +178,11 @@ export function useFabric(
         borderDashArray: [4, 2],
         selectable: true,
         evented: true,
+        editable: false, // Prevent text editing
       } as fabric.ITextboxOptions);
       // Fix browser compatibility for textBaseline
       (verifyTextbox as any).textBaseline = 'alphabetic';
-      // Mark as verification URL - cannot be deleted
+      // Mark as verification URL - cannot be deleted or edited
       (verifyTextbox as any).isVerificationUrl = true;
       (verifyTextbox as any).isLocked = true;
       canvas.add(verifyTextbox);
@@ -434,6 +435,15 @@ export function useFabric(
     localStorage.removeItem(CANVAS_AUTOSAVE_KEY);
   }, []);
 
+  const bringVerificationUrlToFront = useCallback(() => {
+    if (!fabricRef.current) return;
+    
+    const verificationUrl = fabricRef.current.getObjects().find((obj: any) => obj.isVerificationUrl);
+    if (verificationUrl) {
+      fabricRef.current.bringToFront(verificationUrl);
+    }
+  }, []);
+
   const undo = useCallback(() => {
     if (!fabricRef.current || historyIndexRef.current <= 0) {
       console.log('[Undo] Cannot undo: no history or at start');
@@ -535,7 +545,7 @@ export function useFabric(
         isHistoryActionRef.current = false;
       }, 600);
     });
-  }, [width, height, backgroundColor, setHistoryState]);
+  }, [width, height, backgroundColor, setHistoryState, bringVerificationUrlToFront]);
 
   const redo = useCallback(() => {
     if (!fabricRef.current || historyIndexRef.current >= historyRef.current.length - 1) {
@@ -636,16 +646,7 @@ export function useFabric(
         isHistoryActionRef.current = false;
       }, 600);
     });
-  }, [width, height, backgroundColor, setHistoryState]);
-
-  const bringVerificationUrlToFront = useCallback(() => {
-    if (!fabricRef.current) return;
-    
-    const verificationUrl = fabricRef.current.getObjects().find((obj: any) => obj.isVerificationUrl);
-    if (verificationUrl) {
-      fabricRef.current.bringToFront(verificationUrl);
-    }
-  }, []);
+  }, [width, height, backgroundColor, setHistoryState, bringVerificationUrlToFront]);
 
   const addText = useCallback((text: string = 'New Text', options?: fabric.ITextboxOptions) => {
     if (!fabricRef.current) return null;
@@ -683,6 +684,7 @@ export function useFabric(
       fill: '#000000',
       dynamicKey,
       isPlaceholder: true,
+      editable: false, // Dynamic variables should not be editable
       ...options,
     });
     // Fix browser compatibility for textBaseline
@@ -739,7 +741,7 @@ export function useFabric(
     });
   }, [width, height, bringVerificationUrlToFront]);
 
-  const addShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond', options?: fabric.IObjectOptions) => {
+  const addShape = useCallback((type: 'rect' | 'circle' | 'triangle' | 'line' | 'star' | 'pentagon' | 'hexagon' | 'arrow' | 'dashedLine' | 'arrowLine' | 'roundedRect' | 'diamond' | 'ellipse' | 'heart' | 'cross', options?: fabric.IObjectOptions) => {
     if (!fabricRef.current) return null;
 
     let shape: fabric.Object;
@@ -927,6 +929,51 @@ export function useFabric(
           ...options,
         });
         break;
+      case 'ellipse':
+        shape = new fabric.Ellipse({
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          rx: 70,
+          ry: 45,
+          fill: '#3b82f6',
+          ...options,
+        });
+        break;
+      case 'heart': {
+        const heartPath = 'M 50 90 C 25 70, 0 50, 0 30 C 0 10, 15 0, 25 0 C 35 0, 45 10, 50 25 C 55 10, 65 0, 75 0 C 85 0, 100 10, 100 30 C 100 50, 75 70, 50 90 Z';
+        shape = new fabric.Path(heartPath, {
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: '#ef4444',
+          scaleX: 1,
+          scaleY: 1,
+          ...options,
+        });
+        break;
+      }
+      case 'cross': {
+        const crossPoints = [
+          { x: 30, y: 0 }, { x: 70, y: 0 },
+          { x: 70, y: 30 }, { x: 100, y: 30 },
+          { x: 100, y: 70 }, { x: 70, y: 70 },
+          { x: 70, y: 100 }, { x: 30, y: 100 },
+          { x: 30, y: 70 }, { x: 0, y: 70 },
+          { x: 0, y: 30 }, { x: 30, y: 30 },
+        ];
+        shape = new fabric.Polygon(crossPoints, {
+          left: width / 2,
+          top: height / 2,
+          originX: 'center',
+          originY: 'center',
+          fill: '#3b82f6',
+          ...options,
+        });
+        break;
+      }
       default:
         return null;
     }
@@ -1209,7 +1256,12 @@ export function useFabric(
                 borderColor: '#dc2626',
                 borderDashArray: [4, 2],
                 cornerColor: '#dc2626',
+                editable: false, // Prevent text editing
               });
+            }
+            // Prevent editing of dynamic variable textboxes
+            if (obj.dynamicKey) {
+              obj.set({ editable: false });
             }
             // Fix textBaseline for any remaining objects
             if (obj.textBaseline === 'alphabetical') {
@@ -1238,6 +1290,7 @@ export function useFabric(
               borderDashArray: [4, 2],
               selectable: true,
               evented: true,
+              editable: false, // Prevent text editing
             } as fabric.ITextboxOptions);
             (verifyTextbox as any).textBaseline = 'alphabetic';
             (verifyTextbox as any).isVerificationUrl = true;
@@ -1310,7 +1363,7 @@ export function useFabric(
         resolve();
       });
     });
-  }, [saveToHistory, width, height]);
+  }, [saveToHistory, width, height, backgroundColor]);
 
   const toHighDPIDataURL = useCallback((multiplier: number = HIGH_DPI_MULTIPLIER): string => {
     if (!fabricRef.current) return '';
@@ -1444,6 +1497,23 @@ export function useFabric(
     });
   }, [width, height]);
 
+  // Drawing mode
+  const setDrawingMode = useCallback((enabled: boolean) => {
+    if (!fabricRef.current) return;
+    fabricRef.current.isDrawingMode = enabled;
+    if (enabled) {
+      fabricRef.current.freeDrawingBrush.color = '#000000';
+      fabricRef.current.freeDrawingBrush.width = 3;
+    }
+    fabricRef.current.requestRenderAll();
+  }, []);
+
+  const setDrawingBrush = useCallback((options: { color?: string; width?: number }) => {
+    if (!fabricRef.current) return;
+    if (options.color) fabricRef.current.freeDrawingBrush.color = options.color;
+    if (options.width) fabricRef.current.freeDrawingBrush.width = options.width;
+  }, []);
+
   const getCanvas = useCallback(() => fabricRef.current, []);
 
   const isVariable = useCallback((obj: fabric.Object) => isVariableTextbox(obj), []);
@@ -1484,6 +1554,10 @@ export function useFabric(
     
     // Utilities
     isVariable,
+    
+    // Drawing mode
+    setDrawingMode,
+    setDrawingBrush,
   }), [
     getCanvas,
     addText,
@@ -1507,6 +1581,8 @@ export function useFabric(
     getBackgroundColor,
     clearAutoSave,
     isVariable,
+    setDrawingMode,
+    setDrawingBrush,
   ]);
 }
 

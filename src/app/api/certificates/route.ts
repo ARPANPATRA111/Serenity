@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import { createLogger, getErrorDetails } from '@/lib/logger';
+
+const logger = createLogger('Certificates.API');
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,12 +24,14 @@ export async function GET(request: NextRequest) {
     const userId = request.headers.get('x-user-id');
     
     if (!userId) {
+      logger.debug('No user ID provided, returning empty certificates');
       return NextResponse.json({ success: true, certificates: [] });
     }
 
     const now = Date.now();
     const cached = certificatesCache.get(userId);
     if (cached && (now - cached.timestamp) < CACHE_TTL) {
+      logger.debug('Returning cached certificates', { userId, count: cached.certificates.length });
       return NextResponse.json({ success: true, certificates: cached.certificates });
     }
 
@@ -34,8 +39,8 @@ export async function GET(request: NextRequest) {
     try {
       db = getAdminFirestore();
     } catch (e) {
-      console.warn('Firebase Admin Init Failed:', e);
-      return NextResponse.json({ success: true, certificates: [], warning: 'Service unavailable' });
+      logger.warn('Firebase Admin Init Failed', { userId }, e as Error);
+      return NextResponse.json({ success: true, certificates: [], warning: 'Service temporarily unavailable' });
     }
     
     const certificatesRef = db.collection('certificates');
@@ -50,17 +55,19 @@ export async function GET(request: NextRequest) {
         .get();
     } catch (e: any) {
         if (e.code === 9) {
+          logger.debug('Index not ready, using fallback query', { userId });
           try {
             snapshot = await certificatesRef
               .where('userId', '==', userId)
               .limit(100)
               .get();
-          } catch {
-            return NextResponse.json({ success: true, certificates: [], error: 'Database unavailable' });
+          } catch (fallbackError) {
+            logger.error('Fallback query failed', { userId }, fallbackError as Error);
+            return NextResponse.json({ success: true, certificates: [], error: 'Database temporarily unavailable' });
           }
         } else {
-          console.warn('[Certificates API] Database query failed');
-          return NextResponse.json({ success: true, certificates: [], error: 'Database unavailable' });
+          logger.warn('Database query failed', { userId, errorCode: e.code });
+          return NextResponse.json({ success: true, certificates: [], error: 'Database temporarily unavailable' });
         }
     }
     
@@ -78,15 +85,21 @@ export async function GET(request: NextRequest) {
         isActive: data.isActive !== false,
         viewCount: data.viewCount || 0,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        emailStatus: data.emailStatus || 'not_sent', // 'not_sent' | 'sent' | 'failed'
+        emailSentAt: data.emailSentAt?.toDate?.()?.toISOString() || null,
+        emailError: data.emailError || null,
+        certificateImage: data.certificateImage || null, // URL to certificate image
       };
     });
 
     certificatesCache.set(userId, { certificates, timestamp: now });
     cleanCache();
 
+    logger.debug('Fetched certificates', { userId, count: certificates.length });
     return NextResponse.json({ success: true, certificates });
   } catch (error) {
-    console.error('[API/certificates] Error:', error);
+    const errorDetails = getErrorDetails(error);
+    logger.error('Failed to fetch certificates', { error: errorDetails });
     return NextResponse.json(
       { success: false, error: 'Failed to fetch certificates' },
       { status: 500 }

@@ -215,6 +215,7 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
                   <div className="sticky top-24 overflow-hidden rounded-xl border border-border shadow-lg bg-card">
                     <div className="relative aspect-[1.414/1] w-full bg-muted">
                       {result.certificate.certificateImage.startsWith('data:') ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={result.certificate.certificateImage}
                           alt={`Certificate for ${result.certificate.recipientName}`}

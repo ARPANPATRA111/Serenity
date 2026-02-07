@@ -15,6 +15,16 @@ export async function POST(request: NextRequest) {
     const userDoc = await userRef.get();
 
     if (userDoc.exists) {
+      const userData = userDoc.data();
+      
+      // Check if account has been soft-deleted
+      if (userData?.isDeleted) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'This account has been deleted. Please contact support if you wish to restore it.' 
+        }, { status: 403 });
+      }
+      
       const updateData: Record<string, any> = {
         lastLoginAt: new Date(),
       };
@@ -95,7 +105,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE - Delete user account and all associated data
+// DELETE - Soft delete user account (marks as deleted, does not remove data)
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -106,30 +116,23 @@ export async function DELETE(request: NextRequest) {
     }
 
     const db = getAdminFirestore();
-    const batch = db.batch();
-
-    // Delete user document
+    
+    // Soft delete: mark user as deleted instead of removing data
     const userRef = db.collection('users').doc(userId);
-    batch.delete(userRef);
+    const userDoc = await userRef.get();
+    
+    if (!userDoc.exists) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
 
-    // Delete all user's templates
-    const templatesSnapshot = await db.collection('templates').where('userId', '==', userId).get();
-    templatesSnapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
+    await userRef.update({
+      isDeleted: true,
+      deletedAt: new Date(),
     });
-
-    // Delete all user's certificates
-    const certificatesSnapshot = await db.collection('certificates').where('userId', '==', userId).get();
-    certificatesSnapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-
-    await batch.commit();
 
     return NextResponse.json({ 
       success: true, 
-      deletedTemplates: templatesSnapshot.size,
-      deletedCertificates: certificatesSnapshot.size
+      message: 'Account marked as deleted',
     });
   } catch (error) {
     console.error('[API Users] Error deleting account:', error);
