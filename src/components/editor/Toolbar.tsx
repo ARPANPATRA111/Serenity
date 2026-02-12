@@ -53,6 +53,7 @@ import {
   Heart,
   Plus,
   Pencil,
+  Check,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -761,7 +762,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         {/* Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
            {saveStatus === 'saved' && (
-             <span className="text-xs text-green-600 hidden sm:block">âœ“</span>
+             <span className="text-xs text-green-600 hidden sm:flex items-center gap-1">
+               <Check className="h-3.5 w-3.5" />
+               Saved
+             </span>
            )}
            
            <button

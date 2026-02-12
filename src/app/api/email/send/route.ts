@@ -1,36 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getTodayDateString } from '@/lib/utils';
-import { createLogger, getErrorDetails, createErrorResponse } from '@/lib/logger';
+import { createLogger, getErrorDetails } from '@/lib/logger';
 
 const logger = createLogger('Email.Send');
 
-let transporter: Transporter | null = null;
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
-function getTransporter(): Transporter {
-  if (!transporter) {
-    const user = process.env.GMAIL_USER;
-    const pass = process.env.GMAIL_APP_PASSWORD;
-    
-    if (!user || !pass) {
-      throw new Error('GMAIL_USER or GMAIL_APP_PASSWORD environment variables are not set');
-    }
-    
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user,
-        pass,
-      },
-    });
-  }
-  return transporter;
+interface BrevoAttachment {
+  name: string;
+  content: string; // base64 encoded
 }
 
-const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || '200', 10);
+interface BrevoEmailPayload {
+  sender: { name: string; email: string };
+  to: { email: string; name?: string }[];
+  subject: string;
+  htmlContent: string;
+  attachment?: BrevoAttachment[];
+}
+
+async function sendEmailWithBrevo(payload: BrevoEmailPayload): Promise<{ messageId: string }> {
+  const apiKey = process.env.SEND_IN_BLUE_API_KEY?.trim();
+  
+  if (!apiKey) {
+    throw new Error('SEND_IN_BLUE_API_KEY environment variable is not set');
+  }
+
+  const response = await fetch(BREVO_API_URL, {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Brevo API error: ${response.status} - ${errorBody}`);
+  }
+
+  const result = await response.json();
+  return { messageId: result.messageId || `brevo_${Date.now()}` };
+}
+
+const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || '300', 10);
 
 interface SendEmailRequest {
   to: string;
@@ -112,9 +129,6 @@ function generateEmailHTML(data: SendEmailRequest): string {
               <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fef3c7; border-radius: 12px; margin-bottom: 30px;">
                 <tr>
                   <td style="padding: 30px; text-align: center;">
-                    <p style="margin: 0 0 8px; color: #92400e; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
-                      Certificate of
-                    </p>
                     <h2 style="margin: 0; color: #78350f; font-size: 24px; font-weight: 700;">
                       ${data.certificateTitle}
                     </h2>
@@ -207,11 +221,6 @@ export async function POST(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
     const verifyUrl = `${appUrl}/verify/${certificateId}`;
 
-    let pdfBuffer: Buffer | null = null;
-    if (certificatePdfBase64) {
-      pdfBuffer = Buffer.from(certificatePdfBase64, 'base64');
-    }
-
     const emailData: SendEmailRequest = {
       to,
       recipientName,
@@ -222,54 +231,50 @@ export async function POST(request: NextRequest) {
     };
 
     const senderName = process.env.EMAIL_SENDER_NAME || 'Serenity Certificates';
-    const gmailUser = process.env.GMAIL_USER;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || 'thispc119@gmail.com';
 
     try {
-      const mailOptions: nodemailer.SendMailOptions = {
-        from: `"${senderName}" <${gmailUser}>`,
-        to: to,
-        subject: `🎉 Your Certificate: ${emailData.certificateTitle}`,
-        html: generateEmailHTML(emailData),
-      };
-
       const sanitizedName = recipientName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
       
-      if (pdfBuffer) {
-        // Attach PDF if provided
-        mailOptions.attachments = [
+      const brevoPayload: BrevoEmailPayload = {
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: to, name: recipientName }],
+        subject: `🎉 ${emailData.certificateTitle}`,
+        htmlContent: generateEmailHTML(emailData),
+      };
+
+      if (certificatePdfBase64) {
+        brevoPayload.attachment = [
           {
-            filename: `certificate_${sanitizedName}.pdf`,
-            content: pdfBuffer,
-            contentType: 'application/pdf',
+            name: `certificate_${sanitizedName}.pdf`,
+            content: certificatePdfBase64,
           },
         ];
       } else if (certificateImageUrl) {
         // If no PDF but image URL is provided, fetch and attach the image
         try {
-          let imageBuffer: Buffer;
+          let base64Content: string;
           
           if (certificateImageUrl.startsWith('data:')) {
             // Handle data URL (base64)
-            const base64Data = certificateImageUrl.split(',')[1];
-            imageBuffer = Buffer.from(base64Data, 'base64');
+            base64Content = certificateImageUrl.split(',')[1];
           } else {
-            // Fetch image from URL
+            // Fetch image from URL and convert to base64
             const imageResponse = await fetch(certificateImageUrl);
             if (imageResponse.ok) {
               const arrayBuffer = await imageResponse.arrayBuffer();
-              imageBuffer = Buffer.from(arrayBuffer);
+              base64Content = Buffer.from(arrayBuffer).toString('base64');
             } else {
               logger.warn('Failed to fetch certificate image', { requestId, imageUrl: certificateImageUrl.substring(0, 50) });
-              imageBuffer = Buffer.alloc(0);
+              base64Content = '';
             }
           }
           
-          if (imageBuffer.length > 0) {
-            mailOptions.attachments = [
+          if (base64Content) {
+            brevoPayload.attachment = [
               {
-                filename: `certificate_${sanitizedName}.png`,
-                content: imageBuffer,
-                contentType: 'image/png',
+                name: `certificate_${sanitizedName}.png`,
+                content: base64Content,
               },
             ];
           }
@@ -279,7 +284,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const info = await getTransporter().sendMail(mailOptions);
+      const info = await sendEmailWithBrevo(brevoPayload);
 
       const db = getAdminFirestore();
       await db.collection('emailLogs').add({
@@ -288,7 +293,7 @@ export async function POST(request: NextRequest) {
         messageId: info.messageId,
         sentAt: FieldValue.serverTimestamp(),
         userId: userId || 'anonymous',
-        hasAttachment: !!(pdfBuffer || (certificateImageUrl && mailOptions.attachments)),
+        hasAttachment: !!(brevoPayload.attachment && brevoPayload.attachment.length > 0),
       });
 
       // Update certificate with email status
