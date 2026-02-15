@@ -1,296 +1,272 @@
-# Serenity - Certificate Generator
+<div align="center">
 
-A production-ready, SaaS-grade Certificate Generator built with Next.js 14 and Fabric.js.
+# ✨ Serenity
 
-![Serenity Banner](https://img.shields.io/badge/Serenity-Certificate%20Generator-blue?style=for-the-badge)
-![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+### Professional Certificate Generator
 
-## 🌟 Features
+**Design • Generate • Verify — All in One Platform**
 
-### Core Features
-- **Visual Editor**: Drag-and-drop interface powered by Fabric.js 5.3.0
-- **Excel Import**: Upload Excel/CSV files and map columns to template variables
-- **Bulk Generation**: Process thousands of certificates client-side
-- **QR Verification**: Each certificate gets a unique verifiable QR code
-- **High-DPI Output**: 300 DPI PDF export for professional printing
-- **Dual Themes**: Dark and Light themes with smooth transitions
-- **Privacy-First**: All processing happens in the browser
-- **Fully Responsive**: Optimized for desktop and mobile devices
+[Live Demo](https://serenity-certificate.vercel.app) · [Report Bug](https://github.com/ARPANPATRA111/Serenity/issues) · [Request Feature](https://github.com/ARPANPATRA111/Serenity/issues)
 
-### New Features (v2.0)
 
-#### 🎨 Enhanced Color Picker
-- Professional color selection component
-- Preset color palettes with 10+ color categories
-- Quick access to common colors
-- Recent colors memory (saved to localStorage)
-- Custom hex color input
-- Native color picker integration
+[![Next.js](https://img.shields.io/badge/Next.js_14-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com/)
 
-#### 📐 Shapes & Borders
-- Multiple shape types: rectangles, circles, triangles, stars, polygons
-- Line tools: solid, dashed, and arrow lines
-- Certificate border styles: simple, double, ornate, gold frame, corner
-- Customizable stroke colors and widths
+[![GitHub stars](https://img.shields.io/github/stars/ARPANPATRA111/Serenity?style=for-the-badge&logo=github&color=yellow)](https://github.com/ARPANPATRA111/Serenity/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/ARPANPATRA111/Serenity?style=for-the-badge&logo=github&color=blue)](https://github.com/ARPANPATRA111/Serenity/fork)
+[![GitHub issues](https://img.shields.io/github/issues/ARPANPATRA111/Serenity?style=for-the-badge&logo=github&color=red)](https://github.com/ARPANPATRA111/Serenity/issues)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-#### 🖼️ Stunning Homepage
-- Performance-optimized animated mesh gradient background
-- Floating particles with CSS-only animations
-- Animated geometric shapes
-- Modern, engaging design with smooth transitions
-- Mobile-responsive layout
-- Product preview mockup
+</div>
 
-#### 📁 Media Library
-- Personal cloud storage for each user via Vercel Blob
-- Drag-and-drop upload interface
-- Support for PNG, JPG, WebP, SVG, and GIF files
-- 5MB file size limit with validation
-- One-click media management
 
-#### 🔒 Verification URL Tag
-- Mandatory non-deletable verification element on all certificates
-- Fixed-size (350px width), cannot be resized
-- Can be repositioned anywhere on the canvas
-- Red border indicator for easy identification
-- Ensures all certificates are verifiable
+## 🎯 What is Serenity?
 
-#### 🔗 Link Elements
-- Add clickable link text to certificates
-- Styled underlined blue text appearance
-- Links work in exported PDF files
-- Custom URL per link element
+Serenity is a **production-ready, SaaS-grade certificate generator** that empowers organizations to create, distribute, and verify professional certificates at scale. Built with modern web technologies, it offers a seamless experience from design to delivery.
 
-#### 👁️ Preview Mode
-- Lock editor to preview final certificate appearance
-- Green tinted background indicator
-- All editing functions disabled during preview
-- Toggle with eye icon in toolbar
+> 💡 **Privacy-First**: All certificate generation happens client-side. Your data never leaves your browser.
 
-#### 📋 Certificate Info Modal
-- Add metadata to templates: title, issuer, description
-- Certificate info is saved with each template
-- Opens existing templates with their saved certificate info
-- Required before generating certificates
-- Displayed on the public verification page with sharing options
 
-#### 🔐 Email Verification
-- New user registration requires email verification
-- Firebase Auth sends verification emails with custom redirect
-- Users cannot login until email is verified
-- Verification success message on login page
-- Automatic fallback for deployment domain issues
+## ⚡ Key Features
 
-#### 🎯 Enhanced Canvas Boundary
-- Red dashed boundary line for print area
-- Semi-transparent red shade outside boundary
-- Clear distinction between printable/non-printable areas
+<table>
+<tr>
+<td width="50%">
 
-#### 📱 Social Sharing
-- Share verified certificates on LinkedIn, Facebook, and X (Twitter)
-- Copy link to clipboard functionality
-- Add certificate directly to LinkedIn profile
-- Beautiful share dialog with multiple options
+### 🎨 Powerful Editor
+- Drag-and-drop canvas (Fabric.js)
+- Variable textboxes `{{name}}`
+- 1000+ Google Fonts
+- Shapes, borders & decorations
+- Image editing & filters
+- Element locking
+- Undo/Redo history
+
+</td>
+<td width="50%">
+
+### 📊 Bulk Generation
+- Excel/CSV data import
+- Process 1000s of certificates
+- High-DPI PDF export (300 DPI)
+- Progress tracking
+- Batch email delivery
+- Client-side processing
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### ✅ Verification System
+- Unique QR codes per certificate
+- Public verification pages
+- Social sharing (LinkedIn, X, Facebook)
+- View analytics
+- Metadata display
+
+</td>
+<td width="50%">
+
+### 👤 User Management
+- Email + OAuth (Google, GitHub)
+- Email verification
+- Premium membership
+- Personal template library
+- Dark/Light themes
+
+</td>
+</tr>
+</table>
+
+
+## 🖼️ Screenshots
+
+<div>
+<table>
+<tr>
+<td align="center"><strong>🏠 Landing Page</strong></td>
+<td align="center"><strong>🎨 Certificate Editor</strong></td>
+</tr>
+<tr>
+<td><img src="https://placehold.co/400x250/1a1a2e/ffffff?text=Landing+Page" alt="Landing Page"/></td>
+<td><img src="https://placehold.co/400x250/1a1a2e/ffffff?text=Editor" alt="Editor"/></td>
+</tr>
+<tr>
+<td align="center"><strong>📋 Dashboard</strong></td>
+<td align="center"><strong>✅ Verification Page</strong></td>
+</tr>
+<tr>
+<td><img src="https://placehold.co/400x250/1a1a2e/ffffff?text=Dashboard" alt="Dashboard"/></td>
+<td><img src="https://placehold.co/400x250/1a1a2e/ffffff?text=Verification" alt="Verification"/></td>
+</tr>
+</table>
+</div>
+
 
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies (using pnpm recommended)
+# Clone the repository
+git clone https://github.com/ARPANPATRA111/Serenity.git
+cd Serenity
+
+# Install dependencies
 pnpm install
 
-# Copy environment variables
+# Set up environment variables
 cp .env.local.example .env.local
-
-# Configure Firebase and Resend credentials in .env.local
+# Edit .env.local with your Firebase & Brevo credentials
 
 # Start development server
 pnpm dev
-
-# Build for production
-pnpm build
 ```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+
+## 🛠️ Tech Stack
+
+<div>
+
+| Layer | Technology |
+|:-----:|:-----------|
+| **Framework** | Next.js 14 (App Router) |
+| **Language** | TypeScript 5.0 |
+| **Canvas** | Fabric.js 5.3.0 |
+| **State** | Zustand |
+| **Database** | Firebase Firestore |
+| **Auth** | Firebase Auth |
+| **Storage** | Vercel Blob |
+| **Email** | Brevo |
+| **PDF** | jsPDF |
+| **Styling** | Tailwind CSS |
+
+</div>
+
 
 ## 📁 Project Structure
 
 ```
 src/
-├── app/                    # Next.js App Router
-│   ├── api/               # API Routes
-│   │   ├── verify/[id]/   # Certificate verification
-│   │   ├── email/         # Email sending
-│   │   ├── media/         # Media upload/management
-│   │   ├── templates/     # Template CRUD
-│   │   └── leads/         # Lead capture
-│   ├── dashboard/         # User dashboard
-│   ├── editor/            # Certificate editor
-│   ├── templates/         # Template gallery
-│   ├── history/           # Certificate history
-│   ├── settings/          # User settings
-│   └── verify/[id]/       # Public verification page
-├── components/
-│   ├── editor/            # Editor components
-│   │   ├── EditorLayout.tsx
-│   │   ├── FabricCanvasWrapper.tsx
-│   │   ├── LeftSidebar.tsx    # Media Library
-│   │   ├── RightSidebar.tsx
-│   │   ├── PropertiesBar.tsx
-│   │   ├── Toolbar.tsx
-│   │   ├── GenerationModal.tsx
-│   │   └── CertificateInfoModal.tsx  # Certificate metadata
-│   ├── providers/         # Context providers
-│   ├── templates/         # Template components
-│   └── ui/                # Reusable UI components
-├── lib/
-│   ├── fabric/            # Fabric.js utilities
-│   │   ├── VariableTextbox.ts  # Custom textbox class
-│   │   ├── QRCodeImage.ts      # QR code object
-│   │   └── useFabric.ts        # Main canvas hook
-│   ├── excel/             # Excel parsing (SheetJS)
-│   ├── generator/         # Batch generation engine
-│   ├── firebase/          # Firebase configuration
-│   │   ├── client.ts      # Client SDK
-│   │   ├── admin.ts       # Admin SDK
-│   │   ├── storage.ts     # Media storage service
-│   │   └── templates.ts   # Template operations
-│   └── services/          # Application services
-├── store/                 # Zustand state management
-│   ├── editorStore.ts     # Editor state
-│   ├── dataSourceStore.ts # Excel data state
-│   └── generationStore.ts # Generation progress
-└── types/                 # TypeScript definitions
+├── 📂 app/                    # Next.js App Router
+│   ├── 📂 api/               # API Routes (verify, email, templates)
+│   ├── 📂 dashboard/         # User dashboard
+│   ├── 📂 editor/            # Certificate editor
+│   ├── 📂 my-templates/      # Personal templates
+│   ├── 📂 templates/         # Public gallery
+│   ├── 📂 premium/           # Upgrade page
+│   ├── 📂 history/           # Certificate history
+│   ├── 📂 settings/          # User settings
+│   └── 📂 verify/[id]/       # Verification page
+├── 📂 components/
+│   ├── 📂 editor/            # Canvas, Toolbar, Sidebars
+│   ├── 📂 providers/         # Context providers
+│   └── 📂 ui/                # Reusable components
+├── 📂 lib/
+│   ├── 📂 fabric/            # Canvas utilities
+│   ├── 📂 generator/         # Batch processing
+│   └── 📂 firebase/          # Firebase config
+├── 📂 store/                 # Zustand stores
+└── 📂 types/                 # TypeScript types
 ```
 
-## 🏗️ Architecture
 
-### Client-Heavy, Serverless-Light
+## ⚙️ Environment Variables
 
-This application follows a "Client-Heavy" architecture where:
-
-1. **Canvas operations** are managed imperatively via refs, not React state
-2. **PDF generation** happens entirely in the browser
-3. **Batch processing** uses chunked loops with `setTimeout` yielding
-4. **Server** only handles lightweight operations (verification, email rate limiting)
-5. **Media storage** uses Firebase Storage with server-side validation
-
-### Key Components
-
-#### VariableTextbox (`src/lib/fabric/VariableTextbox.ts`)
-Custom Fabric.js class that extends `Textbox` with:
-- `dynamicKey` property for data binding
-- Visual indicators (dashed border) for placeholders
-- Proper serialization via `toObject` override
-
-#### BatchGenerator (`src/lib/generator/BatchGenerator.ts`)
-The "heart" of the application:
-- Processes data rows without blocking UI
-- High-DPI rasterization (4.166x multiplier)
-- Generates PDFs and ZIP archives client-side
-- Progress tracking with cancellation support
-
-#### Media Library (`src/components/editor/LeftSidebar.tsx`)
-User's personal asset library:
-- Firebase Storage integration
-- Drag-and-drop uploads
-- File type and size validation
-- Thumbnail previews
-
-#### Verification API (`src/app/api/verify/[id]/route.ts`)
-Privacy-preserving view counting:
-- IP hashing with daily rotating salt
-- No cookies required
-- Atomic Firestore transactions
-
-## 🎨 Theming
-
-Two themes available via `next-themes`:
-
-### Dark Theme
-- Background: Rich slate gradient
-- Primary: Indigo (`#6366f1`)
-- Secondary: Purple (`#a855f7`)
-- Accent: Pink (`#ec4899`)
-
-### Light Theme
-- Background: Clean white with subtle gradients
-- Primary: Indigo (`#4f46e5`)
-- Secondary: Purple (`#a855f7`)
-- Accent: Pink (`#ec4899`)
-
-## 🔧 Configuration
-
-### Environment Variables
+Create a `.env.local` file in the root directory:
 
 ```env
-# Firebase Client (server-only — injected to client via FirebaseProvider)
-FB_CREDENTIAL=
-FB_AUTH_DOMAIN=
-FB_PROJECT=
-FB_BUCKET=
-FB_SENDER=
-FB_APP=
+# Firebase Client
+FB_CREDENTIAL=your-api-key
+FB_AUTH_DOMAIN=your-project.firebaseapp.com
+FB_PROJECT=your-project-id
+FB_BUCKET=your-project.appspot.com
 
-# Firebase Admin (Server-side)
-FIREBASE_ADMIN_PROJECT_ID=
-FIREBASE_ADMIN_CLIENT_EMAIL=
-FIREBASE_ADMIN_PRIVATE_KEY=
+# Firebase Admin
+FIREBASE_ADMIN_PROJECT_ID=your-project-id
+FIREBASE_ADMIN_CLIENT_EMAIL=firebase-admin@your-project.iam.gserviceaccount.com
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 
-# Vercel Blob (for media storage)
-BLOB_READ_WRITE_TOKEN=
+# Vercel Blob (Media Storage)
+BLOB_READ_WRITE_TOKEN=your-blob-token
 
-# Resend (for email)
-RESEND_API_KEY=
+# Email (Brevo)
+BREVO_API_KEY=your-brevo-api-key
 
-# App
+# App Configuration
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-DAILY_IP_SALT=your-secret-salt
-
-# Rate Limiting
-DAILY_EMAIL_LIMIT=100
 FREE_BULK_EMAIL_LIMIT=5
 ```
 
-## 📦 Dependencies
 
-- **Next.js 14** - React framework with App Router
-- **Fabric.js 5.3.0** - Canvas manipulation (STRICT: not v6)
-- **SheetJS (xlsx)** - Excel/CSV parsing
-- **jsPDF** - PDF generation
-- **JSZip** - ZIP compression
-- **Firebase** - Auth, Firestore, Storage
-- **Resend** - Email delivery
-- **Zustand** - State management
-- **Tailwind CSS** - Styling
-- **next-themes** - Theme switching
+## ⌨️ Keyboard Shortcuts
 
-## 🚧 Freemium Model
+| Shortcut | Action |
+|:--------:|:-------|
+| `Ctrl + S` | Save template |
+| `Ctrl + Z` | Undo |
+| `Ctrl + Y` | Redo |
+| `Ctrl + Q` | Toggle preview |
+| `Delete` | Remove selected |
+| `Alt + Drag` | Pan canvas |
 
-The app implements a "Fake Door" freemium strategy:
-
-1. Free users can generate unlimited certificates
-2. Bulk email sending is limited to 5 recipients
-3. Beyond limits, a `ComingSoonModal` captures leads
-4. Lead events are stored in Firestore for analysis
-
-## 🔮 Roadmap
-
-### Planned Features
-- [ ] Template marketplace
-- [ ] Team collaboration
-- [ ] Advanced analytics dashboard
-- [ ] Mobile application
-- [ ] Public API access
-- [ ] Multi-language support
-- [ ] Custom email templates
-- [ ] Version history for templates
-
-See [IMPROVEMENTS.md](./IMPROVEMENTS.md) for detailed improvement plans and suggestions.
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+Contributions make the open-source community amazing! Here's how you can help:
 
-## 📝 License
+1. **🐛 Found a bug?** [Open an issue](https://github.com/ARPANPATRA111/Serenity/issues/new)
+2. **💡 Have an idea?** [Request a feature](https://github.com/ARPANPATRA111/Serenity/issues/new)
+3. **🔧 Want to contribute?** Follow the steps below:
 
-MIT
+```bash
+# Fork the repository
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/Serenity.git
+
+# Create a feature branch
+git checkout -b feature/amazing-feature
+
+# Make your changes and commit
+git commit -m "feat: add amazing feature"
+
+# Push and create a Pull Request
+git push origin feature/amazing-feature
+```
+
+Please ensure:
+- ✅ Code follows existing conventions
+- ✅ TypeScript types are properly defined
+- ✅ `pnpm build` passes without errors
+- ✅ PR references the related issue
+
+
+## 📜 Roadmap
+
+See [Improvements.md](./Improvements.md) for planned improvements and the development roadmap.
+
+**Upcoming Features:**
+- 🏷️ Template categories & search
+- 📤 PNG/JPG export options
+- 📊 Analytics dashboard
+- 🌐 Multi-language support
+- 🤖 AI-powered suggestions
+
+
+## 📄 License
+
+Distributed under the **MIT License**. See `LICENSE` for more information.
+
+
+<div align="center">
+
+### ⭐ Star this repo if you find it useful!
+
+Made with ❤️ by [Arpan Patra](https://github.com/ARPANPATRA111)
+
+[![GitHub](https://img.shields.io/badge/GitHub-ARPANPATRA111-181717?style=for-the-badge&logo=github)](https://github.com/ARPANPATRA111)
+
+</div>
