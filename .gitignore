@@ -51,6 +51,7 @@ firestore-debug.log
 *.ps1
 arpan.md
 I.md
+.excalidraw
 
 # Login to Firebase
 firebase login

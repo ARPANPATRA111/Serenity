@@ -1,6 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 
+// GET - Fetch user profile
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('id');
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Missing user ID' }, { status: 400 });
+    }
+
+    const db = getAdminFirestore();
+    const userDoc = await db.collection('users').doc(userId).get();
+
+    if (!userDoc.exists) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    const userData = userDoc.data();
+    
+    // Check if account is deleted
+    if (userData?.isDeleted) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      user: {
+        id: userData?.id,
+        name: userData?.name,
+        email: userData?.email,
+        avatar: userData?.avatar,
+        isPremium: userData?.isPremium || false,
+        certificatesGenerated: userData?.certificatesGenerated || 0,
+      }
+    });
+  } catch (error) {
+    console.error('[API Users] Error fetching user:', error);
+    return NextResponse.json({ success: false, error: 'Failed to fetch user' }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -39,6 +80,8 @@ export async function POST(request: NextRequest) {
         name: name || email.split('@')[0],
         avatar: avatar || null,
         emailVerified: emailVerified || false,
+        isPremium: false,
+        certificatesGenerated: 0,
         createdAt: new Date(),
         lastLoginAt: new Date(),
       });

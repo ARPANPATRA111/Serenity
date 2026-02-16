@@ -23,10 +23,9 @@ interface UserSettings {
 }
 
 export default function SettingsPage() {
-  const { user, logout, isLoading: authLoading, updateUser, deleteAccount } = useAuth();
+  const { user, logout, isLoading: authLoading, updateUser } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings>({
@@ -77,32 +76,6 @@ export default function SettingsPage() {
       setTimeout(() => setSaveStatus('idle'), 3000);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete your account? Your account will be deactivated and you will be logged out.'
-    );
-    
-    if (confirmed) {
-      const doubleConfirm = window.confirm(
-        'This is your final confirmation. Your account will be deactivated. Contact support to restore it later. Continue?'
-      );
-      
-      if (doubleConfirm) {
-        setDeleteLoading(true);
-        setErrorMessage(null);
-        
-        try {
-          await deleteAccount();
-          // deleteAccount already handles redirect to home
-        } catch (error: any) {
-          console.error('Error deleting account:', error);
-          setErrorMessage(error.message || 'Failed to delete account');
-          setDeleteLoading(false);
-        }
-      }
     }
   };
 
@@ -221,37 +194,6 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
-          </section>
-
-          {/* Danger Zone */}
-          <section className="card border-red-500/20">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
-                <Trash2 className="h-5 w-5 text-red-500" />
-              </div>
-              <div>
-                <h2 className="font-display text-lg font-semibold text-red-500">Danger Zone</h2>
-                <p className="text-sm text-muted-foreground">Irreversible actions</p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleDeleteAccount}
-              disabled={deleteLoading}
-              className="px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {deleteLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                'Delete Account'
-              )}
-            </button>
-            <p className="mt-2 text-xs text-muted-foreground">
-              This will deactivate your account. Contact support to restore it.
-            </p>
           </section>
 
           {/* Save Button */}

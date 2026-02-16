@@ -16,7 +16,10 @@ export interface CertificateMetadata {
   title: string;
   issuedBy: string;
   description: string;
+  category?: string;
 }
+
+export type LeftSidebarTab = 'media' | 'colors' | 'effects';
 
 export interface EditorState {
   selectedObject: fabric.Object | null;
@@ -26,6 +29,7 @@ export interface EditorState {
   canvasDimensions: { width: number; height: number };
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
+  leftSidebarTab: LeftSidebarTab;
   historyIndex: number;
   historyLength: number;
   canUndo: boolean;
@@ -46,6 +50,7 @@ export interface EditorState {
   setCanvasDimensions: (dims: { width: number; height: number }) => void;
   setLeftSidebarOpen: (open: boolean) => void;
   setRightSidebarOpen: (open: boolean) => void;
+  setLeftSidebarTab: (tab: LeftSidebarTab) => void;
   pushHistory: (json: string) => void;
   setHistoryState: (canUndo: boolean, canRedo: boolean) => void;
   setClipboard: (obj: fabric.Object | null) => void;
@@ -70,6 +75,7 @@ const initialState = {
   canvasDimensions: { width: 842, height: 595 },
   leftSidebarOpen: true,
   rightSidebarOpen: true,
+  leftSidebarTab: 'media' as LeftSidebarTab,
   historyIndex: -1,
   historyLength: 0,
   canUndo: false,
@@ -108,6 +114,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setLeftSidebarOpen: (open) => set({ leftSidebarOpen: open }),
   setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
+  setLeftSidebarTab: (tab) => set({ leftSidebarTab: tab }),
 
   pushHistory: () => {
     const { historyIndex } = get();

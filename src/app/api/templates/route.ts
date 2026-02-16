@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    const { name, canvasJSON, thumbnail, userId, isPublic, creatorName, creatorEmail, tags, certificateMetadata } = body;
+    const { name, canvasJSON, thumbnail, userId, isPublic, creatorName, creatorEmail, tags, certificateMetadata, category } = body;
 
     if (!name || !canvasJSON) {
       return NextResponse.json(
@@ -91,6 +91,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check for duplicate template name for this user
+    if (userId) {
+      const existingTemplates = await getUserTemplates(userId);
+      const duplicateName = existingTemplates.find(
+        t => t.name.toLowerCase().trim() === name.toLowerCase().trim()
+      );
+      if (duplicateName) {
+        return NextResponse.json(
+          { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
+          { status: 400 }
+        );
+      }
+    }
+
     const template = await createTemplate({
       name,
       canvasJSON,
@@ -100,6 +114,7 @@ export async function POST(request: NextRequest) {
       creatorName,
       creatorEmail,
       tags: tags || [],
+      category,
       certificateMetadata,
     });
 

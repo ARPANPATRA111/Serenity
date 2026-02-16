@@ -399,17 +399,22 @@ export function useFabric(
     historyRef.current.push(json);
     historyIndexRef.current = historyRef.current.length - 1;
 
-    // Keep history manageable (max 3 states for quick undo/redo)
-    if (historyRef.current.length > 3) {
+    // Keep history manageable (max 50 states)
+    if (historyRef.current.length > 50) {
       historyRef.current.shift();
       historyIndexRef.current--;
     }
+
+    // Update undo/redo button states
+    const canUndoNow = historyIndexRef.current > 0;
+    const canRedoNow = false; // After a new action, no redo available
+    setHistoryState(canUndoNow, canRedoNow);
 
     pushHistory(json);
     
     // Auto-save to localStorage
     autoSaveToLocalStorage(json);
-  }, [pushHistory, autoSaveToLocalStorage]);
+  }, [pushHistory, autoSaveToLocalStorage, setHistoryState]);
 
   const restoreFromAutoSave = useCallback((canvas: fabric.Canvas) => {
     if (typeof window === 'undefined') return;

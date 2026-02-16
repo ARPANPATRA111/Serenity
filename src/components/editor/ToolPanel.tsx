@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Crown } from 'lucide-react';
 
 interface ToolPanelProps {
   title: string;
@@ -79,18 +79,34 @@ interface ToolPanelItemProps {
   onClick: () => void;
   disabled?: boolean;
   shortcut?: string;
+  premium?: boolean;
+  isPremiumUser?: boolean;
 }
 
-export function ToolPanelItem({ icon: Icon, label, onClick, disabled, shortcut }: ToolPanelItemProps) {
+export function ToolPanelItem({ icon: Icon, label, onClick, disabled, shortcut, premium, isPremiumUser }: ToolPanelItemProps) {
+  const isBlocked = premium && !isPremiumUser;
+  
+  const handleClick = () => {
+    if (isBlocked) {
+      // Show a brief tooltip or redirect
+      alert('This is a premium element. Upgrade to Premium to unlock all design elements.');
+      return;
+    }
+    onClick();
+  };
+
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
       disabled={disabled}
-      className="flex items-center justify-between w-full gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className={`flex items-center justify-between w-full gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isBlocked ? 'opacity-70' : ''}`}
     >
       <div className="flex items-center gap-2.5">
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon className={`h-4 w-4 ${isBlocked ? 'text-amber-500' : 'text-muted-foreground'}`} />
         <span>{label}</span>
+        {premium && (
+          <Crown className="h-3 w-3 text-amber-500 shrink-0" />
+        )}
       </div>
       {shortcut && (
         <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{shortcut}</span>

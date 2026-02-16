@@ -54,13 +54,16 @@ import {
   Plus,
   Pencil,
   Check,
+  QrCode,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { ToolPanel, ToolPanelItem, ToolPanelDivider, ToolPanelSection } from './ToolPanel';
+import { useAuth } from '@/contexts/AuthContext';
+import { createQRCodeImage, findQRCodeImage } from '@/lib/fabric';
 
 interface ToolbarProps {
-  onSave?: () => Promise<void>;
+  onSave?: () => Promise<{ success: boolean; error?: string } | void>;
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   onGenerate?: () => void;
   onPreview?: () => void;
@@ -69,6 +72,8 @@ interface ToolbarProps {
 
 export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, onOpenCertificateInfo }: ToolbarProps) {
   const { fabricInstance } = useFabricContext();
+  const { user } = useAuth();
+  const isPremiumUser = user?.isPremium === true;
   const { 
     canUndo, canRedo, 
     selectedObject,
@@ -89,13 +94,13 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
   const [borderColor, setBorderColor] = useState('#d4af37');
   const { rows, getPreviewRow, previewRowIndex } = useDataSourceStore();
 
-  // Sync canvas background color with fabric instance
+  // Sync canvas background color with fabric instance (including after undo/redo)
   useEffect(() => {
     if (fabricInstance) {
       const currentBg = fabricInstance.getBackgroundColor?.() || '#ffffff';
       setCanvasBackgroundColor(currentBg);
     }
-  }, [fabricInstance]);
+  }, [fabricInstance, canUndo, canRedo]); // Re-sync when undo/redo state changes
 
   useEffect(() => {
     if (!isPreviewMode || !fabricInstance) return;
@@ -109,6 +114,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     const objects = canvas.getObjects();
     
     objects.forEach((obj: any, index: number) => {
+      // Skip verification URL objects - they are handled separately and should keep their preview URL
+      if (obj.isVerificationUrl) return;
+      
       const objId = `obj_${index}`;
       const originalText = previewOriginalTexts.get(objId);
       const objType = obj.type?.toLowerCase() || '';
@@ -279,6 +287,48 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     closePanels();
   }, [fabricInstance, isPreviewMode]);
 
+  // Add QR Code
+  const handleAddQRCode = useCallback(async () => {
+    if (isPreviewMode) return;
+    const canvas = fabricInstance?.getCanvas();
+    if (!canvas) return;
+
+    // Check if a QR code already exists
+    const existingQR = findQRCodeImage(canvas);
+    if (existingQR) {
+      alert('A QR code already exists on the canvas. Only one QR code is allowed per certificate.');
+      canvas.setActiveObject(existingQR);
+      canvas.requestRenderAll();
+      return;
+    }
+
+    // Create a placeholder QR code with a sample verification ID
+    const placeholderVerificationId = 'sample-verification-id';
+    try {
+      const qrImage = await createQRCodeImage(placeholderVerificationId, {
+        size: 100,
+      });
+      
+      // Position it in the bottom-right area of the canvas
+      const canvasWidth = canvas.getWidth();
+      const canvasHeight = canvas.getHeight();
+      qrImage.set({
+        left: canvasWidth - 80,
+        top: canvasHeight - 80,
+        scaleX: 0.5,
+        scaleY: 0.5,
+      });
+
+      canvas.add(qrImage);
+      canvas.setActiveObject(qrImage);
+      canvas.requestRenderAll();
+      pushHistory(JSON.stringify(canvas.toJSON()));
+    } catch (error) {
+      console.error('Failed to add QR code:', error);
+      alert('Failed to add QR code. Please try again.');
+    }
+  }, [fabricInstance, isPreviewMode, pushHistory]);
+
   // Drawing mode
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [brushColor, setBrushColor] = useState('#000000');
@@ -356,18 +406,18 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     const activeObjects = canvas?.getActiveObjects();
     
     if (activeObjects && activeObjects.length > 0) {
-      // Filter out verification URL objects - they cannot be deleted
-      const deletableObjects = activeObjects.filter((obj: any) => !obj.isVerificationUrl);
+      // Filter out verification URL objects and locked objects - they cannot be deleted
+      const deletableObjects = activeObjects.filter((obj: any) => !obj.isVerificationUrl && !obj.isLocked);
       
       if (deletableObjects.length === 0) {
-        // All selected objects are verification URLs
-        alert('The Verification URL tag cannot be deleted. It is required for certificate validation.');
+        // All selected objects are verification URLs or locked
+        alert('Cannot delete: the selected element(s) are locked or required (Verification URL).');
         return;
       }
       
       if (deletableObjects.length !== activeObjects.length) {
         // Some objects were filtered out
-        alert('Note: The Verification URL tag cannot be deleted and was skipped.');
+        alert('Note: Locked elements and the Verification URL tag were skipped.');
       }
       
       canvas?.discardActiveObject();
@@ -557,11 +607,29 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
   const handleSendToBack = useCallback(() => {
     const canvas = fabricInstance?.getCanvas();
     const activeObject = canvas?.getActiveObject();
-    if (activeObject) {
-      activeObject.sendToBack();
-      canvas?.requestRenderAll();
-      pushHistory(JSON.stringify(canvas?.toJSON()));
+    if (!canvas || !activeObject) return;
+
+    // Get the index of the topmost helper element (innerClear, outerShade, boundary)
+    const objects = canvas.getObjects();
+    let minNonHelperIndex = 0;
+    for (let i = 0; i < objects.length; i++) {
+      const obj = objects[i] as any;
+      if (obj.isInnerClear || obj.isOuterShade || obj.isBoundary) {
+        minNonHelperIndex = i + 1;
+      }
     }
+
+    // Send to back but keep above helper elements
+    activeObject.sendToBack();
+    
+    // Move back above helper elements
+    const currentIndex = objects.indexOf(activeObject);
+    if (currentIndex < minNonHelperIndex) {
+      canvas.moveTo(activeObject, minNonHelperIndex);
+    }
+    
+    canvas.requestRenderAll();
+    pushHistory(JSON.stringify(canvas?.toJSON()));
   }, [fabricInstance, pushHistory]);
 
    const handleFlipHorizontal = useCallback(() => {
@@ -605,9 +673,37 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         lockRotation: !isLocked,
         lockScalingX: !isLocked,
         lockScalingY: !isLocked,
-      });
+        hasControls: isLocked, // Show controls when unlocking, hide when locking
+        editable: isLocked, // Allow text editing when unlocking
+        selectable: true, // Keep selectable so user can unlock later
+        hoverCursor: !isLocked ? 'not-allowed' : 'move',
+        isLocked: !isLocked, // Custom property for serialization
+      } as any);
+
+      // Visual lock indicator - outline style
+      if (!isLocked) {
+        // Locking - add visual indicator
+        activeObject.set({
+          borderColor: '#ef4444',
+          borderDashArray: [6, 3],
+          cornerColor: '#ef4444',
+          transparentCorners: true,
+        });
+      } else {
+        // Unlocking - restore normal style
+        activeObject.set({
+          borderColor: '#3b82f6',
+          borderDashArray: undefined,
+          cornerColor: '#3b82f6',
+          transparentCorners: false,
+          hasControls: true,
+        });
+      }
+
       canvas?.discardActiveObject(); // Deselect to visually update handles
       canvas?.requestRenderAll();
+      // Trigger object:modified to save to history
+      canvas?.fire('object:modified', { target: activeObject } as any);
     }
   }, [fabricInstance]);
 
@@ -686,7 +782,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         </Link>
         
         {/* Template Name Input */}
-        <div className="flex flex-col justify-center min-w-0 flex-shrink mx-1 sm:mx-2">
+        <div className="flex items-center gap-2 min-w-0 flex-shrink mx-1 sm:mx-2">
            <input 
              type="text" 
              value={templateName} 
@@ -695,6 +791,12 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
              className="h-5 sm:h-6 min-w-12 sm:min-w-20 w-full max-w-24 sm:max-w-48 rounded border-transparent bg-transparent px-1 text-xs sm:text-sm font-semibold hover:border-border hover:bg-muted focus:border-primary focus:bg-background focus:outline-none disabled:opacity-50"
              placeholder="Untitled"
            />
+           {isPremiumUser && !isPreviewMode && (
+             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400/20 to-orange-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-semibold whitespace-nowrap" title="Premium features enabled">
+               <Star className="h-3 w-3 fill-current" />
+               PRO
+             </span>
+           )}
         </div>
 
         <div className="toolbar-divider" />
@@ -711,6 +813,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
 
         <button onClick={handleAddImage} className="toolbar-button" title="Add Image" disabled={isPreviewMode}>
           <ImageIcon />
+        </button>
+
+        <button onClick={handleAddQRCode} className="toolbar-button" title="Add QR Code (for verification)" disabled={isPreviewMode}>
+          <QrCode />
         </button>
 
         <button
@@ -754,6 +860,14 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
           disabled={!isObjectSelected || isPreviewMode}
         >
           <Trash2 />
+        </button>
+        <button
+          onClick={handleToggleLock}
+          className={`toolbar-button ${isLocked ? 'bg-red-500/20 text-red-500' : ''}`}
+          title={isLocked ? 'Unlock Element' : 'Lock Element'}
+          disabled={!isObjectSelected || isPreviewMode}
+        >
+          {isLocked ? <Unlock /> : <Lock />}
         </button>
 
         {/* Spacer */}
@@ -901,6 +1015,11 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         <ToolPanelItem icon={Heart} label="Heart" onClick={() => handleAddShape('heart')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Plus} label="Cross" onClick={() => handleAddShape('cross')} disabled={isPreviewMode} />
         <ToolPanelDivider />
+        <ToolPanelSection title="Premium Shapes" />
+        <ToolPanelItem icon={Star} label="Gold Star" onClick={() => handleAddShape('star')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
+        <ToolPanelItem icon={Diamond} label="Gold Diamond" onClick={() => handleAddShape('diamond')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
+        <ToolPanelItem icon={Hexagon} label="Gold Hexagon" onClick={() => handleAddShape('hexagon')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
+        <ToolPanelDivider />
         <ToolPanelSection title="Lines" />
         <ToolPanelItem icon={Minus} label="Line" onClick={() => handleAddShape('line')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Minus} label="Dashed Line" onClick={() => handleAddShape('dashedLine')} disabled={isPreviewMode} />
@@ -916,6 +1035,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         <ToolPanelItem icon={Square} label="Double" onClick={() => handleAddBorder('double')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Square} label="Ornate" onClick={() => handleAddBorder('ornate')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Square} label="Gold Frame" onClick={() => handleAddBorder('gold')} disabled={isPreviewMode} />
+        <ToolPanelDivider />
+        <ToolPanelSection title="Premium Borders" />
+        <ToolPanelItem icon={Square} label="Ornate Gold" onClick={() => handleAddBorder('ornate')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
+        <ToolPanelItem icon={Square} label="Corner Frame" onClick={() => handleAddBorder('corner')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
       </ToolPanel>
 
       <ToolPanel title="Alignment" isOpen={openDropdown === 'align'} onClose={closePanels}>

@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { FirebaseProvider } from '@/components/providers/FirebaseProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { Analytics } from '@vercel/analytics/next';
 import type { FirebaseConfig } from '@/lib/firebase/client';
 import './globals.css';
 
@@ -59,6 +60,7 @@ export default function RootLayout({
           <FirebaseProvider config={firebaseConfig}>
             <AuthProvider>
               {children}
+              <Analytics />
             </AuthProvider>
           </FirebaseProvider>
         </ThemeProvider>

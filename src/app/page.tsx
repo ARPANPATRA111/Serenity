@@ -258,15 +258,15 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ delay: 0.15, type: "spring", stiffness: 200 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 border border-primary/30 mb-8 shadow-lg shadow-primary/10"
+            className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 border border-primary/30 mb-6 sm:mb-8 shadow-lg shadow-primary/10"
           >
             <motion.div
               animate={{ rotate: [0, 15, -15, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
             >
-              <Sparkles className="w-4 h-4 text-primary" />
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
             </motion.div>
-            <span className="text-xs sm:text-sm font-bold text-primary uppercase tracking-wide">Version 2.0 — QR Verification</span>
+            <span className="text-xs sm:text-sm font-bold text-primary uppercase tracking-wide">Trusted by Thousands</span>
             <span className="flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
@@ -629,7 +629,113 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Pricing Plans Section */}
       <section className="py-16 sm:py-28">
+        <div className="max-w-5xl mx-auto px-5 sm:px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <span className="inline-block px-4 py-1.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-semibold mb-4 uppercase tracking-wide">
+              Pricing
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-foreground mb-4">Simple, transparent pricing</h2>
+            <p className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto">Start free, upgrade when you need more. One payment, lifetime access.</p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Free Plan */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="relative rounded-2xl border border-border bg-card p-8 shadow-sm"
+            >
+              <h3 className="text-xl font-bold text-foreground">Free</h3>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-4xl font-black text-foreground">$0</span>
+                <span className="text-muted-foreground">/forever</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-3 mb-6">Great for getting started</p>
+              <div className="space-y-3 mb-8">
+                {[
+                  { text: '5 Certificate Generations', ok: true },
+                  { text: 'Basic Templates', ok: true },
+                  { text: 'QR Code Verification', ok: true },
+                  { text: 'CSV Data Import', ok: true },
+                  { text: 'PDF Export', ok: true },
+                  { text: 'Unlimited Generations', ok: false },
+                  { text: 'Premium Templates', ok: false },
+                  { text: 'Email Delivery', ok: false },
+                ].map((f, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    {f.ok
+                      ? <Check className="w-4 h-4 text-green-500 shrink-0" />
+                      : <Lock className="w-4 h-4 text-muted-foreground/40 shrink-0" />}
+                    <span className={f.ok ? 'text-sm text-foreground' : 'text-sm text-muted-foreground line-through'}>{f.text}</span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/signup"
+                className="block w-full py-3 px-6 text-center bg-muted hover:bg-muted/80 text-foreground rounded-xl font-medium transition-colors border border-border"
+              >
+                Get Started Free
+              </Link>
+            </motion.div>
+
+            {/* Premium Plan */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="relative rounded-2xl border-2 border-amber-400 dark:border-amber-600 bg-gradient-to-b from-amber-50 to-card dark:from-amber-900/10 dark:to-card p-8 shadow-xl shadow-amber-200/20 dark:shadow-amber-900/20"
+            >
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
+                  <Star className="w-3.5 h-3.5 fill-white" />
+                  BEST VALUE
+                </div>
+              </div>
+              <h3 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">Premium</h3>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-sm text-muted-foreground line-through">$99</span>
+                <span className="text-4xl font-black bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">$25</span>
+                <span className="text-amber-600 dark:text-amber-400">/lifetime</span>
+              </div>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-3 mb-6 font-medium">Everything unlimited, forever</p>
+              <div className="space-y-3 mb-8">
+                {[
+                  { text: 'Unlimited Generations', highlight: true },
+                  { text: 'All Templates Unlocked', highlight: true },
+                  { text: 'QR Code Verification', highlight: false },
+                  { text: 'CSV Data Import', highlight: false },
+                  { text: 'High-Quality PDF Export', highlight: false },
+                  { text: 'Email Delivery (300/day)', highlight: true },
+                  { text: 'Premium Design Elements', highlight: true },
+                  { text: 'Lifetime Access & Updates', highlight: true },
+                ].map((f, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Check className={`w-4 h-4 shrink-0 ${f.highlight ? 'text-amber-500' : 'text-green-500'}`} />
+                    <span className={`text-sm ${f.highlight ? 'font-semibold text-foreground' : 'text-foreground'}`}>{f.text}</span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/premium"
+                className="block w-full py-3.5 px-6 text-center bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20 hover:shadow-amber-600/25 hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Upgrade to Premium — $25
+              </Link>
+              <p className="text-center text-xs text-muted-foreground mt-3">One-time payment • No subscription</p>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 sm:py-28 bg-muted/30">
         <div className="max-w-3xl mx-auto px-5 sm:px-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -670,6 +776,7 @@ export default function HomePage() {
             <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-muted-foreground">
               <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
               <Link href="/templates" className="hover:text-foreground transition-colors">Templates</Link>
+              <Link href="/premium" className="hover:text-foreground transition-colors">Premium</Link>
               <Link href="/verify" className="hover:text-foreground transition-colors">Verify</Link>
               <span className="hidden sm:inline">•</span>
               <span>© 2026 Serenity</span>

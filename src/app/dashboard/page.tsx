@@ -36,7 +36,8 @@ import {
   MailCheck,
   MailX,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Crown
 } from 'lucide-react';
 import { SkeletonDashboard, Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
 
@@ -513,10 +514,28 @@ export default function DashboardPage() {
                     className="absolute right-0 mt-2 w-56 rounded-xl border border-border bg-card shadow-xl z-50"
                   >
                     <div className="p-3 border-b border-border">
-                      <p className="font-medium truncate">{user?.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{user?.name}</p>
+                        {user?.isPremium && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
+                            <Crown className="h-3 w-3" />
+                            PRO
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
                     </div>
                     <div className="p-2">
+                      {!user?.isPremium && (
+                        <Link
+                          href="/premium"
+                          onClick={() => setShowUserMenu(false)}
+                          className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-colors mb-1"
+                        >
+                          <Crown className="h-4 w-4" />
+                          Upgrade to Premium
+                        </Link>
+                      )}
                       <Link
                         href="/settings"
                         onClick={() => setShowUserMenu(false)}
@@ -553,9 +572,21 @@ export default function DashboardPage() {
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="font-display text-3xl sm:text-4xl font-bold">
-                Welcome back, {user?.name?.split(' ')[0] || 'there'}! 👋
-              </h1>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="font-display text-3xl sm:text-4xl font-bold">
+                  Welcome back, {user?.name?.split(' ')[0] || 'there'}! 👋
+                </h1>
+                {user?.isPremium && (
+                  <motion.span 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-semibold shadow-lg shadow-amber-500/25"
+                  >
+                    <Crown className="h-4 w-4" />
+                    Premium
+                  </motion.span>
+                )}
+              </div>
               <p className="mt-2 text-muted-foreground">
                 {totalCertificates === 0 
                   ? "Get started by creating your first certificate template."
@@ -763,7 +794,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <Link
-                href="/templates"
+                href={templateTab === 'my' ? '/my-templates' : '/templates'}
                 className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
               >
                 View All

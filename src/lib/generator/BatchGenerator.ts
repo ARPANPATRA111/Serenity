@@ -9,6 +9,7 @@ import {
   findQRCodeImage,
   A4_LANDSCAPE,
   HIGH_DPI_MULTIPLIER,
+  generateQRCodeDataURL,
 } from '@/lib/fabric';
 import { yieldToMain } from '@/lib/utils';
 import type { DataRow, CertificateRecord as FirebaseCertificateRecord } from '@/types/fabric.d';
@@ -41,6 +42,8 @@ export interface BatchGenerationResult {
   certificateImageUrls: Map<string, string>;
   certificatePdfBlobs: Map<string, Blob>;
   zipBlob?: Blob;
+  limitReached?: boolean;
+  remaining?: number;
 }
 
 const YIELD_INTERVAL = 10;
@@ -75,6 +78,45 @@ export async function generateBatch(
     certificateImageUrls: new Map(),
     certificatePdfBlobs: new Map(),
   };
+
+  // Check user's certificate generation limit before starting
+  if (userId) {
+    try {
+      const premiumResponse = await fetch(`/api/users/premium?userId=${userId}`);
+      const premiumData = await premiumResponse.json();
+      
+      if (premiumData.success) {
+        const canGenerate = premiumData.canGenerate;
+        const remainingFree = premiumData.remainingFree ?? 5;
+        const isPremium = premiumData.isPremium;
+        
+        if (!isPremium && !canGenerate) {
+          result.success = false;
+          result.errors.push({ 
+            index: -1, 
+            message: 'Free tier limit reached. Upgrade to premium for unlimited certificates.' 
+          });
+          result.limitReached = true;
+          result.remaining = 0;
+          return result;
+        }
+        
+        if (!isPremium && dataRows.length > remainingFree) {
+          result.success = false;
+          result.errors.push({ 
+            index: -1, 
+            message: `You can only generate ${remainingFree} more certificate(s) on the free tier. Upgrade to premium for unlimited certificates.` 
+          });
+          result.limitReached = true;
+          result.remaining = remainingFree;
+          return result;
+        }
+      }
+    } catch (e) {
+      console.warn('[BatchGenerator] Failed to check premium status:', e);
+      // Continue anyway if the check fails - the API will still enforce limits
+    }
+  }
 
   const thumbnailMap: Map<string, string> = new Map();
 
@@ -541,9 +583,27 @@ async function updateQRCode(
 ): Promise<void> {
   const qrImage = findQRCodeImage(canvas);
   
-  if (qrImage && typeof qrImage.updateVerificationId === 'function') {
-    await qrImage.updateVerificationId(certificateId);
-  }
+  if (!qrImage) return;
+  
+  // Get existing style properties (fall back to defaults)
+  const qrColor = qrImage.qrColor || '#000000';
+  const qrBackgroundColor = qrImage.qrBackgroundColor || '#ffffff';
+  
+  // Generate new QR code with the actual certificate ID
+  const newDataUrl = await generateQRCodeDataURL(certificateId, 200, qrColor, qrBackgroundColor);
+  
+  // Replace the image element
+  return new Promise<void>((resolve) => {
+    fabric.Image.fromURL(newDataUrl, (newImg) => {
+      if (newImg && newImg.getElement()) {
+        qrImage.setElement(newImg.getElement() as HTMLImageElement);
+        // Update the verificationId property
+        qrImage.verificationId = certificateId;
+        canvas.requestRenderAll();
+      }
+      resolve();
+    });
+  });
 }
 
 async function dataURLToBlob(dataURL: string): Promise<Blob> {

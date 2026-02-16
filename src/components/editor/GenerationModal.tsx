@@ -10,12 +10,13 @@ import { useGenerationStore } from '@/store/generationStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateBatch, downloadZip } from '@/lib/generator';
-import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight } from 'lucide-react';
+import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Crown, Lock } from 'lucide-react';
+import Link from 'next/link';
 
 interface GenerationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave?: () => Promise<void> | void;
+  onSave?: () => Promise<{ success: boolean; error?: string }>;
 }
 
 type GenerationStep = 'configure' | 'generating' | 'emailing' | 'complete';
@@ -57,6 +58,10 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [emailResults, setEmailResults] = useState<EmailResult[]>([]);
   const [emailProgress, setEmailProgress] = useState({ current: 0, total: 0 });
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [premiumCheck, setPremiumCheck] = useState<{ loading: boolean; canGenerate: boolean; remaining: number; isPremium: boolean }>({
+    loading: true, canGenerate: true, remaining: 5, isPremium: false,
+  });
 
   // Find email-like columns in headers
   const emailColumns = useMemo(() => {
@@ -98,6 +103,29 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       setEmailResults([]);
       setEmailProgress({ current: 0, total: 0 });
       setSendEmails(false);
+      setSaveError(null);
+      
+      // Check premium status
+      if (user?.id) {
+        setPremiumCheck(prev => ({ ...prev, loading: true }));
+        fetch(`/api/users/premium?userId=${user.id}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              setPremiumCheck({
+                loading: false,
+                canGenerate: data.canGenerate,
+                remaining: data.remainingFree ?? 5,
+                isPremium: data.isPremium,
+              });
+            } else {
+              setPremiumCheck({ loading: false, canGenerate: true, remaining: 5, isPremium: false });
+            }
+          })
+          .catch(() => {
+            setPremiumCheck({ loading: false, canGenerate: true, remaining: 5, isPremium: false });
+          });
+      }
       
       if (headers.length > 0 && !nameField) {
         const nameColumn = headers.find((h) =>
@@ -110,7 +138,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
         setEmailField(emailColumns[0]);
       }
     }
-  }, [isOpen, headers, reset, emailColumns, nameField, emailField]);
+  }, [isOpen, headers, reset, emailColumns, nameField, emailField, user?.id]);
 
   // Only title and issuedBy are required - description is optional
   const isCertificateInfoComplete = certificateMetadata.title.trim() && 
@@ -123,11 +151,15 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       return;
     }
 
+    // Clear any previous save error
+    setSaveError(null);
+
+    // Save the template first - generation requires a saved template
     if (onSave) {
-      try {
-        await onSave();
-      } catch (e) {
-        console.warn('Failed to auto-save before generation:', e);
+      const saveResult = await onSave();
+      if (!saveResult.success) {
+        setSaveError(saveResult.error || 'Failed to save template. Please fix the issue and try again.');
+        return; // Block generation if save fails
       }
     }
 
@@ -160,7 +192,37 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       isCancelled: () => isCancelled,
     });
 
+    // Check if limit was reached
+    if (result.limitReached) {
+      complete();
+      // Update premium check state to reflect the limit
+      setPremiumCheck(prev => ({
+        ...prev,
+        canGenerate: false,
+        remaining: result.remaining ?? 0,
+      }));
+      setStep('configure'); // Go back to configure to show the limit error
+      return;
+    }
+
     complete();
+
+    // Increment certificate generation counter for the user
+    if (user?.id && result.certificateIds.length > 0) {
+      try {
+        await fetch(`/api/users/premium`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            action: 'incrementCount',
+            count: result.certificateIds.length,
+          }),
+        });
+      } catch (e) {
+        console.warn('Failed to update generation count:', e);
+      }
+    }
 
     if (result.zipBlob) {
       setResultBlob(result.zipBlob);
@@ -454,6 +516,53 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             </div>
           )}
 
+          {/* Free Tier Limit Warning */}
+          {!premiumCheck.loading && !premiumCheck.canGenerate && (
+            <div className="rounded-lg border-2 border-amber-500/50 bg-gradient-to-br from-amber-500/10 to-orange-500/10 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20">
+                  <Crown className="h-5 w-5 text-amber-500" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-foreground">Free Limit Reached</h4>
+                  <p className="text-sm text-muted-foreground">You&apos;ve used all 5 free certificate generations</p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Upgrade to <strong className="text-amber-600 dark:text-amber-400">Premium</strong> for unlimited certificate generation and email delivery (up to 300/day).
+              </p>
+              <Link
+                href="/premium"
+                className="flex items-center justify-center gap-2 w-full rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:opacity-90 transition-opacity"
+              >
+                <Crown className="h-4 w-4" />
+                Upgrade to Premium — $25 Lifetime
+              </Link>
+            </div>
+          )}
+
+          {/* Free Tier Remaining Info */}
+          {!premiumCheck.loading && premiumCheck.canGenerate && !premiumCheck.isPremium && (
+            <div className="flex items-center gap-2 rounded-lg bg-blue-500/10 border border-blue-500/20 p-3">
+              <Info className="h-4 w-4 text-blue-500 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                Free plan: <strong>{premiumCheck.remaining}</strong> generation{premiumCheck.remaining !== 1 ? 's' : ''} remaining.{' '}
+                <Link href="/premium" className="text-primary hover:underline font-medium">Upgrade for unlimited</Link>
+              </p>
+            </div>
+          )}
+
+          {/* Save Error Alert */}
+          {saveError && (
+            <div className="flex items-start gap-3 rounded-lg bg-destructive/10 border border-destructive/30 p-3">
+              <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-destructive">Cannot Generate Certificates</p>
+                <p className="text-xs text-destructive/80 mt-1">{saveError}</p>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleClose} className="flex-1">
@@ -462,9 +571,15 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             <Button 
               onClick={handleGenerate} 
               className="flex-1"
-              disabled={!isCertificateInfoComplete}
+              disabled={!isCertificateInfoComplete || premiumCheck.loading || !premiumCheck.canGenerate}
             >
-              Start Generation
+              {premiumCheck.loading ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking...</>
+              ) : !premiumCheck.canGenerate ? (
+                <><Lock className="mr-2 h-4 w-4" /> Upgrade Required</>
+              ) : (
+                'Start Generation'
+              )}
             </Button>
           </div>
         </div>

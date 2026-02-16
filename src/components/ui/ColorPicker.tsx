@@ -158,6 +158,9 @@ export function ColorPicker({
   showOpacity = false,
   onPreviewColor 
 }: ColorPickerProps) {
+  // Safely normalize value to always be a valid color string
+  const normalizedValue = (typeof value === 'string' && value.trim()) ? value : '#000000';
+  
   const [isOpen, setIsOpen] = useState(false);
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'presets' | 'recent'>('presets');
@@ -298,12 +301,12 @@ export function ColorPicker({
           }}
           onMouseDown={(e) => e.stopPropagation()}
           className={`relative ${sizeClasses[size]} rounded-lg border-2 border-border hover:border-primary/50 transition-all overflow-hidden group`}
-          style={{ backgroundColor: value }}
-          title={`${label}: ${value}`}
+          style={{ backgroundColor: normalizedValue }}
+          title={`${label}: ${normalizedValue}`}
         >
           <span 
             className="absolute inset-0 ring-1 ring-inset ring-black/10" 
-            style={{ backgroundColor: value }} 
+            style={{ backgroundColor: normalizedValue }} 
           />
           <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
             <ChevronDown className="w-3 h-3 text-white drop-shadow-md" />
@@ -314,7 +317,7 @@ export function ColorPicker({
         <input
           ref={colorInputRef}
           type="color"
-          value={value}
+          value={normalizedValue}
           onChange={(e) => handleColorChange(e.target.value)}
           className="sr-only"
         />
@@ -344,13 +347,13 @@ export function ColorPicker({
           <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
             <div 
               className="w-14 h-14 rounded-lg border-2 border-border shadow-inner"
-              style={{ backgroundColor: value }}
+              style={{ backgroundColor: normalizedValue }}
             />
             <div className="flex-1">
               <div className="text-sm font-semibold mb-1">{label}</div>
               <input
                 type="text"
-                value={value}
+                value={normalizedValue}
                 onChange={(e) => {
                   const newValue = e.target.value;
                   if (/^#[0-9A-Fa-f]{0,6}$/.test(newValue)) {
@@ -379,14 +382,14 @@ export function ColorPicker({
                   onMouseEnter={() => handlePreviewEnter(color)}
                   onMouseLeave={handlePreviewLeave}
                   className={`w-7 h-7 rounded-lg border-2 transition-all hover:scale-110 ${
-                    value.toLowerCase() === color.toLowerCase() 
+                    normalizedValue.toLowerCase() === color.toLowerCase() 
                       ? 'border-primary ring-2 ring-primary/30 scale-110' 
                       : 'border-gray-200 dark:border-gray-700 hover:border-primary/50'
                   }`}
                   style={{ backgroundColor: color }}
                   title={color}
                 >
-                  {value.toLowerCase() === color.toLowerCase() && (
+                  {normalizedValue.toLowerCase() === color.toLowerCase() && (
                     <Check className={`w-3 h-3 mx-auto ${color === '#ffffff' || color === '#fefce8' ? 'text-gray-800' : 'text-white'}`} />
                   )}
                 </button>
@@ -440,7 +443,7 @@ export function ColorPicker({
                           onMouseEnter={() => handlePreviewEnter(color)}
                           onMouseLeave={handlePreviewLeave}
                           className={`w-6 h-6 rounded-md border transition-all hover:scale-110 ${
-                            value.toLowerCase() === color.toLowerCase() 
+                            normalizedValue.toLowerCase() === color.toLowerCase() 
                               ? 'border-primary ring-2 ring-primary/30 scale-110' 
                               : 'border-gray-200 dark:border-gray-700 hover:border-primary/50'
                           }`}
@@ -464,14 +467,14 @@ export function ColorPicker({
                         onMouseEnter={() => handlePreviewEnter(color)}
                         onMouseLeave={handlePreviewLeave}
                         className={`w-9 h-9 rounded-lg border-2 transition-all hover:scale-110 ${
-                          value.toLowerCase() === color.toLowerCase() 
+                          normalizedValue.toLowerCase() === color.toLowerCase() 
                             ? 'border-primary ring-2 ring-primary/30 scale-110' 
                             : 'border-gray-200 dark:border-gray-700 hover:border-primary/50'
                         }`}
                         style={{ backgroundColor: color }}
                         title={color}
                       >
-                        {value.toLowerCase() === color.toLowerCase() && (
+                        {normalizedValue.toLowerCase() === color.toLowerCase() && (
                           <Check className={`w-4 h-4 mx-auto ${isLightColor(color) ? 'text-gray-800' : 'text-white'}`} />
                         )}
                       </button>

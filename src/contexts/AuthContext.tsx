@@ -23,6 +23,8 @@ interface User {
   name: string;
   avatar?: string;
   emailVerified: boolean;
+  isPremium: boolean;
+  certificatesGenerated: number;
 }
 
 interface AuthContextValue {
@@ -38,6 +40,7 @@ interface AuthContextValue {
   forgotPassword: (email: string) => Promise<void>;
   updateUser: (updates: { name?: string }) => Promise<void>;
   deleteAccount: () => Promise<void>;
+  refreshPremiumStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -104,7 +107,46 @@ function mapFirebaseUser(firebaseUser: FirebaseUser, displayName?: string): User
     name: displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
     avatar: firebaseUser.photoURL || undefined,
     emailVerified: firebaseUser.emailVerified,
+    isPremium: false,
+    certificatesGenerated: 0,
   };
+}
+
+// Fetch user profile from Firestore (includes updated name, etc.)
+async function fetchUserProfile(userId: string): Promise<{ name?: string; avatar?: string } | null> {
+  try {
+    const response = await fetch(`/api/users?id=${userId}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.user) {
+        return {
+          name: data.user.name,
+          avatar: data.user.avatar,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('[Auth] Error fetching user profile:', error);
+  }
+  return null;
+}
+
+async function fetchPremiumStatus(userId: string): Promise<{ isPremium: boolean; certificatesGenerated: number }> {
+  try {
+    const response = await fetch(`/api/users/premium?userId=${userId}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        return {
+          isPremium: data.isPremium || false,
+          certificatesGenerated: data.certificatesGenerated || 0,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('[Auth] Error fetching premium status:', error);
+  }
+  return { isPremium: false, certificatesGenerated: 0 };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -128,9 +170,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setFirebaseUser(fbUser);
         
         if (fbUser.emailVerified) {
-          const mappedUser = mapFirebaseUser(fbUser);
-          setUser(mappedUser);
+          // Fetch user profile from Firestore first (includes updated name)
+          const userProfile = await fetchUserProfile(fbUser.uid);
+          const mappedUser = mapFirebaseUser(fbUser, userProfile?.name);
           await saveUserViaAPI(mappedUser);
+          // Fetch premium status
+          const premiumInfo = await fetchPremiumStatus(fbUser.uid);
+          setUser({ 
+            ...mappedUser, 
+            ...premiumInfo,
+            avatar: userProfile?.avatar || mappedUser.avatar,
+          });
         } else {
           setUser(null);
         }
@@ -177,8 +227,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const mappedUser = mapFirebaseUser(userCredential.user);
-      setUser(mappedUser);
       await saveUserViaAPI(mappedUser);
+      const premiumInfo = await fetchPremiumStatus(mappedUser.id);
+      setUser({ ...mappedUser, ...premiumInfo });
 
       const oldUserId = generateOldUserIdFromEmail(email);
       if (oldUserId !== mappedUser.id) {
@@ -263,8 +314,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userCredential = await signInWithPopup(auth, provider);
       
       const mappedUser = mapFirebaseUser(userCredential.user);
-      setUser(mappedUser);
       await saveUserViaAPI(mappedUser);
+      const premiumInfo = await fetchPremiumStatus(mappedUser.id);
+      setUser({ ...mappedUser, ...premiumInfo });
 
       if (mappedUser.email) {
         const oldUserId = generateOldUserIdFromEmail(mappedUser.email);
@@ -292,8 +344,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userCredential = await signInWithPopup(auth, provider);
       
       const mappedUser = mapFirebaseUser(userCredential.user);
-      setUser(mappedUser);
       await saveUserViaAPI(mappedUser);
+      const premiumInfo = await fetchPremiumStatus(mappedUser.id);
+      setUser({ ...mappedUser, ...premiumInfo });
 
       if (mappedUser.email) {
         const oldUserId = generateOldUserIdFromEmail(mappedUser.email);
@@ -393,6 +446,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshPremiumStatus = async () => {
+    if (!user) return;
+    const premiumInfo = await fetchPremiumStatus(user.id);
+    setUser(prev => prev ? { ...prev, ...premiumInfo } : null);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -408,6 +467,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         forgotPassword,
         updateUser,
         deleteAccount,
+        refreshPremiumStatus,
       }}
     >
       {children}

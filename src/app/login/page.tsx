@@ -22,7 +22,7 @@ export default function LoginPage() {
   useEffect(() => {
     const message = searchParams?.get('message');
     if (message === 'verification-sent') {
-      setSuccessMessage('A verification email has been sent! Please check your inbox and verify your email before logging in.');
+      setSuccessMessage('A verification email has been sent! Please check your inbox and verify your email before logging in [Check spam folder as well]');
     } else if (message === 'email-verified') {
       setSuccessMessage('Your email has been verified! You can now log in.');
     } else if (message === 'password-reset') {

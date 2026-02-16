@@ -21,6 +21,7 @@ export interface Template {
   creatorEmail?: string;
   stars: number;
   tags?: string[];
+  category?: string;
   certificateMetadata?: CertificateMetadata;
 }
 
@@ -33,6 +34,7 @@ export interface CreateTemplateInput {
   creatorName?: string;
   creatorEmail?: string;
   tags?: string[];
+  category?: string;
   certificateMetadata?: CertificateMetadata;
 }
 
@@ -42,6 +44,7 @@ export interface UpdateTemplateInput {
   thumbnail?: string;
   isPublic?: boolean;
   tags?: string[];
+  category?: string;
   certificateMetadata?: CertificateMetadata;
 }
 
@@ -70,6 +73,7 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
     creatorEmail: input.creatorEmail,
     stars: 0,
     tags: input.tags || [],
+    category: input.category,
     certificateMetadata: input.certificateMetadata,
   };
 
@@ -302,6 +306,11 @@ export async function saveOrUpdateTemplate(
       // Only include tags if defined
       if (createInput.tags !== undefined) {
         updateData.tags = createInput.tags;
+      }
+
+      // Include category if defined
+      if (createInput.category !== undefined) {
+        updateData.category = createInput.category;
       }
 
       // Include certificateMetadata if defined

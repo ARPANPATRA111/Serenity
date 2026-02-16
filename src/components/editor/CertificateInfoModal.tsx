@@ -4,7 +4,18 @@ import { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useEditorStore } from '@/store/editorStore';
-import { Building, FileText, Info, AlertCircle, CheckCircle, Award, Eye, ExternalLink } from 'lucide-react';
+import { Building, FileText, Info, AlertCircle, CheckCircle, Award, Eye, ExternalLink, Tag } from 'lucide-react';
+
+const CATEGORIES = [
+  'Education',
+  'Corporate',
+  'Achievement',
+  'Participation',
+  'Workshop',
+  'Course',
+  'Event',
+  'Other',
+];
 
 interface CertificateInfoModalProps {
   isOpen: boolean;
@@ -17,6 +28,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
   const [title, setTitle] = useState(certificateMetadata.title);
   const [issuedBy, setIssuedBy] = useState(certificateMetadata.issuedBy);
   const [description, setDescription] = useState(certificateMetadata.description);
+  const [category, setCategory] = useState(certificateMetadata.category || '');
   const [errors, setErrors] = useState<{ title?: string; issuedBy?: string }>({});
   const [showPreview, setShowPreview] = useState(false);
 
@@ -25,6 +37,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
       setTitle(certificateMetadata.title);
       setIssuedBy(certificateMetadata.issuedBy);
       setDescription(certificateMetadata.description);
+      setCategory(certificateMetadata.category || '');
       setErrors({});
       setShowPreview(false);
     }
@@ -41,7 +54,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
       newErrors.issuedBy = 'Issued By is required';
     }
     
-    // Description is now optional
+    // Description and category are optional
     
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -52,6 +65,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
       title: title.trim(),
       issuedBy: issuedBy.trim(),
       description: description.trim(),
+      category: category || undefined,
     });
     
     onClose();
@@ -95,53 +109,110 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
         </div>
 
         {showPreview ? (
-          /* Verification Page Preview */
-          <div className="border border-border rounded-xl overflow-hidden">
-            <div className="px-4 py-2 bg-muted border-b border-border flex items-center justify-between">
+          /* Verification Page Preview - Realistic mockup */
+          <div className="border border-border rounded-xl overflow-hidden max-h-[70vh] overflow-y-auto">
+            <div className="px-4 py-2 bg-muted border-b border-border flex items-center justify-between sticky top-0 z-10">
               <span className="text-xs text-muted-foreground">Verification Page Preview</span>
-              <ExternalLink className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-mono">/verify/abc123...</span>
             </div>
-            <div className="p-6 bg-gradient-to-br from-background to-muted/50">
-              {/* Mini verification page mockup */}
-              <div className="max-w-sm mx-auto space-y-4">
-                {/* Status Badge */}
-                <div className="flex justify-center">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-success/10 text-success">
-                    <CheckCircle className="h-5 w-5" />
-                    <span className="text-sm font-semibold">Verified Certificate</span>
+            <div className="p-4 sm:p-6 bg-gradient-to-br from-background via-background to-muted/30">
+              {/* Two column layout preview */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left: Certificate Image Placeholder */}
+                <div className="order-1">
+                  <div className="rounded-xl border border-border overflow-hidden bg-card">
+                    <div className="aspect-[1.414/1] bg-gradient-to-br from-muted to-muted/50 flex flex-col items-center justify-center gap-2 p-4">
+                      <Award className="h-16 w-16 text-muted-foreground/30" />
+                      <span className="text-xs text-muted-foreground">Certificate Preview</span>
+                      <span className="text-xs text-muted-foreground/60">(Generated image appears here)</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-border bg-card p-2">
+                      <span className="text-xs text-muted-foreground">Certificate Preview</span>
+                      <span className="text-xs text-primary">Download PNG</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Certificate Card Preview */}
-                <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-                  {/* Certificate Image Placeholder */}
-                  <div className="aspect-[1.4/1] bg-muted rounded-lg flex items-center justify-center">
-                    <Award className="h-12 w-12 text-muted-foreground/50" />
+                {/* Right: Certificate Details */}
+                <div className="order-2 space-y-3">
+                  {/* Verification Badge */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500/20">
+                      <CheckCircle className="h-3 w-3 text-green-500" />
+                    </div>
+                    <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                      Verified Certificate
+                    </span>
                   </div>
-                  
-                  {/* Title */}
-                  <h3 className="text-lg font-bold text-center">
+
+                  {/* Certificate Title */}
+                  <h2 className="text-lg sm:text-xl font-bold">
                     {title.trim() || 'Certificate Title'}
-                  </h3>
-                  
-                  {/* Recipient */}
-                  <p className="text-center text-muted-foreground">
-                    Issued by <span className="font-semibold text-foreground">{issuedBy || 'Issuer'}</span>
+                  </h2>
+
+                  {/* Issued By */}
+                  <p className="text-sm text-muted-foreground">
+                    Issued by <span className="font-semibold text-foreground">{issuedBy || 'Issuer Name'}</span>
                   </p>
-                  
+
                   {/* Description */}
                   {description.trim() && (
-                    <p className="text-sm text-center text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {description.trim()}
                     </p>
                   )}
-                  
 
+                  {/* Recipient Card */}
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-white text-sm font-bold shrink-0">
+                        J
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                          Awarded to
+                        </p>
+                        <p className="font-semibold text-sm">John Doe</p>
+                        <p className="text-xs text-muted-foreground">john@example.com</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <p className="text-xs text-muted-foreground">Issued on</p>
+                      <p className="font-medium text-xs">Feb 16, 2026</p>
+                    </div>
+                    <div className="rounded-md bg-muted/50 p-2">
+                      <p className="text-xs text-muted-foreground">Verified</p>
+                      <p className="font-medium text-xs">0 times</p>
+                    </div>
+                  </div>
+
+                  {/* Certificate ID */}
+                  <div className="rounded-md border border-border bg-muted/30 p-2">
+                    <p className="text-xs text-muted-foreground">Certificate ID</p>
+                    <code className="text-xs font-mono">cert_abc123xyz789</code>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <button className="flex-1 py-1.5 px-3 rounded-md border border-border text-xs font-medium bg-card">
+                      Share Award
+                    </button>
+                    <button className="flex-1 py-1.5 px-3 rounded-md bg-[#0A66C2] text-white text-xs font-medium">
+                      Add to LinkedIn
+                    </button>
+                  </div>
                 </div>
+              </div>
 
-                {/* Info Note */}
-                <p className="text-xs text-center text-muted-foreground">
-                  This is how your certificate will appear on the verification page
+              {/* Security Notice */}
+              <div className="mt-4 rounded-md bg-green-500/10 p-3 text-center">
+                <CheckCircle className="mx-auto mb-1 h-4 w-4 text-green-500" />
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  This certificate was verified on our secure system.
                 </p>
               </div>
             </div>
@@ -235,6 +306,27 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
                   {description.length}/500
                 </span>
               </div>
+            </div>
+
+            {/* Category field (optional) */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium mb-2">
+                <Tag className="h-4 w-4 text-muted-foreground" />
+                Category <span className="text-muted-foreground text-xs">(optional - for public templates)</span>
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full h-10 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Select a category...</option>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Helps users find your template when browsing public templates
+              </p>
             </div>
 
             {/* Status indicator */}

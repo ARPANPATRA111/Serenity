@@ -61,9 +61,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use original filename if provided (compression may change the filename)
+    const originalName = formData.get('originalName') as string;
+    const displayName = originalName || file.name;
+
     // Generate unique ID and path
     const assetId = `asset_${nanoid(10)}`;
-    const fileExtension = file.name.split('.').pop() || 'png';
+    const fileExtension = displayName.split('.').pop() || 'png';
     const blobPath = `media/${userId}/${assetId}.${fileExtension}`;
 
     // Convert file to buffer
@@ -75,11 +79,11 @@ export async function POST(request: NextRequest) {
       access: 'public',
     });
 
-    // Create asset record
+    // Create asset record - use original name for display
     const asset: MediaAsset = {
       id: assetId,
       userId,
-      name: file.name,
+      name: displayName,
       url: blob.url,
       type: file.type,
       size: file.size,

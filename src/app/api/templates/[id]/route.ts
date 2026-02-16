@@ -4,6 +4,7 @@ import {
   updateTemplate,
   deleteTemplate,
   saveOrUpdateTemplate,
+  getUserTemplates,
 } from '@/lib/firebase/templates';
 
 export const runtime = 'nodejs';
@@ -46,9 +47,23 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const body = await request.json();
     
-    const { name, canvasJSON, thumbnail, isPublic, tags, userId, creatorName, creatorEmail, createIfNotExists, certificateMetadata } = body;
+    const { name, canvasJSON, thumbnail, isPublic, tags, userId, creatorName, creatorEmail, createIfNotExists, certificateMetadata, category } = body;
 
     console.log('[Template API] PUT template:', { id, name, isPublic, createIfNotExists });
+
+    // Check for duplicate template name (case-insensitive)
+    if (name && userId) {
+      const existingTemplates = await getUserTemplates(userId);
+      const duplicateName = existingTemplates.find(
+        t => t.id !== id && t.name.toLowerCase().trim() === name.toLowerCase().trim()
+      );
+      if (duplicateName) {
+        return NextResponse.json(
+          { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
+          { status: 400 }
+        );
+      }
+    }
 
     // If createIfNotExists is true, use saveOrUpdateTemplate
     if (createIfNotExists) {
@@ -62,6 +77,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         creatorName,
         creatorEmail,
         tags,
+        category,
         certificateMetadata,
       });
 
@@ -79,6 +95,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (thumbnail !== undefined) updates.thumbnail = thumbnail;
     if (typeof isPublic === 'boolean') updates.isPublic = isPublic;
     if (tags !== undefined) updates.tags = tags;
+    if (category !== undefined) updates.category = category;
     if (certificateMetadata !== undefined) updates.certificateMetadata = certificateMetadata;
 
     // Ensure we have at least one field to update

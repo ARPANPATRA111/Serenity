@@ -120,6 +120,31 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getAdminFirestore();
+    
+    // Check user's certificate limit
+    const userId = certificates[0]?.userId;
+    if (userId) {
+      const userDoc = await db.collection('users').doc(userId).get();
+      const userData = userDoc.data();
+      const isPremium = userData?.isPremium === true;
+      
+      if (!isPremium) {
+        // Get current certificate count for this user
+        const certificatesGenerated = userData?.certificatesGenerated || 0;
+        const newTotal = certificatesGenerated + certificates.length;
+        
+        if (newTotal > 5) {
+          const remaining = Math.max(0, 5 - certificatesGenerated);
+          return NextResponse.json({
+            success: false,
+            error: `Free tier limit reached. You can only generate ${remaining} more certificate(s). Upgrade to premium for unlimited certificates.`,
+            limitReached: true,
+            remaining,
+          }, { status: 403 });
+        }
+      }
+    }
+
     const results: string[] = [];
     const errors: { id: string; error: string }[] = [];
 
@@ -146,7 +171,6 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const userId = certificates[0]?.userId;
     if (userId) {
       certificatesCache.delete(userId);
     }

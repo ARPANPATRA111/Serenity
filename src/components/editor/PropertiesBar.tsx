@@ -4,8 +4,10 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useFabricContext } from './FabricContext';
 import { loadGoogleFont, isGoogleFont, loadAllGoogleFonts } from '@/lib/fonts/googleFonts';
+import { generateQRCodeDataURL } from '@/lib/fabric';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { StyleSidebar } from './StyleSidebar';
+import { fabric } from 'fabric';
 import {
   AlignLeft,
   AlignCenter,
@@ -43,6 +45,9 @@ type FabricObject = Record<string, unknown> & {
   text?: string;
   backgroundColor?: string;
   verificationId?: string; // For QR codes
+  qrColor?: string; // QR code foreground color
+  qrBackgroundColor?: string; // QR code background color
+  updateQRStyle?: (color: string, backgroundColor: string) => Promise<void>; // Method to update QR colors
   set: (key: string, value: unknown) => void;
   dynamicKey?: string;
 };
@@ -215,13 +220,56 @@ export function PropertiesBar() {
 
       {/* QR Code Special Properties */}
       {isQRCode && (
-        <div className="flex items-center gap-2 shrink-0">
-           <span className="text-xs text-muted-foreground">QR Color:</span>
-           {/* Note: Standard QR generation via API usually returns black/white. 
-               We can tint it using filters in Fabric.js, but properly regenerating is better.
-               For now, we'll suggest resizing or use filters if implemented. 
-           */}
-           <p className="text-xs italic text-muted-foreground">Editing colors requires regeneration</p>
+        <div className="flex items-center gap-3 shrink-0">
+           {/* QR Foreground Color */}
+           <div className="flex items-center gap-1">
+             <span className="text-xs text-muted-foreground">QR:</span>
+             <ColorPicker
+              value={object.qrColor || '#000000'}
+              showLabel={false}
+              size="sm"
+              onChange={async (color) => {
+                const bgColor = object.qrBackgroundColor || '#ffffff';
+                const verificationId = object.verificationId || 'placeholder';
+                
+                // Regenerate QR code with new color
+                const newDataUrl = await generateQRCodeDataURL(verificationId, 200, color, bgColor);
+                
+                fabric.Image.fromURL(newDataUrl, (newImg: fabric.Image | null) => {
+                  if (newImg && newImg.getElement()) {
+                    (object as unknown as fabric.Image).setElement(newImg.getElement() as HTMLImageElement);
+                    object.qrColor = color;
+                    handleUpdate();
+                  }
+                });
+              }}
+             />
+           </div>
+           
+           {/* QR Background Color */}
+           <div className="flex items-center gap-1">
+             <span className="text-xs text-muted-foreground">BG:</span>
+             <ColorPicker
+              value={object.qrBackgroundColor || '#ffffff'}
+              showLabel={false}
+              size="sm"
+              onChange={async (color) => {
+                const fgColor = object.qrColor || '#000000';
+                const verificationId = object.verificationId || 'placeholder';
+                
+                // Regenerate QR code with new background color
+                const newDataUrl = await generateQRCodeDataURL(verificationId, 200, fgColor, color);
+                
+                fabric.Image.fromURL(newDataUrl, (newImg: fabric.Image | null) => {
+                  if (newImg && newImg.getElement()) {
+                    (object as unknown as fabric.Image).setElement(newImg.getElement() as HTMLImageElement);
+                    object.qrBackgroundColor = color;
+                    handleUpdate();
+                  }
+                });
+              }}
+             />
+           </div>
            
            {/* Scale Control */}
            <div className="flex items-center gap-1">
