@@ -138,6 +138,11 @@ export async function GET(
     // Get updated view count
     const updatedDoc = await certificateRef.get();
     const viewCount = updatedDoc.data()?.viewCount || 0;
+    const certificateImage =
+      typeof certificateData.certificateImage === 'string' &&
+      /^https?:\/\//i.test(certificateData.certificateImage)
+        ? certificateData.certificateImage
+        : null;
 
     // Return certificate verification data (privacy-preserving)
     return NextResponse.json({
@@ -146,15 +151,14 @@ export async function GET(
       isNewView,
       certificate: {
         id: certificateId,
+        certificateId,
         recipientName: certificateData.recipientName,
-        recipientEmail: certificateData.recipientEmail,
         title: certificateData.title,
-        description: certificateData.description || null,
         issuedAt: certificateData.issuedAt,
         issuerName: certificateData.issuerName,
+        status: certificateData.isActive === false ? 'revoked' : 'active',
         viewCount,
-        certificateImage: certificateData.certificateImage || null,
-        templateId: certificateData.templateId || null,
+        certificateImage,
       },
     });
 

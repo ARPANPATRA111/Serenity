@@ -16,6 +16,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, initializeFirebase } from '@/lib/firebase/client';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 
 interface User {
   id: string;
@@ -62,7 +63,7 @@ function generateOldUserIdFromEmail(email: string): string {
 
 async function migrateUserData(oldUserId: string, newUserId: string): Promise<void> {
   try {
-    const response = await fetch('/api/migrate-user', {
+    const response = await authenticatedFetch('/api/migrate-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ oldUserId, newUserId }),
@@ -85,7 +86,7 @@ async function saveUserViaAPI(user: {
   avatar?: string;
 }): Promise<void> {
   try {
-    const response = await fetch('/api/users', {
+    const response = await authenticatedFetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(user),
@@ -113,9 +114,9 @@ function mapFirebaseUser(firebaseUser: FirebaseUser, displayName?: string): User
 }
 
 // Fetch user profile from Firestore (includes updated name, etc.)
-async function fetchUserProfile(userId: string): Promise<{ name?: string; avatar?: string } | null> {
+async function fetchUserProfile(_userId: string): Promise<{ name?: string; avatar?: string } | null> {
   try {
-    const response = await fetch(`/api/users?id=${userId}`);
+    const response = await authenticatedFetch('/api/users');
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.user) {
@@ -131,9 +132,9 @@ async function fetchUserProfile(userId: string): Promise<{ name?: string; avatar
   return null;
 }
 
-async function fetchPremiumStatus(userId: string): Promise<{ isPremium: boolean; certificatesGenerated: number }> {
+async function fetchPremiumStatus(_userId: string): Promise<{ isPremium: boolean; certificatesGenerated: number }> {
   try {
-    const response = await fetch(`/api/users/premium?userId=${userId}`);
+    const response = await authenticatedFetch('/api/users/premium');
     if (response.ok) {
       const data = await response.json();
       if (data.success) {
@@ -405,7 +406,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await fetch('/api/users', {
+      const response = await authenticatedFetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: user.id, ...updates }),
@@ -430,7 +431,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       // Soft delete: mark user as deleted in Firestore (data is preserved)
-      const response = await fetch(`/api/users?id=${user.id}`, {
+      const response = await authenticatedFetch('/api/users', {
         method: 'DELETE',
       });
 

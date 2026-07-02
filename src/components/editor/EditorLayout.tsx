@@ -12,6 +12,7 @@ import { useEditorStore } from '@/store/editorStore';
 import { useDataSourceStore } from '@/store/dataSourceStore';
 import { useFabricContext } from './FabricContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, AlertCircle, X, PanelLeftOpen, PanelRightOpen, Palette, Database } from 'lucide-react';
 
@@ -105,7 +106,7 @@ export function EditorLayout() {
       setLoadingTemplate(true);
       lastLoadedTemplateId.current = paramTemplateId;
       
-      fetch(`/api/templates/${paramTemplateId}`)
+      authenticatedFetch(`/api/templates/${paramTemplateId}`)
         .then(res => res.json())
         .then(data => {
           if (data.success && data.template) {
@@ -169,7 +170,7 @@ export function EditorLayout() {
       const method = templateId ? 'PUT' : 'POST';
       const url = templateId ? `/api/templates/${templateId}` : '/api/templates';
       
-      const res = await fetch(url, {
+      const res = await authenticatedFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

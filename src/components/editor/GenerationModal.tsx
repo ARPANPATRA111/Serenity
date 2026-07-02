@@ -10,6 +10,8 @@ import { useGenerationStore } from '@/store/generationStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateBatch, downloadZip } from '@/lib/generator';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { getIdToken } from '@/lib/firebase/client';
 import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Crown, Lock } from 'lucide-react';
 import Link from 'next/link';
 
@@ -108,7 +110,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       // Check premium status
       if (user?.id) {
         setPremiumCheck(prev => ({ ...prev, loading: true }));
-        fetch(`/api/users/premium?userId=${user.id}`)
+        authenticatedFetch('/api/users/premium')
           .then(res => res.json())
           .then(data => {
             if (data.success) {
@@ -164,6 +166,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     }
 
     const templateJSON = JSON.stringify(fabricInstance.toJSON());
+    const idToken = await getIdToken();
+    if (!idToken) {
+      setSaveError('Authentication expired. Please sign in again before generating certificates.');
+      return;
+    }
     
     setStep('generating');
     startGeneration(rows.length);
@@ -177,6 +184,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       templateId: templateId || undefined,
       templateName: templateName || 'Untitled Template',
       userId: user?.id,
+      authToken: idToken || undefined,
       issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
       certificateTitle: certificateMetadata.title || 'Certificate of Completion',
       certificateDescription: certificateMetadata.description || '',
@@ -210,11 +218,10 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     // Increment certificate generation counter for the user
     if (user?.id && result.certificateIds.length > 0) {
       try {
-        await fetch(`/api/users/premium`, {
+        await authenticatedFetch(`/api/users/premium`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId: user.id,
             action: 'incrementCount',
             count: result.certificateIds.length,
           }),
@@ -281,14 +288,16 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           
           const response = await fetch('/api/email/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
             body: JSON.stringify({
               to: email,
               recipientName,
               certificateId,
               certificateTitle: certificateMetadata.title || 'Certificate of Completion',
               issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
-              userId: user?.id,
               certificatePdfBase64,
             }),
           });

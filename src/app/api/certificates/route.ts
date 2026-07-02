@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { createLogger, getErrorDetails } from '@/lib/logger';
+import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 
 const logger = createLogger('Certificates.API');
 
@@ -21,13 +22,17 @@ function cleanCache() {
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id');
-    
-    if (!userId) {
-      logger.debug('No user ID provided, returning empty certificates');
-      return NextResponse.json({ success: true, certificates: [] });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const clientUserId = request.headers.get('x-user-id');
+    if (clientUserId && clientUserId !== authUser.uid) {
+      return forbiddenResponse('Authenticated user does not match requested user ID');
+    }
+
+    const userId = authUser.uid;
     const now = Date.now();
     const cached = certificatesCache.get(userId);
     if (cached && (now - cached.timestamp) < CACHE_TTL) {
@@ -109,44 +114,70 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
+    }
+
     const body = await request.json();
     const { certificates } = body;
 
-    if (!certificates || !Array.isArray(certificates)) {
+    if (!certificates || !Array.isArray(certificates) || certificates.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Certificates array is required' },
         { status: 400 }
       );
     }
 
+    for (const cert of certificates) {
+      if (!cert?.id || typeof cert.id !== 'string') {
+        return NextResponse.json(
+          { success: false, error: 'Each certificate must include an id' },
+          { status: 400 }
+        );
+      }
+
+      if (cert.userId && cert.userId !== authUser.uid) {
+        return forbiddenResponse('Authenticated user does not match certificate user ID');
+      }
+    }
+
     const db = getAdminFirestore();
+    const userId = authUser.uid;
+
+    const certRefs = certificates.map(cert => db.collection('certificates').doc(cert.id));
+    const existingCertDocs = await db.getAll(...certRefs);
+    for (const existingDoc of existingCertDocs) {
+      if (!existingDoc.exists) continue;
+
+      const existingUserId = existingDoc.data()?.userId;
+      if (existingUserId !== userId) {
+        return forbiddenResponse('Cannot overwrite a certificate owned by another user');
+      }
+    }
     
     // Check user's certificate limit
-    const userId = certificates[0]?.userId;
-    if (userId) {
-      const userDoc = await db.collection('users').doc(userId).get();
-      const userData = userDoc.data();
-      const isPremium = userData?.isPremium === true;
-      
-      if (!isPremium) {
-        // Get current certificate count for this user
-        const certificatesGenerated = userData?.certificatesGenerated || 0;
-        const newTotal = certificatesGenerated + certificates.length;
-        
-        if (newTotal > 5) {
-          const remaining = Math.max(0, 5 - certificatesGenerated);
-          return NextResponse.json({
-            success: false,
-            error: `Free tier limit reached. You can only generate ${remaining} more certificate(s). Upgrade to premium for unlimited certificates.`,
-            limitReached: true,
-            remaining,
-          }, { status: 403 });
-        }
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+    const isPremium = userData?.isPremium === true;
+
+    if (!isPremium) {
+      // Get current certificate count for this user
+      const certificatesGenerated = userData?.certificatesGenerated || 0;
+      const newTotal = certificatesGenerated + certificates.length;
+
+      if (newTotal > 5) {
+        const remaining = Math.max(0, 5 - certificatesGenerated);
+        return NextResponse.json({
+          success: false,
+          error: `Free tier limit reached. You can only generate ${remaining} more certificate(s). Upgrade to premium for unlimited certificates.`,
+          limitReached: true,
+          remaining,
+        }, { status: 403 });
       }
     }
 
     const results: string[] = [];
-    const errors: { id: string; error: string }[] = [];
 
     const batch = db.batch();
     const timestamp = new Date().toISOString();
@@ -155,6 +186,7 @@ export async function POST(request: NextRequest) {
       const certRef = db.collection('certificates').doc(cert.id);
       batch.set(certRef, {
         ...cert,
+        userId,
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -171,9 +203,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    if (userId) {
-      certificatesCache.delete(userId);
-    }
+    certificatesCache.delete(userId);
 
     return NextResponse.json({
       success: true,

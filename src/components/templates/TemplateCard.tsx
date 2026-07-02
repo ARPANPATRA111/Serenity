@@ -7,6 +7,7 @@ import { type Template } from '@/lib/firebase/templates';
 import { formatDate } from '@/lib/utils';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 
 interface TemplateCardProps {
   template: Template;
@@ -26,10 +27,8 @@ export function TemplateCard({ template }: TemplateCardProps) {
     
     setIsStarring(true);
     try {
-      const response = await fetch(`/api/templates/${template.id}/star`, {
+      const response = await authenticatedFetch(`/api/templates/${template.id}/star`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
       });
 
       if (response.ok) {

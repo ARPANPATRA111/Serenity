@@ -16,7 +16,6 @@ import {
   AlertTriangle, 
   Award, 
   Download, 
-  Mail, 
   Share2, 
   Linkedin, 
   Copy, 
@@ -31,15 +30,14 @@ interface VerificationClientProps {
 
 interface CertificateData {
   id: string;
+  certificateId?: string;
   recipientName: string;
-  recipientEmail?: string;
   title: string;
-  description?: string;
   issuerName: string;
   issuedAt: string;
   viewCount: number;
   isActive: boolean;
-  templateId?: string;
+  status?: string;
   certificateImage?: string;
 }
 
@@ -276,13 +274,6 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
                   Issued by <span className="font-semibold text-foreground">{result.certificate.issuerName}</span>
                 </p>
 
-                {/* Description */}
-                {result.certificate.description && (
-                  <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                    {result.certificate.description}
-                  </p>
-                )}
-
                 {/* Recipient Card */}
                 <div className="rounded-xl border border-border bg-card p-4 sm:p-5 mb-6">
                   <div className="flex items-center gap-4">
@@ -296,12 +287,6 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
                       <h2 className="font-display text-lg sm:text-xl font-bold truncate">
                         {result.certificate.recipientName}
                       </h2>
-                      {result.certificate.recipientEmail && (
-                        <p className="flex items-center gap-1.5 text-sm text-muted-foreground truncate">
-                          <Mail className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{result.certificate.recipientEmail}</span>
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>

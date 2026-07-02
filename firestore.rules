@@ -25,8 +25,11 @@ service cloud.firestore {
 
     // Certificates collection
     match /certificates/{certificateId} {
-      // Anyone can read certificates (for verification)
-      allow read: if true;
+      // Owner-only client reads. Public verification does NOT use the client
+      // SDK — it goes through the /api/verify route (Firebase Admin SDK), which
+      // bypasses these rules. Previously this was `allow read: if true`, which
+      // let anyone dump every certificate's recipient PII via the client SDK.
+      allow read: if isOwner(resource.data.userId);
       // Users can create certificates for themselves
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       // Users can update/delete their own certificates

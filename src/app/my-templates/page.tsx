@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 import { 
   ArrowLeft, Plus, Search, Filter, Star, Award, Globe, Lock, 
   MoreVertical, Edit3, Trash2, Eye, Clock, FileText, Crown,
@@ -59,7 +60,7 @@ export default function MyTemplatesPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/templates?userId=${user.id}`);
+      const res = await authenticatedFetch('/api/templates');
       const data = await res.json();
       if (data.success && data.templates) {
         setTemplates(data.templates);
@@ -118,7 +119,7 @@ export default function MyTemplatesPage() {
 
   const handleDelete = async (templateId: string) => {
     try {
-      const res = await fetch(`/api/templates/${templateId}`, {
+      const res = await authenticatedFetch(`/api/templates/${templateId}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -132,8 +133,8 @@ export default function MyTemplatesPage() {
 
   const handleToggleVisibility = async (templateId: string, currentPublic: boolean) => {
     try {
-      const res = await fetch(`/api/templates/${templateId}`, {
-        method: 'PATCH',
+      const res = await authenticatedFetch(`/api/templates/${templateId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPublic: !currentPublic }),
       });

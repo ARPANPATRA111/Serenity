@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 import { 
   Plus, 
   FileText, 
@@ -131,11 +132,7 @@ export default function DashboardPage() {
       }
       
       try {
-        const response = await fetch('/api/certificates', {
-          headers: {
-            'x-user-id': user.id,
-          },
-        });
+        const response = await authenticatedFetch('/api/certificates');
         
         if (response.ok) {
           const data = await response.json();
@@ -161,7 +158,7 @@ export default function DashboardPage() {
       }
       
       try {
-        const response = await fetch(`/api/templates?userId=${user.id}`);
+        const response = await authenticatedFetch('/api/templates');
         if (response.ok) {
           const data = await response.json();
           console.log('[Dashboard] Loaded templates from API:', data.templates?.length || 0);
@@ -185,11 +182,7 @@ export default function DashboardPage() {
         if (response.ok) {
           const data = await response.json();
           console.log('[Dashboard] Loaded public templates:', data.templates?.length || 0);
-          // Filter out user's own templates from public list
-          const filtered = (data.templates || []).filter(
-            (t: DashboardTemplate) => t.userId !== user?.id
-          );
-          setPublicTemplates(filtered);
+          setPublicTemplates(data.templates || []);
         }
       } catch (error) {
         console.error('[Dashboard] Error fetching public templates:', error);
@@ -208,7 +201,7 @@ export default function DashboardPage() {
     
     if (confirm('Are you sure you want to delete this template?')) {
       try {
-        const response = await fetch(`/api/templates/${templateId}`, {
+        const response = await authenticatedFetch(`/api/templates/${templateId}`, {
           method: 'DELETE',
         });
         
@@ -232,7 +225,7 @@ export default function DashboardPage() {
     e.stopPropagation();
     
     try {
-      const response = await fetch(`/api/templates/${templateId}`, {
+      const response = await authenticatedFetch(`/api/templates/${templateId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPublic: !currentlyPublic }),
@@ -259,13 +252,26 @@ export default function DashboardPage() {
     );
   }, [templates, searchQuery]);
 
+  const ownTemplateIds = useMemo(
+    () => new Set(templates.map(template => template.id)),
+    [templates]
+  );
+
+  const visiblePublicTemplates = useMemo(
+    () =>
+      templatesLoading
+        ? []
+        : publicTemplates.filter(template => !ownTemplateIds.has(template.id)),
+    [publicTemplates, ownTemplateIds, templatesLoading]
+  );
+
   const filteredPublicTemplates = useMemo(() => {
-    if (!searchQuery.trim()) return publicTemplates;
+    if (!searchQuery.trim()) return visiblePublicTemplates;
     const query = searchQuery.toLowerCase();
-    return publicTemplates.filter(tmpl => 
+    return visiblePublicTemplates.filter(tmpl =>
       tmpl.name.toLowerCase().includes(query)
     );
-  }, [publicTemplates, searchQuery]);
+  }, [visiblePublicTemplates, searchQuery]);
 
   // Get current templates based on tab
   const displayTemplates = templateTab === 'my' ? filteredUserTemplates : filteredPublicTemplates;
@@ -416,13 +422,12 @@ export default function DashboardPage() {
       }
       
       // Create new template via API
-      const response = await fetch('/api/templates', {
+      const response = await authenticatedFetch('/api/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: `${templateName} (Imported)`,
           canvasJSON,
-          userId: user.id,
           isPublic: false,
           creatorName: user.name,
           creatorEmail: user.email,
@@ -789,7 +794,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <Globe className="inline h-3.5 w-3.5 mr-1" />
-                    Public ({publicTemplates.length})
+                    Public ({visiblePublicTemplates.length})
                   </button>
                 </div>
               </div>
@@ -803,7 +808,9 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(templateTab === 'my' ? templatesLoading : publicTemplatesLoading) ? (
+              {(templateTab === 'my'
+                ? templatesLoading
+                : publicTemplatesLoading || templatesLoading) ? (
                 // Skeleton loading state
                 <>
                   {[1, 2, 3, 4, 5, 6].map((i) => (

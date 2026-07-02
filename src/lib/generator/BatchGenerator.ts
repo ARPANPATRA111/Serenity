@@ -23,6 +23,7 @@ export interface BatchGenerationOptions {
   templateId?: string;
   templateName?: string;
   userId?: string;
+  authToken?: string;
   issuerName?: string;
   certificateTitle?: string;
   certificateDescription?: string;
@@ -48,6 +49,10 @@ export interface BatchGenerationResult {
 
 const YIELD_INTERVAL = 10;
 
+function authHeaders(authToken?: string): Record<string, string> {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
+
 export async function generateBatch(
   options: BatchGenerationOptions
 ): Promise<BatchGenerationResult> {
@@ -63,6 +68,7 @@ export async function generateBatch(
     titleField = 'Certificate',
     templateName = 'Untitled Template',
     userId,
+    authToken,
     outputFormat = 'pdf',
     onProgress,
     onError,
@@ -82,7 +88,9 @@ export async function generateBatch(
   // Check user's certificate generation limit before starting
   if (userId) {
     try {
-      const premiumResponse = await fetch(`/api/users/premium?userId=${userId}`);
+      const premiumResponse = await fetch('/api/users/premium', {
+        headers: authHeaders(authToken),
+      });
       const premiumData = await premiumResponse.json();
       
       if (premiumData.success) {
@@ -347,11 +355,13 @@ export async function generateBatch(
       try {
         const response = await fetch('/api/certificates/upload-image', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders(authToken),
+          },
           body: JSON.stringify({
             certificateId: certId,
             imageBase64: thumbnailDataURL,
-            userId: userId,
           }),
         });
         
@@ -421,6 +431,7 @@ export async function generateBatch(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...authHeaders(authToken),
           },
           body: JSON.stringify({ certificates: certificatesToSave }),
         });

@@ -25,6 +25,8 @@ import {
   FileText
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { getIdToken } from '@/lib/firebase/client';
 
 interface CertificateRecord {
   id: string;
@@ -87,8 +89,7 @@ export default function HistoryPage() {
     }
     
     try {
-      const response = await fetch('/api/certificates', {
-        headers: { 'x-user-id': user.id },
+      const response = await authenticatedFetch('/api/certificates', {
         cache: 'no-store',
       });
       
@@ -210,10 +211,14 @@ export default function HistoryPage() {
     try {
       const cert = resendModal.certificate;
       const verifyUrl = `${window.location.origin}/verify/${cert.id}`;
-      
+      const idToken = await getIdToken();
+
       const response = await fetch('/api/email/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({
           to: resendModal.newEmail,
           recipientName: cert.recipientName,
@@ -221,7 +226,6 @@ export default function HistoryPage() {
           certificateTitle: cert.title,
           issuerName: cert.issuerName,
           verifyUrl,
-          userId: user?.id,
           // Include certificate image for attachment
           certificateImageUrl: cert.certificateImage || undefined,
         }),

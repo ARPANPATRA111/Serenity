@@ -51,4 +51,21 @@ export function isFirebaseInitialized() {
   return _isInitialized;
 }
 
+/**
+ * Get the current user's Firebase ID token for authenticating API requests.
+ * Returns null if no user is signed in. Attach as `Authorization: Bearer <token>`.
+ */
+export async function getIdToken(): Promise<string | null> {
+  try {
+    if (!auth) {
+      initializeFirebase();
+    }
+    const current = auth?.currentUser;
+    if (!current) return null;
+    return await current.getIdToken();
+  } catch {
+    return null;
+  }
+}
+
 export { app, auth, db, storage, initializeFirebase };

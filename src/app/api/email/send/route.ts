@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import { verifyAuth } from '@/lib/firebase/verifyAuth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getTodayDateString } from '@/lib/utils';
 import { createLogger, getErrorDetails } from '@/lib/logger';
 
 const logger = createLogger('Email.Send');
+const MAX_ATTACHMENT_BASE64_LENGTH = 8_000_000;
+
+/** Escape user-controlled values before interpolating into email HTML. */
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
@@ -91,7 +103,14 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
 
 function generateEmailHTML(data: SendEmailRequest): string {
   const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
-  
+
+  // Escape all user-controlled values to prevent HTML/phishing injection.
+  const recipientName = escapeHtml(data.recipientName);
+  const issuerName = escapeHtml(data.issuerName);
+  const certificateTitle = escapeHtml(data.certificateTitle);
+  const certificateId = escapeHtml(data.certificateId);
+  const verifyUrl = escapeHtml(data.verifyUrl);
+
   return `
 <!DOCTYPE html>
 <html>
@@ -118,11 +137,11 @@ function generateEmailHTML(data: SendEmailRequest): string {
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 20px; color: #1e293b; font-size: 18px; line-height: 1.6;">
-                Dear <strong>${data.recipientName}</strong>,
+                Dear <strong>${recipientName}</strong>,
               </p>
               
               <p style="margin: 0 0 30px; color: #64748b; font-size: 16px; line-height: 1.6;">
-                You have been awarded a certificate from <strong>${data.issuerName}</strong>:
+                You have been awarded a certificate from <strong>${issuerName}</strong>:
               </p>
               
               <!-- Certificate Card -->
@@ -130,7 +149,7 @@ function generateEmailHTML(data: SendEmailRequest): string {
                 <tr>
                   <td style="padding: 30px; text-align: center;">
                     <h2 style="margin: 0; color: #78350f; font-size: 24px; font-weight: 700;">
-                      ${data.certificateTitle}
+                      ${certificateTitle}
                     </h2>
                   </td>
                 </tr>
@@ -146,7 +165,7 @@ function generateEmailHTML(data: SendEmailRequest): string {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${data.verifyUrl}" style="display: inline-block; background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 600;">
+                    <a href="${verifyUrl}" style="display: inline-block; background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 600;">
                       View Your Certificate
                     </a>
                   </td>
@@ -154,7 +173,7 @@ function generateEmailHTML(data: SendEmailRequest): string {
               </table>
               
               <p style="margin: 30px 0 0; color: #94a3b8; font-size: 14px; text-align: center;">
-                Certificate ID: <code style="background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${data.certificateId}</code>
+                Certificate ID: <code style="background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${certificateId}</code>
               </p>
             </td>
           </tr>
@@ -183,8 +202,26 @@ export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7);
   
   try {
+    // Require a verified Firebase ID token. Identity is derived from the token,
+    // never from a client-supplied userId. Closes the unauthenticated email
+    // relay / spam-abuse vector on this endpoint.
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+    if (!authUser.emailVerified) {
+      return NextResponse.json(
+        { success: false, error: 'Email verification required' },
+        { status: 403 }
+      );
+    }
+    const userId = authUser.uid;
+
     const body = await request.json();
-    const { to, recipientName, certificateId, certificateTitle, issuerName, userId, certificatePdfBase64, certificateImageUrl } = body;
+    const { to, recipientName, certificateId, certificateTitle, issuerName, certificatePdfBase64, certificateImageUrl } = body;
 
     logger.debug('Processing email send request', { requestId, to, certificateId, userId });
 
@@ -205,7 +242,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rateLimit = await checkRateLimit(userId || 'anonymous');
+    if (certificatePdfBase64 !== undefined && typeof certificatePdfBase64 !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid certificate attachment' },
+        { status: 400 }
+      );
+    }
+
+    if (certificatePdfBase64 && certificatePdfBase64.length > MAX_ATTACHMENT_BASE64_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate attachment is too large' },
+        { status: 413 }
+      );
+    }
+
+    if (
+      typeof certificateImageUrl === 'string' &&
+      certificateImageUrl.startsWith('data:') &&
+      certificateImageUrl.length > MAX_ATTACHMENT_BASE64_LENGTH
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate image attachment is too large' },
+        { status: 413 }
+      );
+    }
+
+    const db = getAdminFirestore();
+    const certificateRef = db.collection('certificates').doc(certificateId);
+    const certificateDoc = await certificateRef.get();
+
+    if (!certificateDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate not found' },
+        { status: 404 }
+      );
+    }
+
+    const certificateData = certificateDoc.data();
+    if (certificateData?.userId !== userId) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
+    if (certificateData?.isActive === false) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate has been revoked' },
+        { status: 410 }
+      );
+    }
+
+    const rateLimit = await checkRateLimit(userId);
     if (!rateLimit.allowed) {
       logger.info('Rate limit exceeded', { requestId, userId, limit: DAILY_EMAIL_LIMIT });
       return NextResponse.json(
@@ -251,6 +339,16 @@ export async function POST(request: NextRequest) {
           },
         ];
       } else if (certificateImageUrl) {
+        if (
+          certificateImageUrl !== certificateData?.certificateImage &&
+          !certificateImageUrl.startsWith('data:')
+        ) {
+          return NextResponse.json(
+            { success: false, error: 'Certificate image does not match the saved certificate' },
+            { status: 400 }
+          );
+        }
+
         // If no PDF but image URL is provided, fetch and attach the image
         try {
           let base64Content: string;
@@ -286,20 +384,19 @@ export async function POST(request: NextRequest) {
 
       const info = await sendEmailWithBrevo(brevoPayload);
 
-      const db = getAdminFirestore();
       await db.collection('emailLogs').add({
         to,
         certificateId,
         messageId: info.messageId,
         sentAt: FieldValue.serverTimestamp(),
-        userId: userId || 'anonymous',
+        userId,
         hasAttachment: !!(brevoPayload.attachment && brevoPayload.attachment.length > 0),
       });
 
       // Update certificate with email status
       if (certificateId) {
         try {
-          await db.collection('certificates').doc(certificateId).update({
+          await certificateRef.update({
             emailStatus: 'sent',
             emailSentAt: FieldValue.serverTimestamp(),
             recipientEmail: to,
@@ -324,8 +421,7 @@ export async function POST(request: NextRequest) {
       // Update certificate with failed status
       if (certificateId) {
         try {
-          const db = getAdminFirestore();
-          await db.collection('certificates').doc(certificateId).update({
+          await certificateRef.update({
             emailStatus: 'failed',
             emailError: errorDetails.message,
           });
