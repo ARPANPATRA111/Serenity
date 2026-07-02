@@ -56,6 +56,9 @@ I.md
 # Login to Firebase
 firebase login
 
+Serenity-Certificate-Generator-I-QA.md
+Serenity-Certificate-Generator-P.md
+
 # Deploy only indexes
 firebase deploy --only firestore:indexes
 firebase deploy --only firestore:rules
