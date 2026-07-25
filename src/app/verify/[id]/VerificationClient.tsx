@@ -16,14 +16,17 @@ import {
   AlertTriangle, 
   Award, 
   Download, 
-  Mail, 
   Share2, 
   Linkedin, 
   Copy, 
   Check,
-  ExternalLink
+  ExternalLink,
+  MapPin,
+  Images,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import type { PublicEventContext } from '@/types/events';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 interface VerificationClientProps {
   certificateId: string;
@@ -31,16 +34,16 @@ interface VerificationClientProps {
 
 interface CertificateData {
   id: string;
+  certificateId?: string;
   recipientName: string;
-  recipientEmail?: string;
   title: string;
-  description?: string;
   issuerName: string;
   issuedAt: string;
   viewCount: number;
   isActive: boolean;
-  templateId?: string;
+  status?: string;
   certificateImage?: string;
+  event?: PublicEventContext | null;
 }
 
 interface VerificationResult {
@@ -182,18 +185,11 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-screen bg-background">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2 sm:gap-3">
-            <div className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-            </div>
-            <span className="font-display text-lg sm:text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Serenity
-            </span>
-          </Link>
+      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
+        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6 lg:px-8">
+          <Link href="/"><SerenityBrand /></Link>
           <ThemeToggle />
         </div>
       </nav>
@@ -276,13 +272,6 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
                   Issued by <span className="font-semibold text-foreground">{result.certificate.issuerName}</span>
                 </p>
 
-                {/* Description */}
-                {result.certificate.description && (
-                  <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                    {result.certificate.description}
-                  </p>
-                )}
-
                 {/* Recipient Card */}
                 <div className="rounded-xl border border-border bg-card p-4 sm:p-5 mb-6">
                   <div className="flex items-center gap-4">
@@ -296,12 +285,6 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
                       <h2 className="font-display text-lg sm:text-xl font-bold truncate">
                         {result.certificate.recipientName}
                       </h2>
-                      {result.certificate.recipientEmail && (
-                        <p className="flex items-center gap-1.5 text-sm text-muted-foreground truncate">
-                          <Mail className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{result.certificate.recipientEmail}</span>
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -328,6 +311,41 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
                     </p>
                   </div>
                 </div>
+
+                {result.certificate.event && (
+                  <section className="mb-6 overflow-hidden rounded-2xl border border-primary/20 bg-primary/5">
+                    {result.certificate.event.coverImageUrl && (
+                      <div className="relative h-32 w-full">
+                        <Image
+                          src={result.certificate.event.coverImageUrl}
+                          alt=""
+                          fill
+                          unoptimized
+                          sizes="(max-width: 1024px) 100vw, 45vw"
+                          className="object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="p-4 sm:p-5">
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Linked event · {result.certificate.event.type}</p>
+                      <h2 className="mt-2 font-display text-xl font-bold">{result.certificate.event.name}</h2>
+                      {result.certificate.event.description && <p className="mt-2 text-sm leading-6 text-muted-foreground">{result.certificate.event.description}</p>}
+                      <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
+                        {result.certificate.event.startAt && <p className="flex gap-2"><Calendar className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{formatDate(result.certificate.event.startAt)}</p>}
+                        {(result.certificate.event.venueName || result.certificate.event.city || result.certificate.event.country) && (
+                          <p className="flex gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{[result.certificate.event.venueName, result.certificate.event.city, result.certificate.event.country].filter(Boolean).join(', ')}</p>
+                        )}
+                        {result.certificate.event.organizerName && <p className="flex gap-2"><Building className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Organized by {result.certificate.event.organizerName}</p>}
+                        {result.certificate.event.galleryImageUrls.length > 0 && <p className="flex gap-2"><Images className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{result.certificate.event.galleryImageUrls.length} event image{result.certificate.event.galleryImageUrls.length === 1 ? '' : 's'} available</p>}
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {result.certificate.event.websiteUrl && <a href={result.certificate.event.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:border-primary/40">Event website <ExternalLink className="h-3.5 w-3.5" /></a>}
+                        {result.certificate.event.registrationUrl && <a href={result.certificate.event.registrationUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:border-primary/40">Registration <ExternalLink className="h-3.5 w-3.5" /></a>}
+                        {result.certificate.event.links.map((link) => <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:border-primary/40">{link.label}<ExternalLink className="h-3.5 w-3.5" /></a>)}
+                      </div>
+                    </div>
+                  </section>
+                )}
 
                 {/* Certificate ID */}
                 <div className="rounded-lg border border-border bg-muted/30 p-3 sm:p-4 mb-6">

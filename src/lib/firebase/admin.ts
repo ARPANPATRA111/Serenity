@@ -1,4 +1,4 @@
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
+import { initializeApp, getApps, cert, App, AppOptions } from 'firebase-admin/app';
 import { getFirestore, Firestore, Settings } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getStorage, Storage } from 'firebase-admin/storage';
@@ -15,14 +15,27 @@ function initializeAdmin() {
   }
 
   if (getApps().length === 0) {
-    adminApp = initializeApp({
-      credential: cert({
+    const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.FB_PROJECT;
+    const useEmulators = process.env.USE_FIREBASE_EMULATORS === 'true';
+
+    if (useEmulators && !projectId?.startsWith('demo-')) {
+      throw new Error('Firebase emulator mode requires a demo-* project ID');
+    }
+
+    const options: AppOptions = {
+      projectId,
+      storageBucket: process.env.FB_BUCKET,
+    };
+
+    if (!useEmulators) {
+      options.credential = cert({
         projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
         clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
-      storageBucket: process.env.FB_BUCKET,
-    });
+      });
+    }
+
+    adminApp = initializeApp(options);
   } else {
     adminApp = getApps()[0];
   }

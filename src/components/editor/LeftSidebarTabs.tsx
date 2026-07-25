@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore, MediaAsset, LeftSidebarTab } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
-import imageCompression from 'browser-image-compression';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { fabric } from 'fabric';
 import {
@@ -19,7 +19,6 @@ import {
   HardDrive,
   Zap,
   Palette,
-  Sparkles,
   FlipHorizontal,
   FlipVertical,
   RotateCcw,
@@ -36,7 +35,7 @@ import Image from 'next/image';
 
 // Maximum file size: 5MB (before compression)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp'];
+const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 // Compression options
 const COMPRESSION_OPTIONS = {
@@ -114,7 +113,7 @@ export function LeftSidebarTabs() {
       
       setIsLoadingMedia(true);
       try {
-        const res = await fetch(`/api/media?userId=${user.id}`);
+        const res = await authenticatedFetch('/api/media');
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
@@ -137,17 +136,15 @@ export function LeftSidebarTabs() {
       return `File too large (${formatFileSize(file.size)}). Maximum size is 5MB.`;
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return `Invalid file type. Allowed: Images, SVGs, GIFs`;
+      return `Invalid file type. Allowed: PNG, JPEG, JPG, WebP`;
     }
     return null;
   };
 
   // Compress image
   const compressImage = async (file: File): Promise<File> => {
-    if (file.type === 'image/svg+xml' || file.type === 'image/gif') {
-      return file;
-    }
     try {
+      const { default: imageCompression } = await import('browser-image-compression');
       const compressedFile = await imageCompression(file, COMPRESSION_OPTIONS);
       return compressedFile;
     } catch (e) {
@@ -182,11 +179,10 @@ export function LeftSidebarTabs() {
         
         const formData = new FormData();
         formData.append('file', compressedFile);
-        formData.append('userId', user.id);
         formData.append('originalName', file.name);
         formData.append('originalSize', file.size.toString());
 
-        const res = await fetch('/api/media', {
+        const res = await authenticatedFetch('/api/media', {
           method: 'POST',
           body: formData,
         });
@@ -214,7 +210,7 @@ export function LeftSidebarTabs() {
     if (!user?.id) return;
 
     try {
-      const res = await fetch(`/api/media?assetId=${assetId}&userId=${user.id}`, {
+      const res = await authenticatedFetch(`/api/media?assetId=${assetId}`, {
         method: 'DELETE',
       });
 
@@ -321,7 +317,7 @@ export function LeftSidebarTabs() {
   const tabs: { id: LeftSidebarTab; label: string; icon: React.ElementType }[] = [
     { id: 'media', label: 'Media', icon: FolderOpen },
     { id: 'colors', label: 'Colors', icon: Palette },
-    { id: 'effects', label: 'Effects', icon: Sparkles },
+    { id: 'effects', label: 'Effects', icon: SlidersHorizontal },
   ];
 
   return (
@@ -468,7 +464,7 @@ function MediaTabContent({
           id="media-upload"
           ref={fileInputRef}
           type="file"
-          accept="image/*,.svg"
+          accept="image/png,image/jpeg,image/jpg,image/webp"
           multiple
           onChange={(e) => e.target.files && onUpload(e.target.files)}
           className="hidden"
@@ -490,7 +486,7 @@ function MediaTabContent({
               {isUploadingMedia ? (compressionStatus || 'Processing...') : 'Upload Media'}
             </p>
             <p className="text-[10px] text-muted-foreground">
-              {isUploadingMedia ? 'Auto-optimizing' : 'Images, SVGs • Max 5MB'}
+              {isUploadingMedia ? 'Auto-optimizing' : 'PNG, JPEG, WebP - Max 5MB'}
             </p>
           </div>
         </button>
@@ -663,7 +659,7 @@ function ColorsTabContent({ isPremium }: ColorsTabContentProps) {
       {isPremium && isShape && (
         <div className="pt-3 border-t border-border">
           <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-3 w-3 text-amber-500" />
+            <Palette className="h-3 w-3 text-amber-500" />
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Premium Gradients</span>
           </div>
           <div className="grid grid-cols-4 gap-1">
@@ -741,7 +737,7 @@ function EffectsTabContent({
   if (!selectedObject) {
     return (
       <div className="p-4 text-center">
-        <Sparkles className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+        <SlidersHorizontal className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
         <p className="text-xs text-muted-foreground">Select an element to apply effects</p>
       </div>
     );

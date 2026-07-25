@@ -4,7 +4,6 @@ import { useCallback, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useDataSourceStore } from '@/store/dataSourceStore';
 import { useEditorStore } from '@/store/editorStore';
-import { parseSpreadsheet, isSupportedFile } from '@/lib/excel';
 import { createVariableTextbox } from '@/lib/fabric';
 import {
   Upload,
@@ -20,6 +19,14 @@ interface RightSidebarProps {
   onUpsell?: (feature: string) => void;
 }
 
+const SUPPORTED_EXTENSIONS = ['.xlsx', '.xls', '.csv', '.ods'];
+const SPREADSHEET_LIMITS = { maxRows: 1000, maxColumns: 100 } as const;
+
+function isSupportedFile(file: File) {
+  const extension = `.${file.name.split('.').pop()?.toLowerCase() || ''}`;
+  return SUPPORTED_EXTENSIONS.includes(extension);
+}
+
 export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
   const { fabricInstance } = useFabricContext();
   const {
@@ -28,6 +35,10 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
     setDataSource,
     previewRowIndex,
     setPreviewRowIndex,
+    isLoading,
+    error,
+    setLoading,
+    setError,
   } = useDataSourceStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,11 +57,16 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
     if (!file) return;
 
     if (!isSupportedFile(file)) {
-      alert('Please upload a valid Excel (.xlsx, .xls) or CSV file');
+      const message = 'Please upload a valid spreadsheet (.xlsx, .xls, .csv, or .ods).';
+      setError(message);
+      alert(message);
       return;
     }
 
     try {
+      setError(null);
+      setLoading(true);
+      const { parseSpreadsheet } = await import('@/lib/excel');
       // For now, assume single sheet or take the first one
       const data = await parseSpreadsheet(file);
       if (data.rows && data.rows.length > 0) {
@@ -58,7 +74,16 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
       }
     } catch (error) {
       console.error('Failed to parse file:', error);
-      alert('Failed to parse the file. Please check if it is a valid spreadsheet.');
+      const message = error instanceof Error
+        ? error.message
+        : 'Failed to parse the file. Please check if it is a valid spreadsheet.';
+      setError(message);
+      alert(message);
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -125,19 +150,25 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx,.xls,.ods"
               className="hidden"
               onChange={handleFileUpload}
             />
             <button
               onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              Select File
+              {isLoading ? 'Loading...' : 'Select File'}
             </button>
             <p className="text-xs text-muted-foreground">
-              Supports: .xlsx, .xls, .csv
+              Supports up to {SPREADSHEET_LIMITS.maxRows} rows and {SPREADSHEET_LIMITS.maxColumns} columns.
             </p>
+            {error && (
+              <p className="text-xs text-destructive">
+                {error}
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-6">

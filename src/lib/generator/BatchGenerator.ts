@@ -12,6 +12,8 @@ import {
   generateQRCodeDataURL,
 } from '@/lib/fabric';
 import { yieldToMain } from '@/lib/utils';
+import { buildVerificationUrl } from '@/lib/verification/url';
+import { loadFontsForTemplate } from '@/lib/fonts/googleFonts';
 import type { DataRow, CertificateRecord as FirebaseCertificateRecord } from '@/types/fabric.d';
 
 export interface BatchGenerationOptions {
@@ -23,9 +25,11 @@ export interface BatchGenerationOptions {
   templateId?: string;
   templateName?: string;
   userId?: string;
+  authToken?: string;
   issuerName?: string;
   certificateTitle?: string;
   certificateDescription?: string;
+  eventId?: string;
   titleField?: string;
   outputFormat?: 'pdf' | 'png' | 'both';
   onProgress?: (current: number, total: number, status: string) => void;
@@ -34,11 +38,23 @@ export interface BatchGenerationOptions {
   isCancelled?: () => boolean;
 }
 
+export interface GeneratedCertificateResult {
+  rowIndex: number;
+  certificateId: string;
+  recipientName: string;
+  rowData: DataRow;
+  record: Partial<FirebaseCertificateRecord>;
+}
+
 export interface BatchGenerationResult {
   success: boolean;
+  generationBatchId: string;
   totalGenerated: number;
   errors: Array<{ index: number; message: string }>;
   certificateIds: string[];
+  generatedCertificates: GeneratedCertificateResult[];
+  persistedCertificateIds: string[];
+  persistenceErrors: Array<{ index: number; certificateId?: string; message: string }>;
   certificateImageUrls: Map<string, string>;
   certificatePdfBlobs: Map<string, Blob>;
   zipBlob?: Blob;
@@ -47,6 +63,10 @@ export interface BatchGenerationResult {
 }
 
 const YIELD_INTERVAL = 10;
+
+function authHeaders(authToken?: string): Record<string, string> {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
 
 export async function generateBatch(
   options: BatchGenerationOptions
@@ -60,9 +80,11 @@ export async function generateBatch(
     issuerName = 'Serenity',
     certificateTitle = 'Certificate of Completion',
     certificateDescription = '',
+    eventId,
     titleField = 'Certificate',
     templateName = 'Untitled Template',
     userId,
+    authToken,
     outputFormat = 'pdf',
     onProgress,
     onError,
@@ -70,19 +92,29 @@ export async function generateBatch(
     isCancelled,
   } = options;
 
+  const generationBatchId = nanoid(12);
+
   const result: BatchGenerationResult = {
     success: false,
+    generationBatchId,
     totalGenerated: 0,
     errors: [],
     certificateIds: [],
+    generatedCertificates: [],
+    persistedCertificateIds: [],
+    persistenceErrors: [],
     certificateImageUrls: new Map(),
     certificatePdfBlobs: new Map(),
   };
 
+  await loadFontsForTemplate(templateJSON);
+
   // Check user's certificate generation limit before starting
   if (userId) {
     try {
-      const premiumResponse = await fetch(`/api/users/premium?userId=${userId}`);
+      const premiumResponse = await fetch('/api/users/premium', {
+        headers: authHeaders(authToken),
+      });
       const premiumData = await premiumResponse.json();
       
       if (premiumData.success) {
@@ -94,7 +126,7 @@ export async function generateBatch(
           result.success = false;
           result.errors.push({ 
             index: -1, 
-            message: 'Free tier limit reached. Upgrade to premium for unlimited certificates.' 
+            message: 'Free tier limit reached. Paid upgrades are not currently available.'
           });
           result.limitReached = true;
           result.remaining = 0;
@@ -105,7 +137,7 @@ export async function generateBatch(
           result.success = false;
           result.errors.push({ 
             index: -1, 
-            message: `You can only generate ${remainingFree} more certificate(s) on the free tier. Upgrade to premium for unlimited certificates.` 
+            message: `You can only generate ${remainingFree} more certificate(s) on the free tier.`
           });
           result.limitReached = true;
           result.remaining = remainingFree;
@@ -293,14 +325,25 @@ export async function generateBatch(
           recipientName,
           title: certificateTitle || String(row[titleField] || 'Certificate of Completion'),
           description: certificateDescription || '',
+          eventId,
           issuedAt: Date.now(),
           issuerName,
           viewCount: 0,
           metadata: row as Record<string, string>,
           isActive: true,
+          generationBatchId,
+          rowIndex: i,
+          generationStatus: 'rendered',
         };
 
         result.certificateIds.push(certificateId);
+        result.generatedCertificates.push({
+          rowIndex: i,
+          certificateId,
+          recipientName,
+          rowData: row,
+          record,
+        });
         result.totalGenerated++;
         console.log(`[BatchGenerator] Generated certificate ${certificateId} for ${recipientName} (${i + 1}/${total})`);
 
@@ -347,11 +390,13 @@ export async function generateBatch(
       try {
         const response = await fetch('/api/certificates/upload-image', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders(authToken),
+          },
           body: JSON.stringify({
             certificateId: certId,
             imageBase64: thumbnailDataURL,
-            userId: userId,
           }),
         });
         
@@ -361,22 +406,22 @@ export async function generateBatch(
         }
       } catch (uploadError) {
         console.warn(`[BatchGenerator] Failed to upload thumbnail for ${certId}:`, uploadError);
+      } finally {
+        thumbnailMap.delete(certId);
       }
     };
     
-    const uploadTasks: Array<{ certId: string; thumbnailDataURL: string }> = [];
-    for (const certId of result.certificateIds) {
-      const thumbnailDataURL = thumbnailMap.get(certId);
-      if (thumbnailDataURL) {
-        uploadTasks.push({ certId, thumbnailDataURL });
-      }
+    const generatedCertificateIds = result.generatedCertificates.map((certificate) => certificate.certificateId);
+    for (let i = 0; i < generatedCertificateIds.length; i += UPLOAD_BATCH_SIZE) {
+      const batchIds = generatedCertificateIds.slice(i, i + UPLOAD_BATCH_SIZE);
+      await Promise.all(batchIds.map((certId) => {
+        const thumbnailDataURL = thumbnailMap.get(certId);
+        return thumbnailDataURL ? uploadImage(certId, thumbnailDataURL) : Promise.resolve();
+      }));
+      onProgress?.(total, total, `Uploading images... ${Math.min(i + UPLOAD_BATCH_SIZE, generatedCertificateIds.length)}/${generatedCertificateIds.length}`);
+      await yieldToMain();
     }
-    
-    for (let i = 0; i < uploadTasks.length; i += UPLOAD_BATCH_SIZE) {
-      const batch = uploadTasks.slice(i, i + UPLOAD_BATCH_SIZE);
-      await Promise.all(batch.map(task => uploadImage(task.certId, task.thumbnailDataURL)));
-      onProgress?.(total, total, `Uploading images... ${Math.min(i + UPLOAD_BATCH_SIZE, uploadTasks.length)}/${uploadTasks.length}`);
-    }
+    thumbnailMap.clear();
     
     imageUrlMap.forEach((url, certId) => {
       result.certificateImageUrls.set(certId, url);
@@ -384,15 +429,12 @@ export async function generateBatch(
     
     onProgress?.(total, total, 'Saving certificate records...');
     
-    for (let i = 0; i < dataRows.length; i++) {
-      const row = dataRows[i];
-      const certId = result.certificateIds[i];
-      if (!certId) {
-        console.log(`[BatchGenerator] Skipping index ${i}, no certificate ID`);
-        continue;
-      }
+    for (const generatedCertificate of result.generatedCertificates) {
+      const row = generatedCertificate.rowData;
+      const certId = generatedCertificate.certificateId;
+      const rowIndex = generatedCertificate.rowIndex;
       
-      const recipientName = String(row[nameField] || `Certificate_${i + 1}`);
+      const recipientName = String(row[nameField] || `Certificate_${rowIndex + 1}`);
       
       const certificateImageUrl = imageUrlMap.get(certId) || '';
       
@@ -405,11 +447,16 @@ export async function generateBatch(
         recipientEmail: String(row['Email'] || row['email'] || ''),
         title: certificateTitle || 'Certificate of Completion',
         description: certificateDescription || '',
+        eventId,
         issuedAt: Date.now(),
         issuerName,
         viewCount: 0,
         metadata: row as Record<string, string>,
         isActive: true,
+        generationBatchId,
+        rowIndex,
+        generationStatus: 'rendered',
+        idempotencyKey: `${generationBatchId}:${rowIndex}`,
         certificateImage: certificateImageUrl, // Store URL reference, not base64
       });
     }
@@ -421,6 +468,7 @@ export async function generateBatch(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...authHeaders(authToken),
           },
           body: JSON.stringify({ certificates: certificatesToSave }),
         });
@@ -428,11 +476,24 @@ export async function generateBatch(
         const data = await response.json();
         
         if (data.success) {
+          result.persistedCertificateIds = Array.isArray(data.ids)
+            ? data.ids.filter((id: unknown): id is string => typeof id === 'string')
+            : certificatesToSave.map((certificate) => certificate.id);
           console.log(`[BatchGenerator] Saved ${data.created} certificates to Firebase via API`);
         } else {
+          const message = typeof data.error === 'string'
+            ? data.error
+            : 'Some certificates failed to save';
+          result.persistenceErrors.push({ index: -1, message });
+          result.errors.push({ index: -1, message });
+          onError?.(-1, message);
           console.warn('[BatchGenerator] Some certificates failed to save:', data.errors);
         }
       } catch (apiError) {
+        const message = apiError instanceof Error ? apiError.message : 'Failed to save certificates via API';
+        result.persistenceErrors.push({ index: -1, message });
+        result.errors.push({ index: -1, message });
+        onError?.(-1, message);
         console.warn('[BatchGenerator] Failed to save certificates via API:', apiError);
         // Don't fail the entire operation if API fails
       }
@@ -442,6 +503,7 @@ export async function generateBatch(
     // No need for localStorage auto-save here
 
     onProgress?.(total, total, 'Complete!');
+    result.success = result.errors.length === 0 && result.persistenceErrors.length === 0;
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Generation failed';
@@ -506,8 +568,7 @@ function collectClickableLinks(
   certificateId: string
 ): ClickableLinkInfo[] {
   const links: ClickableLinkInfo[] = [];
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity-three-kappa.vercel.app/';
-  const verificationURL = `${baseUrl}/verify/${certificateId}`;
+  const verificationURL = buildVerificationUrl(certificateId);
   
   const objects = canvas.getObjects();
   for (const obj of objects) {
@@ -545,8 +606,7 @@ function updateVerificationUrlPlaceholder(
   canvas: fabric.StaticCanvas,
   certificateId: string
 ): void {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity-three-kappa.vercel.app/';
-  const verificationURL = `${baseUrl}/verify/${certificateId}`;
+  const verificationURL = buildVerificationUrl(certificateId);
   
   const objects = canvas.getObjects();
   for (const obj of objects) {
@@ -593,14 +653,16 @@ async function updateQRCode(
   const newDataUrl = await generateQRCodeDataURL(certificateId, 200, qrColor, qrBackgroundColor);
   
   // Replace the image element
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     fabric.Image.fromURL(newDataUrl, (newImg) => {
-      if (newImg && newImg.getElement()) {
-        qrImage.setElement(newImg.getElement() as HTMLImageElement);
-        // Update the verificationId property
-        qrImage.verificationId = certificateId;
-        canvas.requestRenderAll();
+      if (!newImg || !newImg.getElement()) {
+        reject(new Error('Generated QR image could not be loaded'));
+        return;
       }
+
+      qrImage.setElement(newImg.getElement() as HTMLImageElement);
+      qrImage.verificationId = certificateId;
+      canvas.requestRenderAll();
       resolve();
     });
   });
@@ -628,6 +690,7 @@ export async function generateSingleCertificate(
   certificateId?: string
 ): Promise<{ dataURL: string; pdfBlob: Blob; certificateId: string }> {
   const id = certificateId || nanoid(12);
+  await loadFontsForTemplate(templateJSON);
   
   // Register custom classes
   registerVariableTextbox();

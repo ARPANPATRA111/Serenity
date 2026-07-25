@@ -6,6 +6,12 @@ node_modules/
 # Testing
 coverage/
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Next.js
 .next/
 out/
@@ -29,6 +35,8 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.staging.local
+.env*.local
 
 # Vercel
 .vercel
@@ -55,6 +63,9 @@ I.md
 
 # Login to Firebase
 firebase login
+
+Serenity-Certificate-Generator-I-QA.md
+Serenity-Certificate-Generator-P.md
 
 # Deploy only indexes
 firebase deploy --only firestore:indexes

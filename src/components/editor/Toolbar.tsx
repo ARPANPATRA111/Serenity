@@ -36,12 +36,11 @@ import {
   Wand2,
   Loader2,
   Database,
-  ChevronLeft,
   Link2,
   Eye,
   EyeOff,
   Palette,
-  Star,
+  BadgeCheck,
   Pentagon,
   Hexagon,
   ArrowRight,
@@ -58,6 +57,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { ColorPicker } from '@/components/ui/ColorPicker';
+import { SerenityMark } from '@/components/brand/SerenityBrand';
 import { ToolPanel, ToolPanelItem, ToolPanelDivider, ToolPanelSection } from './ToolPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { createQRCodeImage, findQRCodeImage } from '@/lib/fabric';
@@ -78,7 +78,6 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     canUndo, canRedo, 
     selectedObject,
     templateName, setTemplateName,
-    pushHistory,
     isPreviewMode,
     setPreviewMode,
     certificateMetadata,
@@ -160,31 +159,44 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const canvas = fabricInstance?.getCanvas();
+      const activeObject = canvas?.getActiveObject() as { isEditing?: boolean } | undefined;
+      const isNativeEditingTarget = !!target?.closest('input, textarea, select, [contenteditable="true"]');
+      if (isNativeEditingTarget || activeObject?.isEditing) return;
+
+      const key = e.key.toLowerCase();
+      const hasCommandModifier = e.ctrlKey || e.metaKey;
+
       // Ctrl+S for Save
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if (hasCommandModifier && key === 's') {
         e.preventDefault();
         if (!isPreviewMode) onSave?.();
       }
       
-      // Ctrl+Z for Undo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      // Ctrl/Cmd+Z for undo; Shift+Z is redo on both platforms.
+      if (hasCommandModifier && key === 'z') {
         e.preventDefault();
-        if (!isPreviewMode && canUndo) handleUndoRef.current?.();
+        if (e.shiftKey) {
+          if (!isPreviewMode && canRedo) handleRedoRef.current?.();
+        } else if (!isPreviewMode && canUndo) {
+          handleUndoRef.current?.();
+        }
       }
 
       // Ctrl+Y for Redo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      if (hasCommandModifier && key === 'y') {
         e.preventDefault();
         if (!isPreviewMode && canRedo) handleRedoRef.current?.();
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === 'q') {
+      if (hasCommandModifier && key === 'q') {
         e.preventDefault();
         handleTogglePreviewRef.current?.();
       }
 
       // Ctrl+D for Duplicate
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      if (hasCommandModifier && key === 'd') {
         e.preventDefault();
         if (!isPreviewMode && selectedObject) {
           handleCloneRef.current?.();
@@ -195,6 +207,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Only if canvas is active and not editing text
         if (!isPreviewMode && fabricInstance && selectedObject && !useEditorStore.getState().isEditingText) {
+          e.preventDefault();
           handleDeleteRef.current?.();
         }
       }
@@ -322,12 +335,12 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       canvas.add(qrImage);
       canvas.setActiveObject(qrImage);
       canvas.requestRenderAll();
-      pushHistory(JSON.stringify(canvas.toJSON()));
+      fabricInstance?.recordHistory();
     } catch (error) {
       console.error('Failed to add QR code:', error);
       alert('Failed to add QR code. Please try again.');
     }
-  }, [fabricInstance, isPreviewMode, pushHistory]);
+  }, [fabricInstance, isPreviewMode]);
 
   // Drawing mode
   const [isDrawingMode, setIsDrawingMode] = useState(false);
@@ -394,10 +407,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         
         canvas?.setActiveObject(cloned);
         canvas?.requestRenderAll();
-        pushHistory(JSON.stringify(canvas?.toJSON()));
+        fabricInstance?.recordHistory();
       });
     }
-  }, [fabricInstance, pushHistory]);
+  }, [fabricInstance]);
 
   const handleDelete = useCallback(() => {
     if (isPreviewMode) return;
@@ -424,10 +437,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       deletableObjects.forEach((obj) => {
         canvas?.remove(obj);
       });
-      // Push history manually as automatic tracking might miss deletion in some cases
-      pushHistory(JSON.stringify(canvas?.toJSON()));
+      fabricInstance?.recordHistory();
     }
-  }, [fabricInstance, pushHistory, isPreviewMode]);
+  }, [fabricInstance, isPreviewMode]);
 
   handleDeleteRef.current = handleDelete;
   handleCloneRef.current = handleClone;
@@ -600,9 +612,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     if (activeObject) {
       activeObject.bringToFront();
       canvas?.requestRenderAll();
-      pushHistory(JSON.stringify(canvas?.toJSON()));
+      fabricInstance?.recordHistory();
     }
-  }, [fabricInstance, pushHistory]);
+  }, [fabricInstance]);
 
   const handleSendToBack = useCallback(() => {
     const canvas = fabricInstance?.getCanvas();
@@ -629,8 +641,8 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     }
     
     canvas.requestRenderAll();
-    pushHistory(JSON.stringify(canvas?.toJSON()));
-  }, [fabricInstance, pushHistory]);
+    fabricInstance?.recordHistory();
+  }, [fabricInstance]);
 
    const handleFlipHorizontal = useCallback(() => {
     const canvas = fabricInstance?.getCanvas();
@@ -638,9 +650,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     if (activeObject) {
       activeObject.set('flipX', !activeObject.flipX);
       canvas?.requestRenderAll();
-      pushHistory(JSON.stringify(canvas?.toJSON()));
+      fabricInstance?.recordHistory();
     }
-  }, [fabricInstance, pushHistory]);
+  }, [fabricInstance]);
 
   const handleFlipVertical = useCallback(() => {
      const canvas = fabricInstance?.getCanvas();
@@ -648,9 +660,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     if (activeObject) {
       activeObject.set('flipY', !activeObject.flipY);
       canvas?.requestRenderAll();
-      pushHistory(JSON.stringify(canvas?.toJSON()));
+      fabricInstance?.recordHistory();
     }
-  }, [fabricInstance, pushHistory]);
+  }, [fabricInstance]);
 
   const handleRotate = useCallback((angle: number) => {
      const canvas = fabricInstance?.getCanvas();
@@ -658,9 +670,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     if (activeObject) {
       activeObject.rotate((activeObject.angle || 0) + angle);
       canvas?.requestRenderAll();
-      pushHistory(JSON.stringify(canvas?.toJSON()));
+      fabricInstance?.recordHistory();
     }
-  }, [fabricInstance, pushHistory]);
+  }, [fabricInstance]);
 
   const handleToggleLock = useCallback(() => {
     const canvas = fabricInstance?.getCanvas();
@@ -777,8 +789,8 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         )}
         
         {/* Home Button */}
-        <Link href="/dashboard" className="toolbar-button text-muted-foreground flex-shrink-0" title="Back to Dashboard">
-          <ChevronLeft />
+        <Link href="/dashboard" className="toolbar-button flex-shrink-0" title="Back to Dashboard" aria-label="Back to Dashboard">
+          <SerenityMark className="h-7 w-7 sm:h-8 sm:w-8" />
         </Link>
         
         {/* Template Name Input */}
@@ -793,7 +805,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
            />
            {isPremiumUser && !isPreviewMode && (
              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400/20 to-orange-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-semibold whitespace-nowrap" title="Premium features enabled">
-               <Star className="h-3 w-3 fill-current" />
+               <BadgeCheck className="h-3 w-3" />
                PRO
              </span>
            )}
@@ -1007,7 +1019,6 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         <ToolPanelItem icon={RectangleHorizontal} label="Rounded Rect" onClick={() => handleAddShape('roundedRect')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Circle} label="Circle" onClick={() => handleAddShape('circle')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Triangle} label="Triangle" onClick={() => handleAddShape('triangle')} disabled={isPreviewMode} />
-        <ToolPanelItem icon={Star} label="Star" onClick={() => handleAddShape('star')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Pentagon} label="Pentagon" onClick={() => handleAddShape('pentagon')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Hexagon} label="Hexagon" onClick={() => handleAddShape('hexagon')} disabled={isPreviewMode} />
         <ToolPanelItem icon={Diamond} label="Diamond" onClick={() => handleAddShape('diamond')} disabled={isPreviewMode} />
@@ -1016,7 +1027,6 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         <ToolPanelItem icon={Plus} label="Cross" onClick={() => handleAddShape('cross')} disabled={isPreviewMode} />
         <ToolPanelDivider />
         <ToolPanelSection title="Premium Shapes" />
-        <ToolPanelItem icon={Star} label="Gold Star" onClick={() => handleAddShape('star')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
         <ToolPanelItem icon={Diamond} label="Gold Diamond" onClick={() => handleAddShape('diamond')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
         <ToolPanelItem icon={Hexagon} label="Gold Hexagon" onClick={() => handleAddShape('hexagon')} disabled={isPreviewMode} premium isPremiumUser={isPremiumUser} />
         <ToolPanelDivider />

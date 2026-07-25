@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Mail, ArrowRight, ArrowLeft, AlertCircle, CheckCircle, Award, KeyRound } from 'lucide-react';
+import { Mail, ArrowRight, ArrowLeft, AlertCircle, CheckCircle, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 export default function ForgotPasswordPage() {
   const { forgotPassword } = useAuth();
@@ -39,12 +40,7 @@ export default function ForgotPasswordPage() {
           className="w-full max-w-md"
         >
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 mb-8">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-              <Award className="h-5 w-5 text-white" />
-            </div>
-            <span className="font-display text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
-          </Link>
+          <Link href="/" className="mb-8 inline-flex"><SerenityBrand /></Link>
 
           {/* Back Link */}
           <Link 

@@ -1,10 +1,14 @@
 ﻿'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useEditorStore } from '@/store/editorStore';
-import { Building, FileText, Info, AlertCircle, CheckCircle, Award, Eye, ExternalLink, Tag } from 'lucide-react';
+import { Building, FileText, Info, AlertCircle, CheckCircle, Award, Eye, ExternalLink, Tag, CalendarDays, Loader2 } from 'lucide-react';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import type { SerenityEvent } from '@/types/events';
+import { EVENTS_ENABLED } from '@/lib/featureFlags';
 
 const CATEGORIES = [
   'Education',
@@ -29,6 +33,9 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
   const [issuedBy, setIssuedBy] = useState(certificateMetadata.issuedBy);
   const [description, setDescription] = useState(certificateMetadata.description);
   const [category, setCategory] = useState(certificateMetadata.category || '');
+  const [eventId, setEventId] = useState(certificateMetadata.eventId || '');
+  const [events, setEvents] = useState<SerenityEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const [errors, setErrors] = useState<{ title?: string; issuedBy?: string }>({});
   const [showPreview, setShowPreview] = useState(false);
 
@@ -38,10 +45,26 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
       setIssuedBy(certificateMetadata.issuedBy);
       setDescription(certificateMetadata.description);
       setCategory(certificateMetadata.category || '');
+      setEventId(certificateMetadata.eventId || '');
       setErrors({});
       setShowPreview(false);
     }
   }, [isOpen, certificateMetadata]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setEventsLoading(true);
+    authenticatedFetch('/api/events?limit=100')
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to load events');
+        if (!cancelled) setEvents(data.events || []);
+      })
+      .catch((error) => console.error('[Certificate Info] Failed to load events:', error))
+      .finally(() => { if (!cancelled) setEventsLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   const handleSave = () => {
     const newErrors: { title?: string; issuedBy?: string } = {};
@@ -66,6 +89,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
       issuedBy: issuedBy.trim(),
       description: description.trim(),
       category: category || undefined,
+      eventId: eventId || undefined,
     });
     
     onClose();
@@ -328,6 +352,31 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
                 Helps users find your template when browsing public templates
               </p>
             </div>
+
+            {/* Optional event context */}
+            {EVENTS_ENABLED && (
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <label className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                Linked Event <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <select
+                value={eventId}
+                onChange={(event) => setEventId(event.target.value)}
+                disabled={eventsLoading}
+                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+              >
+                <option value="">No linked event</option>
+                {events.map((event) => (
+                  <option key={event.id} value={event.id}>{event.name} · {event.type}</option>
+                ))}
+              </select>
+              <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>{eventsLoading ? <><Loader2 className="mr-1 inline h-3 w-3 animate-spin" />Loading events…</> : 'The event will appear as optional context on verification pages.'}</span>
+                <Link href="/events" target="_blank" className="shrink-0 font-semibold text-primary hover:underline">Manage events</Link>
+              </div>
+            </div>
+            )}
 
             {/* Status indicator */}
             <div className={`flex items-center gap-2 rounded-lg p-3 ${

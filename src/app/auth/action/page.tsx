@@ -5,8 +5,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { applyActionCode, verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
 import { auth, initializeFirebase } from '@/lib/firebase/client';
 import Link from 'next/link';
-import { CheckCircle2, XCircle, Loader2, Sparkles, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 function AuthActionContent() {
   const searchParams = useSearchParams();
@@ -108,12 +109,7 @@ function AuthActionContent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md text-center">
-        <Link href="/" className="inline-flex items-center gap-3 mb-8">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-display text-2xl font-bold">Serenity</span>
-        </Link>
+        <Link href="/" className="mb-8 inline-flex"><SerenityBrand /></Link>
 
         <div className="bg-card border border-border rounded-2xl p-8 shadow-lg">
           {status === 'loading' && (

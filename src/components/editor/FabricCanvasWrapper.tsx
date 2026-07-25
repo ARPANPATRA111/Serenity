@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useFabric, A4_LANDSCAPE, createVariableTextbox } from '@/lib/fabric';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore } from '@/store/editorStore';
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, Smartphone } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 export function FabricCanvasWrapper() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -13,9 +13,13 @@ export function FabricCanvasWrapper() {
   const [manualZoom, setManualZoom] = useState(1);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(true);
-  const [showMobileHint, setShowMobileHint] = useState(true);
   const initRef = useRef(false);
+  const gestureRef = useRef<{
+    distance: number;
+    zoom: number;
+    midpointX: number;
+    midpointY: number;
+  } | null>(null);
   
   const { setFabricInstance } = useFabricContext();
   const { zoomLevel, isPreviewMode } = useEditorStore();
@@ -48,9 +52,7 @@ export function FabricCanvasWrapper() {
   useEffect(() => {
     const checkMobileAndOrientation = () => {
       const isMobileDevice = window.innerWidth < 768 || ('ontouchstart' in window);
-      const isLandscapeOrientation = window.innerWidth > window.innerHeight;
       setIsMobile(isMobileDevice);
-      setIsLandscape(isLandscapeOrientation);
     };
 
     checkMobileAndOrientation();
@@ -98,6 +100,40 @@ export function FabricCanvasWrapper() {
 
   const handleResetZoom = useCallback(() => {
     setManualZoom(1);
+  }, []);
+
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2) return;
+    const [first, second] = Array.from(event.touches);
+    gestureRef.current = {
+      distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY),
+      zoom: manualZoom,
+      midpointX: (first.clientX + second.clientX) / 2,
+      midpointY: (first.clientY + second.clientY) / 2,
+    };
+  }, [manualZoom]);
+
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || event.touches.length !== 2) return;
+    event.preventDefault();
+
+    const [first, second] = Array.from(event.touches);
+    const distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+    const midpointX = (first.clientX + second.clientX) / 2;
+    const midpointY = (first.clientY + second.clientY) / 2;
+    setManualZoom(Math.min(3, Math.max(0.5, gesture.zoom * (distance / gesture.distance))));
+
+    if (containerRef.current) {
+      containerRef.current.scrollLeft -= midpointX - gesture.midpointX;
+      containerRef.current.scrollTop -= midpointY - gesture.midpointY;
+    }
+    gesture.midpointX = midpointX;
+    gesture.midpointY = midpointY;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    gestureRef.current = null;
   }, []);
 
   // Handle drag and drop
@@ -157,26 +193,10 @@ export function FabricCanvasWrapper() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
-      {/* Mobile Landscape Hint */}
-      {isMobile && !isLandscape && showMobileHint && (
-        <div className="fixed top-16 left-4 right-4 z-50 bg-amber-500/90 text-white rounded-lg p-3 shadow-lg animate-in fade-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-3">
-            <Smartphone className="h-5 w-5 flex-shrink-0 rotate-90" />
-            <div className="flex-1 text-sm">
-              <p className="font-medium">Rotate for better editing</p>
-              <p className="text-xs opacity-90">Landscape mode works better for A4 certificates</p>
-            </div>
-            <button 
-              onClick={() => setShowMobileHint(false)}
-              className="text-white/80 hover:text-white text-xl leading-none"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Mobile Zoom Controls */}
       {isMobile && (
         <div className="fixed bottom-20 right-4 z-40 flex flex-col gap-2">
@@ -184,6 +204,7 @@ export function FabricCanvasWrapper() {
             onClick={handleZoomIn}
             className="p-3 bg-card border border-border rounded-full shadow-lg hover:bg-muted transition-colors"
             title="Zoom in"
+            aria-label="Zoom in"
           >
             <ZoomIn className="h-5 w-5" />
           </button>
@@ -191,6 +212,7 @@ export function FabricCanvasWrapper() {
             onClick={handleZoomOut}
             className="p-3 bg-card border border-border rounded-full shadow-lg hover:bg-muted transition-colors"
             title="Zoom out"
+            aria-label="Zoom out"
           >
             <ZoomOut className="h-5 w-5" />
           </button>
@@ -199,6 +221,7 @@ export function FabricCanvasWrapper() {
               onClick={handleResetZoom}
               className="p-3 bg-card border border-border rounded-full shadow-lg hover:bg-muted transition-colors"
               title="Reset zoom"
+              aria-label="Reset zoom"
             >
               <RotateCcw className="h-4 w-4" />
             </button>

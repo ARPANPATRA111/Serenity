@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { useFabricContext } from './FabricContext';
-import { loadGoogleFont, isGoogleFont, loadAllGoogleFonts } from '@/lib/fonts/googleFonts';
+import { loadGoogleFont, isGoogleFont } from '@/lib/fonts/googleFonts';
 import { generateQRCodeDataURL } from '@/lib/fabric';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { StyleSidebar } from './StyleSidebar';
@@ -55,7 +55,7 @@ type FabricObject = Record<string, unknown> & {
 export function PropertiesBar() {
   const { selectedObject, selectedObjectType, isPreviewMode } = useEditorStore();
   const { fabricInstance } = useFabricContext();
-  const [fontsLoaded, setFontsLoaded] = useState(false);
+  const fontsLoaded = true;
   const [, setForceUpdate] = useState(0);
   
   // Style sidebar state (replaces font dropdown)
@@ -88,15 +88,6 @@ export function PropertiesBar() {
   }, [fabricInstance, forceRender]);
 
 
-  // Load fonts on mount
-  useEffect(() => {
-    const loadFonts = async () => {
-      await loadAllGoogleFonts();
-      setFontsLoaded(true);
-    };
-    loadFonts();
-  }, []);
-  
   // Close sidebar when clicking the main canvas area
   useEffect(() => {
     const handleCanvasClick = () => {
@@ -117,7 +108,7 @@ export function PropertiesBar() {
   if (!selectedObject || isPreviewMode) {
     return (
       <div className="flex h-12 w-full items-center border-b border-border bg-card px-4 text-sm text-muted-foreground">
-        {isPreviewMode ? 'Preview mode — editing disabled' : 'Select an element to edit its properties'}
+        {isPreviewMode ? 'Preview mode: editing disabled' : 'Select an element to edit its properties'}
       </div>
     );
   }
@@ -322,9 +313,11 @@ export function PropertiesBar() {
           <input
             type="number"
             value={object.fontSize || 24}
-            onChange={(e) => handleChange('fontSize', parseInt(e.target.value))}
+            onChange={(e) => handleChange('fontSize', Math.min(300, Math.max(1, Number.parseFloat(e.target.value) || 1)))}
             className="h-8 w-16 rounded border border-border px-2 text-xs"
             min="1"
+            max="300"
+            step="0.1"
             title="Font Size"
           />
 

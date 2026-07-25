@@ -4,8 +4,17 @@ import {
   getUserTemplates,
   getPublicTemplates,
   searchTemplates,
+  findTemplateByNormalizedName,
+  updateTemplate,
   type Template,
 } from '@/lib/firebase/templates';
+import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
+import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
+import { getEvent } from '@/lib/firebase/events';
+import {
+  mergeWithCuratedTemplates,
+  searchCuratedTemplates,
+} from '@/lib/templates/curatedPublicTemplates';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,6 +22,40 @@ export const dynamic = 'force-dynamic';
 // In-memory cache for public templates (refreshes every 60 seconds)
 let publicTemplatesCache: { templates: Template[]; timestamp: number } | null = null;
 const CACHE_TTL = 60 * 1000; // 60 seconds
+
+function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
+  if (clientUserId && typeof clientUserId === 'string' && clientUserId !== uid) {
+    return forbiddenResponse('Authenticated user does not match requested user ID');
+  }
+
+  return null;
+}
+
+function sanitizePublicTemplate(template: Template, includeCanvasJSON = false): Template {
+  const { creatorEmail, userId, canvasJSON, ...safeTemplate } = template;
+  return {
+    ...safeTemplate,
+    canvasJSON: includeCanvasJSON ? canvasJSON : '',
+  } as Template;
+}
+
+function filterOwnedTemplates(templates: Template[], query: string): Template[] {
+  const lowerQuery = query.toLowerCase();
+  return templates.filter(template =>
+    template.name.toLowerCase().includes(lowerQuery) ||
+    template.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
+  );
+}
+
+async function validateLinkedEvent(certificateMetadata: unknown, userId: string) {
+  if (!certificateMetadata || typeof certificateMetadata !== 'object') return null;
+  const eventId = (certificateMetadata as Record<string, unknown>).eventId;
+  if (!eventId) return null;
+  if (typeof eventId !== 'string') return 'Linked event ID is invalid.';
+  const event = await getEvent(eventId);
+  if (!event || event.userId !== userId || event.archivedAt) return 'Linked event is unavailable.';
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,37 +66,57 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50', 10);
 
     let templates: Template[] = [];
+    const headers: HeadersInit = {};
 
     try {
-      if (searchQuery) {
-        // Search templates
-        templates = await searchTemplates(searchQuery, isPublic);
-      } else if (userId && !isPublic) {
-        // Get user's own templates
-        templates = await getUserTemplates(userId);
-      } else if (isPublic) {
-        // Get public templates with caching
-        const now = Date.now();
-        if (publicTemplatesCache && (now - publicTemplatesCache.timestamp) < CACHE_TTL) {
-          // Use cached data
-          templates = publicTemplatesCache.templates.slice(0, limit);
+      if (isPublic) {
+        if (searchQuery) {
+          templates = await searchTemplates(searchQuery, true);
+          templates = templates.map(template => sanitizePublicTemplate(template));
+          const existingIds = new Set(templates.map(template => template.id));
+          templates = [
+            ...templates,
+            ...searchCuratedTemplates(searchQuery).filter(template => !existingIds.has(template.id)),
+          ].slice(0, limit);
         } else {
-          // Fetch fresh data
-          templates = await getPublicTemplates(limit);
-          publicTemplatesCache = { templates, timestamp: now };
+          const now = Date.now();
+          if (publicTemplatesCache && (now - publicTemplatesCache.timestamp) < CACHE_TTL) {
+            templates = publicTemplatesCache.templates.slice(0, limit);
+          } else {
+            templates = await getPublicTemplates(limit);
+            templates = mergeWithCuratedTemplates(
+              templates.map(template => sanitizePublicTemplate(template)),
+              limit,
+            ).map(template => sanitizePublicTemplate(template));
+            publicTemplatesCache = { templates, timestamp: now };
+          }
+          headers['Cache-Control'] = 'public, s-maxage=60, stale-while-revalidate=120';
         }
       } else {
-        templates = await getPublicTemplates(limit);
-      }
-    } catch {
-      // Return empty array on database errors (Firebase might not be configured)
-      templates = [];
-    }
+        const authUser = await verifyAuth(request);
+        if (!authUser) {
+          return unauthorizedResponse();
+        }
 
-    // Add cache headers for public templates
-    const headers: HeadersInit = {};
-    if (isPublic && !searchQuery) {
-      headers['Cache-Control'] = 'public, s-maxage=60, stale-while-revalidate=120';
+        const mismatch = rejectMismatchedUserId(userId, authUser.uid);
+        if (mismatch) return mismatch;
+
+        templates = await getUserTemplates(authUser.uid);
+        if (searchQuery) {
+          templates = filterOwnedTemplates(templates, searchQuery);
+        }
+      }
+    } catch (error: any) {
+      const isMissingIndex = error?.code === 9 || error?.code === 'failed-precondition';
+      console.error('[Templates API] Query failed:', error);
+      return NextResponse.json({
+        success: false,
+        templates: [],
+        error: isMissingIndex
+          ? 'Templates are temporarily unavailable while indexes are prepared.'
+          : 'Templates are temporarily unavailable.',
+        code: isMissingIndex ? 'INDEX_REQUIRED' : 'TEMPLATES_UNAVAILABLE',
+      }, { status: 503 });
     }
 
     return NextResponse.json({
@@ -72,9 +135,32 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
+    }
+
     const body = await request.json();
-    
-    const { name, canvasJSON, thumbnail, userId, isPublic, creatorName, creatorEmail, tags, certificateMetadata, category } = body;
+    const {
+      name,
+      canvasJSON,
+      thumbnail,
+      userId,
+      isPublic,
+      creatorName,
+      creatorEmail,
+      tags,
+      certificateMetadata,
+      category,
+    } = body;
+
+    const mismatch = rejectMismatchedUserId(userId, authUser.uid);
+    if (mismatch) return mismatch;
+
+    const linkedEventError = await validateLinkedEvent(certificateMetadata, authUser.uid);
+    if (linkedEventError) {
+      return NextResponse.json({ success: false, error: linkedEventError }, { status: 400 });
+    }
 
     if (!name || !canvasJSON) {
       return NextResponse.json(
@@ -83,40 +169,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if Firebase Admin is configured
-    if (!process.env.FIREBASE_ADMIN_PROJECT_ID || !process.env.FIREBASE_ADMIN_CLIENT_EMAIL || !process.env.FIREBASE_ADMIN_PRIVATE_KEY) {
+    const invariantResult = validateTemplateInvariants(canvasJSON);
+    if (!invariantResult.valid) {
+      return NextResponse.json({
+        success: false,
+        error: invariantResult.errors.join(' '),
+        code: 'TEMPLATE_INVARIANT_FAILED',
+      }, { status: 400 });
+    }
+
+    const usesEmulators = process.env.USE_FIREBASE_EMULATORS === 'true';
+    if (!usesEmulators && (!process.env.FIREBASE_ADMIN_PROJECT_ID || !process.env.FIREBASE_ADMIN_CLIENT_EMAIL || !process.env.FIREBASE_ADMIN_PRIVATE_KEY)) {
       return NextResponse.json(
         { success: false, error: 'Server configuration error: Firebase Admin not configured. Please set FIREBASE_ADMIN_* environment variables.' },
         { status: 500 }
       );
     }
 
-    // Check for duplicate template name for this user
-    if (userId) {
-      const existingTemplates = await getUserTemplates(userId);
-      const duplicateName = existingTemplates.find(
-        t => t.name.toLowerCase().trim() === name.toLowerCase().trim()
+    const duplicateName = await findTemplateByNormalizedName(authUser.uid, name);
+    if (duplicateName) {
+      return NextResponse.json(
+        { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
+        { status: 400 }
       );
-      if (duplicateName) {
-        return NextResponse.json(
-          { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
-          { status: 400 }
-        );
-      }
     }
 
+    const publicationV2 = process.env.PUBLIC_TEMPLATE_PUBLISHING_V2 === 'true';
     const template = await createTemplate({
       name,
       canvasJSON,
       thumbnail,
-      userId,
-      isPublic: isPublic ?? false,
+      userId: authUser.uid,
+      isPublic: publicationV2 ? false : (isPublic ?? false),
       creatorName,
-      creatorEmail,
+      creatorEmail: authUser.email || creatorEmail,
       tags: tags || [],
       category,
       certificateMetadata,
     });
+
+    if (publicationV2 && isPublic === true) {
+      template.publicationStatus = 'pending_review';
+      template.publicationRequestedAt = new Date().toISOString();
+      await updateTemplate(template.id, {
+        publicationStatus: 'pending_review',
+        publicationRequestedAt: template.publicationRequestedAt,
+      });
+    }
 
     return NextResponse.json({
       success: true,

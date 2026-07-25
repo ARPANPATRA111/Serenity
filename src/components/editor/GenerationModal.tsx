@@ -10,8 +10,9 @@ import { useGenerationStore } from '@/store/generationStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateBatch, downloadZip } from '@/lib/generator';
-import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Crown, Lock } from 'lucide-react';
-import Link from 'next/link';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { getIdToken } from '@/lib/firebase/client';
+import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Lock } from 'lucide-react';
 
 interface GenerationModalProps {
   isOpen: boolean;
@@ -108,7 +109,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       // Check premium status
       if (user?.id) {
         setPremiumCheck(prev => ({ ...prev, loading: true }));
-        fetch(`/api/users/premium?userId=${user.id}`)
+        authenticatedFetch('/api/users/premium')
           .then(res => res.json())
           .then(data => {
             if (data.success) {
@@ -151,6 +152,12 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       return;
     }
 
+    if (rows.length > 100 && !window.confirm(
+      `This batch contains ${rows.length} high-resolution certificates and may use significant memory. Continue?`,
+    )) {
+      return;
+    }
+
     // Clear any previous save error
     setSaveError(null);
 
@@ -164,6 +171,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     }
 
     const templateJSON = JSON.stringify(fabricInstance.toJSON());
+    const idToken = await getIdToken();
+    if (!idToken) {
+      setSaveError('Authentication expired. Please sign in again before generating certificates.');
+      return;
+    }
     
     setStep('generating');
     startGeneration(rows.length);
@@ -177,9 +189,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       templateId: templateId || undefined,
       templateName: templateName || 'Untitled Template',
       userId: user?.id,
+      authToken: idToken || undefined,
       issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
       certificateTitle: certificateMetadata.title || 'Certificate of Completion',
       certificateDescription: certificateMetadata.description || '',
+      eventId: certificateMetadata.eventId,
       onProgress: (current, total, status) => {
         updateProgress(current, status);
       },
@@ -207,35 +221,26 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
 
     complete();
 
-    // Increment certificate generation counter for the user
-    if (user?.id && result.certificateIds.length > 0) {
-      try {
-        await fetch(`/api/users/premium`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            action: 'incrementCount',
-            count: result.certificateIds.length,
-          }),
-        });
-      } catch (e) {
-        console.warn('Failed to update generation count:', e);
-      }
-    }
+    const persistedCertificateIds = new Set(result.persistedCertificateIds);
+    const generatedByRowIndex = new Map(
+      result.generatedCertificates
+        .filter((certificate) => persistedCertificateIds.has(certificate.certificateId))
+        .map((certificate) => [certificate.rowIndex, certificate])
+    );
 
     if (result.zipBlob) {
       setResultBlob(result.zipBlob);
       downloadZip(result.zipBlob, `certificates_${Date.now()}.zip`);
     }
 
-    if (sendEmails && emailField && result.certificateIds.length > 0) {
+    if (sendEmails && emailField && generatedByRowIndex.size > 0) {
       setStep('emailing');
       const emailResultsList: EmailResult[] = [];
       const rowsWithEmail = rows.filter(row => {
         const email = row[emailField];
         return email && typeof email === 'string' && email.includes('@');
       });
+      let emailProcessed = 0;
       
       setEmailProgress({ current: 0, total: rowsWithEmail.length });
 
@@ -243,7 +248,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
         const row = rows[i];
         const email = row[emailField];
         const recipientName = String(row[nameField] || `Recipient ${i + 1}`);
-        const certificateId = result.certificateIds[i];
+        const generatedCertificate = generatedByRowIndex.get(i);
+        const certificateId = generatedCertificate?.certificateId;
         
         if (!email || typeof email !== 'string' || !email.includes('@')) {
           emailResultsList.push({
@@ -262,6 +268,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             success: false,
             error: 'Certificate generation failed',
           });
+          emailProcessed += 1;
+          setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
           continue;
         }
 
@@ -281,14 +289,16 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           
           const response = await fetch('/api/email/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
             body: JSON.stringify({
               to: email,
               recipientName,
               certificateId,
               certificateTitle: certificateMetadata.title || 'Certificate of Completion',
               issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
-              userId: user?.id,
               certificatePdfBase64,
             }),
           });
@@ -310,7 +320,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           });
         }
 
-        setEmailProgress(prev => ({ ...prev, current: i + 1 }));
+        emailProcessed += 1;
+        setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
         setEmailResults([...emailResultsList]);
       }
       
@@ -516,28 +527,22 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             </div>
           )}
 
+          {rows.length > 50 && (
+            <div className="flex items-start gap-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-4">
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
+              <p className="text-sm text-muted-foreground">
+                Large high-resolution batches work best on a desktop. Keep this tab open and avoid other memory-heavy tasks during generation.
+              </p>
+            </div>
+          )}
+
           {/* Free Tier Limit Warning */}
           {!premiumCheck.loading && !premiumCheck.canGenerate && (
-            <div className="rounded-lg border-2 border-amber-500/50 bg-gradient-to-br from-amber-500/10 to-orange-500/10 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20">
-                  <Crown className="h-5 w-5 text-amber-500" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-foreground">Free Limit Reached</h4>
-                  <p className="text-sm text-muted-foreground">You&apos;ve used all 5 free certificate generations</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                Upgrade to <strong className="text-amber-600 dark:text-amber-400">Premium</strong> for unlimited certificate generation and email delivery (up to 300/day).
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+              <p className="font-semibold">Free limit reached</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Paid upgrades are not currently available. You can continue editing and exporting the template itself.
               </p>
-              <Link
-                href="/premium"
-                className="flex items-center justify-center gap-2 w-full rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:opacity-90 transition-opacity"
-              >
-                <Crown className="h-4 w-4" />
-                Upgrade to Premium — $25 Lifetime
-              </Link>
             </div>
           )}
 
@@ -547,7 +552,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               <Info className="h-4 w-4 text-blue-500 shrink-0" />
               <p className="text-xs text-muted-foreground">
                 Free plan: <strong>{premiumCheck.remaining}</strong> generation{premiumCheck.remaining !== 1 ? 's' : ''} remaining.{' '}
-                <Link href="/premium" className="text-primary hover:underline font-medium">Upgrade for unlimited</Link>
+                Billing is not currently available.
               </p>
             </div>
           )}
@@ -576,7 +581,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               {premiumCheck.loading ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking...</>
               ) : !premiumCheck.canGenerate ? (
-                <><Lock className="mr-2 h-4 w-4" /> Upgrade Required</>
+                <><Lock className="mr-2 h-4 w-4" /> Limit Reached</>
               ) : (
                 'Start Generation'
               )}

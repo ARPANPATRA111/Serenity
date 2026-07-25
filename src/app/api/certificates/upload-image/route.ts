@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
+import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,11 @@ export const runtime = 'nodejs';
  */
 export async function POST(request: NextRequest) {
   try {
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
+    }
+
     const body = await request.json();
     const { certificateId, imageBase64, userId } = body;
 
@@ -19,11 +25,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (userId && userId !== authUser.uid) {
+      return forbiddenResponse('Authenticated user does not match requested user ID');
+    }
+
+    const isPng = imageBase64.startsWith('data:image/png');
+    const isJpeg = imageBase64.startsWith('data:image/jpeg') || imageBase64.startsWith('data:image/jpg');
+    if (!isPng && !isJpeg) {
+      return NextResponse.json(
+        { success: false, error: 'Only PNG and JPEG certificate images are supported' },
+        { status: 400 }
+      );
+    }
+
     // Extract base64 data (remove data:image/xxx;base64, prefix if present)
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     
     // Determine content type from base64 header
-    const isJpeg = imageBase64.startsWith('data:image/jpeg');
     const contentType = isJpeg ? 'image/jpeg' : 'image/png';
     const extension = isJpeg ? 'jpg' : 'png';
     
@@ -39,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate blob path
-    const blobPath = `certificates/${userId || 'anonymous'}/${certificateId}.${extension}`;
+    const blobPath = `certificates/${authUser.uid}/${certificateId}.${extension}`;
 
     // Upload to Vercel Blob
     const blob = await put(blobPath, imageBuffer, {

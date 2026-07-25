@@ -7,11 +7,13 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 import { 
-  ArrowLeft, Plus, Search, Filter, Star, Award, Globe, Lock, 
+  ArrowLeft, Plus, Search, Filter, Bookmark, Globe, Lock,
   MoreVertical, Edit3, Trash2, Eye, Clock, FileText, Crown,
-  X, Tag, Sparkles
+  X, Tag, Library
 } from 'lucide-react';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 interface UserTemplate {
   id: string;
@@ -59,7 +61,7 @@ export default function MyTemplatesPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/templates?userId=${user.id}`);
+      const res = await authenticatedFetch('/api/templates');
       const data = await res.json();
       if (data.success && data.templates) {
         setTemplates(data.templates);
@@ -118,7 +120,7 @@ export default function MyTemplatesPage() {
 
   const handleDelete = async (templateId: string) => {
     try {
-      const res = await fetch(`/api/templates/${templateId}`, {
+      const res = await authenticatedFetch(`/api/templates/${templateId}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -132,8 +134,8 @@ export default function MyTemplatesPage() {
 
   const handleToggleVisibility = async (templateId: string, currentPublic: boolean) => {
     try {
-      const res = await fetch(`/api/templates/${templateId}`, {
-        method: 'PATCH',
+      const res = await authenticatedFetch(`/api/templates/${templateId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPublic: !currentPublic }),
       });
@@ -152,15 +154,12 @@ export default function MyTemplatesPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-screen bg-background">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
+        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
           <Link href="/" className="flex items-center gap-2">
-            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
+            <SerenityBrand />
           </Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -383,7 +382,7 @@ export default function MyTemplatesPage() {
                       </span>
                       {template.stars > 0 && (
                         <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 text-amber-500" />
+                          <Bookmark className="w-3 h-3 text-primary" />
                           {template.stars}
                         </span>
                       )}
@@ -418,7 +417,7 @@ export default function MyTemplatesPage() {
             <span className="hidden sm:inline">•</span>
             <span>{templates.filter(t => !t.isPublic).length} private</span>
             <span className="hidden sm:inline">•</span>
-            <span>{templates.reduce((sum, t) => sum + t.stars, 0)} total stars</span>
+            <span>{templates.reduce((sum, t) => sum + t.stars, 0)} total saves</span>
           </div>
         )}
 
@@ -434,7 +433,7 @@ export default function MyTemplatesPage() {
             href="/templates"
             className="mt-4 inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
-            <Sparkles className="w-4 h-4" />
+            <Library className="w-4 h-4" />
             Browse Public Templates
           </Link>
         </div>

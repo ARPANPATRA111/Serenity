@@ -1,19 +1,29 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { FabricCanvasWrapper } from './FabricCanvasWrapper';
 import { Toolbar } from './Toolbar';
 import { PropertiesBar } from './PropertiesBar';
 import { LeftSidebarTabs } from './LeftSidebarTabs';
 import { RightSidebar } from './RightSidebar';
-import { GenerationModal } from './GenerationModal';
-import { CertificateInfoModal } from './CertificateInfoModal';
 import { useEditorStore } from '@/store/editorStore';
 import { useDataSourceStore } from '@/store/dataSourceStore';
 import { useFabricContext } from './FabricContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, AlertCircle, X, PanelLeftOpen, PanelRightOpen, Palette, Database } from 'lucide-react';
+
+const GenerationModal = dynamic(
+  () => import('./GenerationModal').then((module) => module.GenerationModal),
+  { ssr: false },
+);
+const CertificateInfoModal = dynamic(
+  () => import('./CertificateInfoModal').then((module) => module.CertificateInfoModal),
+  { ssr: false },
+);
 
 export function EditorLayout() {
   const { leftSidebarOpen, rightSidebarOpen, setLeftSidebarOpen, setRightSidebarOpen } = useEditorStore();
@@ -105,7 +115,7 @@ export function EditorLayout() {
       setLoadingTemplate(true);
       lastLoadedTemplateId.current = paramTemplateId;
       
-      fetch(`/api/templates/${paramTemplateId}`)
+      authenticatedFetch(`/api/templates/${paramTemplateId}`)
         .then(res => res.json())
         .then(data => {
           if (data.success && data.template) {
@@ -125,7 +135,7 @@ export function EditorLayout() {
               setCertificateMetadata(data.template.certificateMetadata);
             } else {
               // Reset to defaults if template has no metadata
-              setCertificateMetadata({ title: '', issuedBy: '', description: '' });
+              setCertificateMetadata({ title: '', issuedBy: '', description: '', category: undefined, eventId: undefined });
             }
             
             if (data.template.canvasJSON) {
@@ -163,13 +173,20 @@ export function EditorLayout() {
     
     try {
       const json = fabricInstance.toJSON();
+      const invariantResult = validateTemplateInvariants(json);
+      if (!invariantResult.valid) {
+        const errorMsg = invariantResult.errors.join(' ');
+        setSaveStatus('error');
+        setSaveErrorMessage(errorMsg);
+        return { success: false, error: errorMsg };
+      }
       const canvasJSON = JSON.stringify(json);
       const thumbnailRef = fabricInstance.getCanvas()?.toDataURL({ format: 'png', multiplier: 0.5 });
       
       const method = templateId ? 'PUT' : 'POST';
       const url = templateId ? `/api/templates/${templateId}` : '/api/templates';
       
-      const res = await fetch(url, {
+      const res = await authenticatedFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -350,16 +367,20 @@ export function EditorLayout() {
       </div>
 
       {/* Generation Modal */}
-      <GenerationModal
-        isOpen={generationModalOpen}
-        onClose={() => setGenerationModalOpen(false)}
-        onSave={handleSave}
-      />
+      {generationModalOpen && (
+        <GenerationModal
+          isOpen
+          onClose={() => setGenerationModalOpen(false)}
+          onSave={handleSave}
+        />
+      )}
 
-      <CertificateInfoModal
-        isOpen={certificateInfoModalOpen}
-        onClose={() => setCertificateInfoModalOpen(false)}
-      />
+      {certificateInfoModalOpen && (
+        <CertificateInfoModal
+          isOpen
+          onClose={() => setCertificateInfoModalOpen(false)}
+        />
+      )}
 
       {/* Save Error Toast */}
       {saveErrorMessage && (

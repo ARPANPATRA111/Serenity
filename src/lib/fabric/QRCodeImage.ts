@@ -1,5 +1,6 @@
 import { fabric } from 'fabric';
 import { generateQRCodeDataURL as generateQRCode, QRCodeOptions } from '../qrcode';
+import { buildVerificationUrl } from '../verification/url';
 
 // QR Code generation constants
 const QR_SIZE = 200;
@@ -16,8 +17,7 @@ export async function generateQRCodeDataURL(
   color: string = '#000000',
   backgroundColor: string = '#ffffff'
 ): Promise<string> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
-  const verifyUrl = `${baseUrl}/verify/${verificationId}`;
+  const verifyUrl = buildVerificationUrl(verificationId);
   
   try {
     const dataUrl = await generateQRCode(verifyUrl, {
@@ -32,32 +32,8 @@ export async function generateQRCodeDataURL(
     return dataUrl;
   } catch (error) {
     console.error('Failed to generate QR code:', error);
-    // Return a placeholder on error
-    return createPlaceholderQR(size);
+    throw new Error('Failed to generate a scannable verification QR code', { cause: error });
   }
-}
-
-function createPlaceholderQR(size: number): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  
-  if (!ctx) return '';
-  
-  // Draw placeholder
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, size, size);
-  
-  ctx.fillStyle = '#e5e7eb';
-  ctx.fillRect(16, 16, size - 32, size - 32);
-  
-  ctx.fillStyle = '#9ca3af';
-  ctx.font = '12px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('QR Code', size / 2, size / 2);
-  
-  return canvas.toDataURL('image/png');
 }
 
 export async function createQRCodeImage(

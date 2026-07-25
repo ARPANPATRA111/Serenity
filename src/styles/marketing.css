@@ -1,0 +1,564 @@
+/**
+ * Serenity marketing + authentication design system.
+ *
+ * Scoped to the public surfaces (landing, login, signup) via `.sr-scope`.
+ * The authenticated application keeps its own tokens in globals.css; nothing
+ * here leaks into the dashboard, editor, history, or verification pages.
+ *
+ * Visual direction: a light neutral canvas, deep ink typography, one decisive
+ * Serenity indigo for actions, and a restrained aqua/amber pair reserved for
+ * verification and recognition moments. Motifs are original certificate
+ * geometry (seal rings, sheet stacks, data-to-document flow) rather than
+ * generic glass or fake browser chrome.
+ */
+
+.sr-scope {
+  --sr-canvas: 255 255 255;
+  --sr-canvas-subtle: 245 247 252;
+  --sr-canvas-sunken: 239 242 249;
+  --sr-ink: 16 25 53;
+  --sr-ink-soft: 74 86 115;
+  --sr-ink-faint: 116 129 158;
+  --sr-line: 226 232 243;
+  --sr-line-strong: 205 214 232;
+
+  --sr-brand: 79 70 229;
+  --sr-brand-strong: 67 56 202;
+  --sr-brand-ink: 255 255 255;
+  --sr-brand-wash: 238 240 254;
+
+  --sr-aqua: 13 148 160;
+  --sr-aqua-wash: 224 246 247;
+  --sr-amber: 176 118 26;
+  --sr-amber-wash: 253 243 224;
+
+  --sr-deep: 12 18 41;
+  --sr-deep-ink: 237 241 250;
+  --sr-deep-soft: 160 174 202;
+  --sr-deep-line: 44 56 89;
+
+  --sr-r-sm: 0.625rem;
+  --sr-r-md: 0.875rem;
+  --sr-r-lg: 1.25rem;
+  --sr-r-xl: 1.75rem;
+
+  --sr-shadow-1: 0 1px 2px rgb(16 25 53 / 0.05), 0 2px 6px rgb(16 25 53 / 0.04);
+  --sr-shadow-2: 0 1px 2px rgb(16 25 53 / 0.05), 0 8px 20px rgb(16 25 53 / 0.06);
+  --sr-shadow-3: 0 2px 4px rgb(16 25 53 / 0.04), 0 12px 28px rgb(16 25 53 / 0.07), 0 32px 64px rgb(16 25 53 / 0.07);
+
+  --sr-max: 76rem;
+  --sr-gutter: 1.25rem;
+  --sr-section: clamp(4rem, 7.5vw, 6.5rem);
+
+  --sr-fast: 150ms;
+  --sr-base: 260ms;
+  --sr-slow: 620ms;
+
+  background: rgb(var(--sr-canvas));
+  color: rgb(var(--sr-ink));
+}
+
+.dark .sr-scope {
+  --sr-canvas: 8 12 28;
+  --sr-canvas-subtle: 12 17 37;
+  --sr-canvas-sunken: 15 21 44;
+  --sr-ink: 240 244 252;
+  --sr-ink-soft: 173 185 209;
+  --sr-ink-faint: 133 147 176;
+  --sr-line: 33 43 71;
+  --sr-line-strong: 47 60 95;
+
+  --sr-brand: 141 140 251;
+  --sr-brand-strong: 165 165 253;
+  --sr-brand-ink: 12 16 38;
+  --sr-brand-wash: 28 33 71;
+
+  --sr-aqua: 62 197 208;
+  --sr-aqua-wash: 15 44 51;
+  --sr-amber: 233 179 88;
+  --sr-amber-wash: 51 38 15;
+
+  --sr-deep: 12 17 37;
+  --sr-deep-line: 42 54 88;
+
+  --sr-shadow-1: 0 1px 2px rgb(0 0 0 / 0.3);
+  --sr-shadow-2: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 20px rgb(0 0 0 / 0.34);
+  --sr-shadow-3: 0 2px 4px rgb(0 0 0 / 0.3), 0 14px 30px rgb(0 0 0 / 0.36), 0 34px 64px rgb(0 0 0 / 0.4);
+}
+
+@media (min-width: 640px) {
+  .sr-scope {
+    --sr-gutter: 2rem;
+  }
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.sr-shell {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+.sr-container {
+  width: 100%;
+  max-width: var(--sr-max);
+  margin-inline: auto;
+  padding-inline: var(--sr-gutter);
+}
+
+.sr-section {
+  position: relative;
+  padding-block: var(--sr-section);
+}
+
+.sr-section-subtle {
+  background: rgb(var(--sr-canvas-subtle));
+  border-block: 1px solid rgb(var(--sr-line));
+}
+
+.sr-section-deep {
+  background: rgb(var(--sr-deep));
+  color: rgb(var(--sr-deep-ink));
+}
+
+.sr-divider {
+  height: 1px;
+  background: rgb(var(--sr-line));
+}
+
+/* Keyboard users get a real skip target; it stays out of the way otherwise. */
+.sr-skip {
+  transition: transform var(--sr-fast) ease;
+}
+
+/* ------------------------------------------------------------ typography */
+
+.sr-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--sr-brand));
+}
+
+.sr-h1 {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(2.25rem, 4.6vw, 3.5rem);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+
+.sr-h2 {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.75rem);
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.sr-h3 {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 1.1875rem;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.sr-lead {
+  font-size: clamp(1.0625rem, 1.35vw, 1.1875rem);
+  line-height: 1.65;
+  color: rgb(var(--sr-ink-soft));
+}
+
+.sr-body {
+  font-size: 0.9688rem;
+  line-height: 1.65;
+  color: rgb(var(--sr-ink-soft));
+}
+
+.sr-section-deep .sr-lead,
+.sr-section-deep .sr-body {
+  color: rgb(var(--sr-deep-soft));
+}
+
+/* --------------------------------------------------------------- surfaces */
+
+.sr-card {
+  position: relative;
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: var(--sr-r-lg);
+  background: rgb(var(--sr-canvas));
+  box-shadow: var(--sr-shadow-1);
+}
+
+.sr-card-lift {
+  transition: transform var(--sr-base) ease, box-shadow var(--sr-base) ease,
+    border-color var(--sr-base) ease;
+}
+
+.sr-card-lift:hover {
+  transform: translateY(-3px);
+  border-color: rgb(var(--sr-brand) / 0.4);
+  box-shadow: var(--sr-shadow-2);
+}
+
+.sr-panel {
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: var(--sr-r-xl);
+  background: rgb(var(--sr-canvas));
+  box-shadow: var(--sr-shadow-3);
+}
+
+.sr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: 999px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgb(var(--sr-ink-soft));
+  background: rgb(var(--sr-canvas));
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.sr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding-inline: 1.25rem;
+  border-radius: var(--sr-r-md);
+  border: 1px solid transparent;
+  font-size: 0.9688rem;
+  font-weight: 650;
+  text-align: center;
+  transition: background-color var(--sr-fast) ease, border-color var(--sr-fast) ease,
+    color var(--sr-fast) ease, box-shadow var(--sr-fast) ease, transform var(--sr-fast) ease;
+}
+
+.sr-btn:focus-visible {
+  outline: 2px solid rgb(var(--sr-brand));
+  outline-offset: 2px;
+}
+
+.sr-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sr-btn-primary {
+  background: rgb(var(--sr-brand));
+  color: rgb(var(--sr-brand-ink));
+  box-shadow: var(--sr-shadow-1);
+}
+
+.sr-btn-primary:hover:not(:disabled) {
+  background: rgb(var(--sr-brand-strong));
+  box-shadow: var(--sr-shadow-2);
+}
+
+.sr-btn-secondary {
+  background: rgb(var(--sr-canvas));
+  border-color: rgb(var(--sr-line-strong));
+  color: rgb(var(--sr-ink));
+}
+
+.sr-btn-secondary:hover:not(:disabled) {
+  border-color: rgb(var(--sr-brand) / 0.55);
+  background: rgb(var(--sr-brand-wash));
+  color: rgb(var(--sr-brand-strong));
+}
+
+.sr-btn-quiet {
+  background: transparent;
+  color: rgb(var(--sr-ink-soft));
+  min-height: 2.5rem;
+  padding-inline: 0.75rem;
+  font-weight: 600;
+}
+
+.sr-btn-quiet:hover:not(:disabled) {
+  background: rgb(var(--sr-canvas-sunken));
+  color: rgb(var(--sr-ink));
+}
+
+.sr-section-deep .sr-btn-secondary {
+  background: transparent;
+  border-color: rgb(var(--sr-deep-line));
+  color: rgb(var(--sr-deep-ink));
+}
+
+.sr-section-deep .sr-btn-secondary:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.07);
+  border-color: rgb(255 255 255 / 0.3);
+  color: rgb(var(--sr-deep-ink));
+}
+
+.sr-link {
+  font-weight: 650;
+  color: rgb(var(--sr-brand));
+  border-radius: 0.25rem;
+}
+
+.sr-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sr-link:focus-visible {
+  outline: 2px solid rgb(var(--sr-brand));
+  outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.sr-field-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: rgb(var(--sr-ink));
+}
+
+.sr-input {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  border: 1px solid rgb(var(--sr-line-strong));
+  border-radius: var(--sr-r-md);
+  background: rgb(var(--sr-canvas));
+  padding: 0.6875rem 0.875rem;
+  font-size: 1rem;
+  color: rgb(var(--sr-ink));
+  transition: border-color var(--sr-fast) ease, box-shadow var(--sr-fast) ease;
+}
+
+.sr-input::placeholder {
+  color: rgb(var(--sr-ink-faint));
+}
+
+.sr-input:focus {
+  outline: none;
+  border-color: rgb(var(--sr-brand));
+  box-shadow: 0 0 0 3px rgb(var(--sr-brand) / 0.18);
+}
+
+.sr-input[aria-invalid='true'] {
+  border-color: rgb(190 46 62);
+}
+
+/* Browser autofill keeps the field readable in both themes. */
+.sr-input:-webkit-autofill,
+.sr-input:-webkit-autofill:hover,
+.sr-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--sr-ink));
+  -webkit-box-shadow: 0 0 0 40rem rgb(var(--sr-canvas)) inset;
+  caret-color: rgb(var(--sr-ink));
+}
+
+.sr-hint {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgb(var(--sr-ink-faint));
+}
+
+/* Reserve the hint row so validation text never shifts the control below it. */
+.sr-hint-reserved {
+  display: block;
+  min-height: 1.1875rem;
+}
+
+.sr-notice {
+  display: flex;
+  gap: 0.625rem;
+  border: 1px solid;
+  border-radius: var(--sr-r-md);
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.sr-notice-error {
+  border-color: rgb(190 46 62 / 0.35);
+  background: rgb(190 46 62 / 0.08);
+  color: rgb(159 27 42);
+}
+
+.dark .sr-notice-error {
+  color: rgb(252 176 184);
+}
+
+.sr-notice-success {
+  border-color: rgb(15 138 100 / 0.35);
+  background: rgb(15 138 100 / 0.08);
+  color: rgb(12 106 77);
+}
+
+.dark .sr-notice-success {
+  color: rgb(134 231 195);
+}
+
+.sr-divider-text {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: rgb(var(--sr-ink-faint));
+}
+
+.sr-divider-text::before,
+.sr-divider-text::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgb(var(--sr-line));
+}
+
+/* ------------------------------------------------------- background motif */
+
+.sr-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Certificate-seal geometry: concentric rings behind the hero, never on text. */
+.sr-hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -20rem;
+  inset-inline-end: -16rem;
+  width: 44rem;
+  height: 44rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 50%, rgb(var(--sr-brand) / 0.07), transparent 64%),
+    radial-gradient(circle at 62% 38%, rgb(var(--sr-aqua) / 0.06), transparent 58%);
+  pointer-events: none;
+}
+
+.sr-hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -11rem;
+  inset-inline-end: -8rem;
+  width: 28rem;
+  height: 28rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--sr-brand) / 0.1);
+  box-shadow:
+    0 0 0 3.5rem rgb(var(--sr-brand) / 0.02),
+    0 0 0 7rem rgb(var(--sr-aqua) / 0.015);
+  pointer-events: none;
+}
+
+/* On narrow screens the rings would sit under the copy, so they step aside. */
+@media (max-width: 1023px) {
+  .sr-hero::before {
+    inset-inline-end: -24rem;
+    opacity: 0.6;
+  }
+
+  .sr-hero::after {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- product */
+
+.sr-shot {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: var(--sr-r-lg);
+  background: rgb(var(--sr-canvas-subtle));
+  box-shadow: var(--sr-shadow-3);
+}
+
+.sr-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.sr-shot-caption {
+  border-block-start: 1px solid rgb(var(--sr-line));
+  background: rgb(var(--sr-canvas));
+  padding: 0.625rem 0.875rem;
+  font-size: 0.8125rem;
+  color: rgb(var(--sr-ink-faint));
+}
+
+/* ---------------------------------------------------------------- motion */
+
+.sr-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity var(--sr-slow) cubic-bezier(0.22, 0.75, 0.25, 1),
+    transform var(--sr-slow) cubic-bezier(0.22, 0.75, 0.25, 1);
+}
+
+.sr-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* The workflow rail fills in once, in step order, to explain sequence. */
+.sr-rail {
+  position: relative;
+}
+
+@media (min-width: 1024px) {
+  .sr-rail::before {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    inset-inline: 8%;
+    inset-block-start: 1.5rem;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      rgb(var(--sr-brand) / 0.45),
+      rgb(var(--sr-aqua) / 0.45)
+    );
+    transform-origin: left center;
+    animation: sr-rail-draw 1.3s ease-out both;
+  }
+}
+
+@keyframes sr-rail-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sr-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .sr-rail::before {
+    animation: none;
+  }
+
+  .sr-card-lift:hover {
+    transform: none;
+  }
+}

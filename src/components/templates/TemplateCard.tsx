@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Star, User, Calendar } from 'lucide-react';
+import { Bookmark, User, Calendar } from 'lucide-react';
 import { type Template } from '@/lib/firebase/templates';
 import { formatDate } from '@/lib/utils';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 
 interface TemplateCardProps {
   template: Template;
@@ -17,19 +18,18 @@ export function TemplateCard({ template }: TemplateCardProps) {
   const [stars, setStars] = useState(template.stars);
   const [isStarred, setIsStarred] = useState(false);
   const { user } = useAuth();
+  const isCurated = template.source === 'serenity_curated' || template.id.startsWith('bundled-');
 
   const handleStar = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!user?.id || isStarring) return;
+    if (!user?.id || isStarring || isCurated) return;
     
     setIsStarring(true);
     try {
-      const response = await fetch(`/api/templates/${template.id}/star`, {
+      const response = await authenticatedFetch(`/api/templates/${template.id}/star`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
       });
 
       if (response.ok) {
@@ -78,18 +78,18 @@ export function TemplateCard({ template }: TemplateCardProps) {
           </div>
         )}
         
-        {/* Star button overlay */}
+        {/* Save count and action */}
         <button
           onClick={handleStar}
-          disabled={isStarring || !user}
+          disabled={isStarring || !user || isCurated}
           className={`absolute right-2 top-2 flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium backdrop-blur-sm transition-colors ${
             isStarred 
-              ? 'bg-yellow-500/90 text-white' 
+              ? 'bg-primary/90 text-primary-foreground'
               : 'bg-black/50 text-white hover:bg-black/70'
           }`}
-          title={user ? 'Star this template' : 'Sign in to star templates'}
+          title={isCurated ? 'Curated by Serenity' : user ? 'Save this template' : 'Sign in to save templates'}
         >
-          <Star className={`h-3.5 w-3.5 ${isStarred ? 'fill-current' : ''}`} />
+          <Bookmark className={`h-3.5 w-3.5 ${isStarred ? 'fill-current' : ''}`} />
           <span>{stars}</span>
         </button>
       </div>

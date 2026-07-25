@@ -4,8 +4,14 @@ import {
   updateTemplate,
   deleteTemplate,
   saveOrUpdateTemplate,
-  getUserTemplates,
+  findTemplateByNormalizedName,
+  normalizeTemplateName,
+  type Template,
 } from '@/lib/firebase/templates';
+import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
+import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
+import { getEvent } from '@/lib/firebase/events';
+import { getCuratedPublicTemplate } from '@/lib/templates/curatedPublicTemplates';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,13 +20,46 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
+  if (clientUserId && typeof clientUserId === 'string' && clientUserId !== uid) {
+    return forbiddenResponse('Authenticated user does not match requested user ID');
+  }
+
+  return null;
+}
+
+async function validateLinkedEvent(certificateMetadata: unknown, userId: string) {
+  if (!certificateMetadata || typeof certificateMetadata !== 'object') return null;
+  const eventId = (certificateMetadata as Record<string, unknown>).eventId;
+  if (!eventId) return null;
+  if (typeof eventId !== 'string') return 'Linked event ID is invalid.';
+  const event = await getEvent(eventId);
+  if (!event || event.userId !== userId || event.archivedAt) return 'Linked event is unavailable.';
+  return null;
+}
+
+function sanitizePublicTemplate(template: Template): Template {
+  const { creatorEmail, userId, ...safeTemplate } = template;
+  return safeTemplate as Template;
+}
+
+async function rejectIfDuplicateName(name: string | undefined, userId: string, currentId: string) {
+  if (!name) return null;
+
+  const duplicateName = await findTemplateByNormalizedName(userId, name, currentId);
+
+  if (!duplicateName) return null;
+
+  return NextResponse.json(
+    { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
+    { status: 400 }
+  );
+}
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    
-    console.log('[Template API] GET template:', id);
-
-    const template = await getTemplate(id);
+    const template = getCuratedPublicTemplate(id) || await getTemplate(id);
 
     if (!template) {
       return NextResponse.json(
@@ -29,9 +68,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const authUser = await verifyAuth(request);
+    const isOwner = !!authUser && template.userId === authUser.uid;
+
+    if (!template.isPublic && !isOwner) {
+      return authUser ? forbiddenResponse('Forbidden') : unauthorizedResponse();
+    }
+
     return NextResponse.json({
       success: true,
-      template,
+      template: isOwner ? template : sanitizePublicTemplate(template),
     });
   } catch (error) {
     console.error('[Template API] Error fetching template:', error);
@@ -44,38 +90,64 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
+    }
+
     const { id } = await params;
     const body = await request.json();
-    
-    const { name, canvasJSON, thumbnail, isPublic, tags, userId, creatorName, creatorEmail, createIfNotExists, certificateMetadata, category } = body;
+    const {
+      name,
+      canvasJSON,
+      thumbnail,
+      isPublic,
+      tags,
+      userId,
+      creatorName,
+      creatorEmail,
+      createIfNotExists,
+      certificateMetadata,
+      category,
+    } = body;
 
-    console.log('[Template API] PUT template:', { id, name, isPublic, createIfNotExists });
+    const mismatch = rejectMismatchedUserId(userId, authUser.uid);
+    if (mismatch) return mismatch;
 
-    // Check for duplicate template name (case-insensitive)
-    if (name && userId) {
-      const existingTemplates = await getUserTemplates(userId);
-      const duplicateName = existingTemplates.find(
-        t => t.id !== id && t.name.toLowerCase().trim() === name.toLowerCase().trim()
-      );
-      if (duplicateName) {
-        return NextResponse.json(
-          { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
-          { status: 400 }
-        );
+    const linkedEventError = await validateLinkedEvent(certificateMetadata, authUser.uid);
+    if (linkedEventError) {
+      return NextResponse.json({ success: false, error: linkedEventError }, { status: 400 });
+    }
+
+    const existing = await getTemplate(id);
+    if (existing && existing.userId !== authUser.uid) {
+      return forbiddenResponse('Forbidden');
+    }
+
+    if (canvasJSON !== undefined) {
+      const invariantResult = validateTemplateInvariants(canvasJSON);
+      if (!invariantResult.valid) {
+        return NextResponse.json({
+          success: false,
+          error: invariantResult.errors.join(' '),
+          code: 'TEMPLATE_INVARIANT_FAILED',
+        }, { status: 400 });
       }
     }
 
-    // If createIfNotExists is true, use saveOrUpdateTemplate
+    const duplicate = await rejectIfDuplicateName(name, authUser.uid, id);
+    if (duplicate) return duplicate;
+
     if (createIfNotExists) {
       const template = await saveOrUpdateTemplate({
         existingId: id,
         name: name || 'Untitled Template',
         canvasJSON,
         thumbnail,
-        userId,
+        userId: authUser.uid,
         isPublic,
         creatorName,
-        creatorEmail,
+        creatorEmail: authUser.email || creatorEmail,
         tags,
         category,
         certificateMetadata,
@@ -88,17 +160,34 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    // Otherwise, just update existing
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: 'Template not found' },
+        { status: 404 }
+      );
+    }
+
     const updates: Record<string, unknown> = {};
-    if (name !== undefined) updates.name = name;
+    if (name !== undefined) {
+      updates.name = name;
+      updates.normalizedName = normalizeTemplateName(name);
+    }
     if (canvasJSON !== undefined) updates.canvasJSON = canvasJSON;
     if (thumbnail !== undefined) updates.thumbnail = thumbnail;
-    if (typeof isPublic === 'boolean') updates.isPublic = isPublic;
+    if (typeof isPublic === 'boolean') {
+      if (process.env.PUBLIC_TEMPLATE_PUBLISHING_V2 === 'true') {
+        updates.isPublic = false;
+        updates.publicationStatus = isPublic ? 'pending_review' : 'private';
+        if (isPublic) updates.publicationRequestedAt = new Date().toISOString();
+      } else {
+        updates.isPublic = isPublic;
+        updates.publicationStatus = isPublic ? 'public' : 'private';
+      }
+    }
     if (tags !== undefined) updates.tags = tags;
     if (category !== undefined) updates.category = category;
     if (certificateMetadata !== undefined) updates.certificateMetadata = certificateMetadata;
 
-    // Ensure we have at least one field to update
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
         { success: false, error: 'No valid fields to update' },
@@ -107,15 +196,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const template = await updateTemplate(id, updates);
-
-    if (!template) {
-      return NextResponse.json(
-        { success: false, error: 'Template not found' },
-        { status: 404 }
-      );
-    }
-
-    console.log('[Template API] Template updated:', id);
 
     return NextResponse.json({
       success: true,
@@ -133,9 +213,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
+    }
+
     const { id } = await params;
-    
-    console.log('[Template API] DELETE template:', id);
+    const template = await getTemplate(id);
+
+    if (!template) {
+      return NextResponse.json(
+        { success: false, error: 'Template not found' },
+        { status: 404 }
+      );
+    }
+
+    if (template.userId !== authUser.uid) {
+      return forbiddenResponse('Forbidden');
+    }
 
     const success = await deleteTemplate(id);
 
@@ -145,8 +240,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { status: 404 }
       );
     }
-
-    console.log('[Template API] Template deleted:', id);
 
     return NextResponse.json({
       success: true,
