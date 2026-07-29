@@ -123,6 +123,41 @@ test.describe('public landing', () => {
     await expect(page.locator('#marketing-menu')).toHaveCount(0);
   });
 
+  // The bar once squeezed the CTA from 113px to 79px at 360px, breaking
+  // "Start free" onto two lines inside the button.
+  for (const width of [360, 390, 430]) {
+    test(`header CTA is not squeezed at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto('/');
+
+      const cta = page.locator('header').getByRole('link', { name: /start free/i });
+      await expect(cta).toBeVisible();
+
+      const box = await cta.evaluate((element) => ({
+        width: element.getBoundingClientRect().width,
+        // Text wider than the padded box means it wrapped or was clipped.
+        overflow: element.scrollWidth - element.clientWidth,
+      }));
+
+      expect(box.overflow, '"Start free" must fit its button').toBeLessThanOrEqual(1);
+      expect(box.width, 'the CTA must keep its single-line width').toBeGreaterThan(104);
+    });
+  }
+
+  // `.sr-btn`'s inline padding used to beat Tailwind's `px-0`, collapsing the
+  // icon's content box to zero width — an empty outline where the menu is.
+  test('the mobile menu button renders a visible icon', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    const icon = page.getByRole('button', { name: /open menu/i }).locator('svg');
+    const box = await icon.boundingBox();
+
+    expect(box, 'the menu button must contain an icon').not.toBeNull();
+    expect(box!.width, 'the menu icon must not collapse').toBeGreaterThan(12);
+    expect(box!.height).toBeGreaterThan(12);
+  });
+
   for (const width of [360, 390, 430, 768, 1024, 1280, 1440]) {
     test(`no horizontal overflow at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
