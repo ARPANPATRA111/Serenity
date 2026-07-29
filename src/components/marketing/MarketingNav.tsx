@@ -40,7 +40,11 @@ export function MarketingNav() {
         className="sr-container flex h-16 items-center justify-between gap-3"
         aria-label="Primary"
       >
-        <Link href="/" className="rounded-lg" aria-label="Serenity Certificate Generator â€” home">
+        <Link
+          href="/"
+          className="shrink-0 rounded-lg"
+          aria-label="Serenity Certificate Generator — home"
+        >
           <SerenityBrand />
         </Link>
 
@@ -54,23 +58,30 @@ export function MarketingNav() {
           ))}
         </ul>
 
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
+        <div className="flex shrink-0 items-center gap-2">
           {/* Wrappers carry the responsive display so Tailwind's utility never
-              has to out-specify the `.sr-btn` display rule. */}
+              has to out-specify the `.sr-btn` display rule. Below `sm` the bar
+              would squeeze the CTA onto two lines, so the toggle and "Sign in"
+              move into the menu panel and the CTA keeps its single line. */}
+          <div className="hidden sm:block">
+            <ThemeToggle />
+          </div>
           <div className="hidden sm:block">
             <Link href="/login" className="sr-btn sr-btn-quiet text-sm">
               Sign in
             </Link>
           </div>
-          <Link href="/signup" className="sr-btn sr-btn-primary h-10 min-h-10 text-sm">
+          <Link
+            href="/signup"
+            className="sr-btn sr-btn-primary shrink-0 whitespace-nowrap text-sm"
+          >
             Start free
           </Link>
           <div className="xl:hidden">
             <button
               type="button"
               onClick={() => setOpen((value) => !value)}
-              className="sr-btn sr-btn-secondary h-10 min-h-10 w-10 px-0"
+              className="sr-btn sr-btn-secondary sr-btn-icon"
               aria-expanded={open}
               aria-controls="marketing-menu"
               aria-label={open ? 'Close menu' : 'Open menu'}
@@ -106,6 +117,11 @@ export function MarketingNav() {
               >
                 Sign in
               </Link>
+            </li>
+            {/* The bar drops the toggle below `sm`; the panel carries it there. */}
+            <li className="mt-1 flex items-center justify-between px-3 py-2 sm:hidden">
+              <span className="sr-body text-sm">Appearance</span>
+              <ThemeToggle />
             </li>
           </ul>
         </div>

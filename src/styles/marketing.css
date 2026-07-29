@@ -18,7 +18,10 @@
   --sr-canvas-sunken: 239 242 249;
   --sr-ink: 16 25 53;
   --sr-ink-soft: 74 86 115;
-  --sr-ink-faint: 116 129 158;
+  /* 5.3:1 on the subtle canvas, 5.7:1 on white. The previous 116 129 158 read
+     as a nicer grey but measured 3.6–3.9:1, under the 4.5:1 that 13px hint
+     text needs. */
+  --sr-ink-faint: 92 103 128;
   --sr-line: 226 232 243;
   --sr-line-strong: 205 214 232;
 
@@ -288,6 +291,23 @@
   font-weight: 600;
 }
 
+/*
+ * Square icon-only button.
+ *
+ * This has to be a variant rather than Tailwind's `w-10 px-0`: those utilities
+ * tie with `.sr-btn` on specificity and lose on source order, so the base
+ * 1.25rem inline padding survived and collapsed the icon's content box to zero
+ * width — the menu button rendered as an empty outline on every phone width.
+ */
+.sr-btn-icon {
+  width: 2.75rem;
+  padding-inline: 0;
+}
+
+.sr-btn-icon > svg {
+  flex: 0 0 auto;
+}
+
 .sr-btn-quiet:hover:not(:disabled) {
   background: rgb(var(--sr-canvas-sunken));
   color: rgb(var(--sr-ink));
@@ -476,6 +496,56 @@
   }
 }
 
+/*
+ * The single-column auth pages are short, so on a tall viewport they sit in a
+ * band of dead space under the header. `safe center` pulls them into the
+ * optical centre but degrades to top alignment the moment the card is taller
+ * than the viewport, so the heading can never scroll out of reach.
+ */
+.sr-auth-center {
+  align-items: safe center;
+}
+
+/* ----------------------------------------------------------- theme toggle */
+
+/*
+ * The application's toggle is an amber-to-rose gradient pill. That reads as a
+ * different product beside the indigo marketing palette, so inside `.sr-scope`
+ * the track becomes a neutral surface and the brand carries the active state.
+ * The authenticated app keeps its own treatment untouched.
+ */
+.sr-scope .theme-toggle-button {
+  background: rgb(var(--sr-canvas));
+  border-color: rgb(var(--sr-line-strong));
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.sr-scope .theme-toggle-button:hover {
+  border-color: rgb(var(--sr-brand) / 0.55);
+  box-shadow: var(--sr-shadow-1);
+}
+
+.sr-scope .theme-toggle-track,
+.dark .sr-scope .theme-toggle-track {
+  background: rgb(var(--sr-line-strong));
+  box-shadow: inset 0 0 0 1px rgb(var(--sr-ink) / 0.08);
+}
+
+/* The knob carries its own outline so it stays a distinct shape against the
+   track in both themes, rather than relying on a drop shadow alone. */
+.sr-scope .theme-toggle-thumb {
+  background: rgb(var(--sr-canvas));
+  color: rgb(var(--sr-amber));
+  box-shadow:
+    0 0 0 1px rgb(var(--sr-ink) / 0.18),
+    0 1px 2px rgb(var(--sr-ink) / 0.35);
+}
+
+.sr-scope .theme-toggle-thumb.is-dark {
+  color: rgb(var(--sr-brand));
+}
+
 /* ---------------------------------------------------------------- product */
 
 .sr-shot {
@@ -491,6 +561,20 @@
   display: block;
   width: 100%;
   height: auto;
+}
+
+/*
+ * The captures are of the app's light theme. Dropped straight onto the dark
+ * canvas they glare, so dark mode mediates the edge with a lighter frame and
+ * takes a few percent off the brightness. The screenshot itself is unaltered
+ * in content — this is framing, not retouching.
+ */
+.dark .sr-scope .sr-shot {
+  border-color: rgb(var(--sr-line-strong));
+}
+
+.dark .sr-scope .sr-shot img {
+  filter: brightness(0.94);
 }
 
 .sr-shot-caption {

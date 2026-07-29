@@ -136,7 +136,7 @@ export function PricingSection() {
             <button
               type="button"
               onClick={() => setDialogOpen(false)}
-              className="sr-btn sr-btn-quiet absolute right-3 top-3 h-9 min-h-9 w-9 px-0"
+              className="sr-btn sr-btn-quiet sr-btn-icon absolute right-3 top-3"
               aria-label="Close pricing dialog"
             >
               <X className="h-4 w-4" />

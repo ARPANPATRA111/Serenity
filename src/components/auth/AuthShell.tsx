@@ -40,7 +40,12 @@ export function AuthShell({
         </div>
       </header>
 
-      <main id="main" className="sr-hero flex flex-1 items-start py-10 sm:py-12">
+      <main
+        id="main"
+        className={`sr-hero flex flex-1 items-start py-10 sm:py-12 ${
+          split ? '' : 'sr-auth-center'
+        }`}
+      >
         <div className="sr-container">
           <div className={split ? 'mx-auto max-w-4xl' : 'mx-auto max-w-md'}>
             <h1 className="sr-h1 text-[clamp(1.9rem,4.2vw,2.5rem)]">{title}</h1>
