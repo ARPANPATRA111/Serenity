@@ -187,3 +187,96 @@ secret or Firebase configuration value appears in any commit, screenshot, or
 document. All Firebase interaction in this run went to the local emulator on a
 `demo-` project; the production project was not contacted, so no test account
 was created there and no production record was read or modified.
+
+---
+
+## Second pass — runtime audit (2026-07-29)
+
+The first pass was verified largely by construction. This pass drove the built
+pages in a real browser and measured them, which surfaced four defects that
+source review had missed.
+
+### 9. Defects found by running the pages
+
+| # | Defect | Evidence | Fix |
+| - | ------ | -------- | --- |
+| 1 | The mobile menu button rendered as an **empty outline** — no hamburger icon — at every phone width. `.sr-btn`'s `padding-inline: 1.25rem` ties with Tailwind's `px-0` on specificity and wins on source order, so a `w-10` button had a **zero-width content box** and the SVG collapsed to `0x20`. | measured `svgBox: "0x20"` | Added an `.sr-btn-icon` variant that owns its own width and zero padding. The same dead `w-9 px-0` pattern in the pricing dialog's close button was fixed with it. |
+| 2 | "Start free" in the header **wrapped onto two lines** at 360-390px: the flex row squeezed it from its natural 113px down to 79px. | measured at 360/390/430 | Below `sm` the theme toggle and "Sign in" move into the menu panel; the CTA is `shrink-0 whitespace-nowrap`. |
+| 3 | `--sr-ink-faint` (`#74819E`) measured **3.64-3.9:1** on the light canvases, under the 4.5:1 that 13px hint text needs. Footer hints, pricing captions, and shot captions all failed WCAG AA. | axe-core, 8 nodes | Darkened to `92 103 128`: 5.3:1 on the subtle canvas, 5.7:1 on white. Dark mode already passed and is unchanged. |
+| 4 | The FAQ's `<dt>`/`<dd>` pairs sat **two divs deep** inside the `<dl>` (reveal wrapper plus padding wrapper), which detaches them from the list for assistive technology. | axe-core, 15 nodes | The reveal wrapper *is* the group div now. |
+
+Two further inconsistencies were corrected while there. The marketing nav's
+brand link carried a **mojibake em dash** in its `aria-label`, so screen readers
+announced the encoding artefact. And the theme toggle used the application's
+amber-to-rose gradient, which read as a different product beside the indigo
+marketing palette; inside `.sr-scope` it is now a neutral track with the brand
+on the active knob. The authenticated app's own toggle is untouched.
+
+Two refinements, not defects: single-column auth pages sat in a band of dead
+space on tall viewports and now use `align-items: safe center`, which degrades
+to top alignment rather than making a tall card unreachable. And the light
+product screenshots are framed and dimmed 6% in dark mode so they stop glaring
+against the near-black canvas.
+
+### 10. Accessibility — automated coverage added
+
+The first pass recorded "no axe/Lighthouse run" as a limitation. That gap is
+closed: `@axe-core/playwright` (dev dependency) now scans the landing page,
+login, and signup at 1440x1000 and 390x844 in **both** themes, plus the open
+mobile menu — 13 scans against `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`.
+
+Findings on entry: **23 violation nodes across 3 rules** (`color-contrast`,
+`definition-list`, `dlitem`), all rated serious. Findings now: **zero**.
+
+**This is still not a WCAG conformance claim.** axe covers roughly a third of
+WCAG criteria. No screen-reader pass, no manual keyboard pass on real assistive
+technology, and no Lighthouse run has been performed.
+
+### 11. Regression guards added
+
+- The header CTA must not be squeezed or clipped at 360/390/430px.
+- The mobile menu button must contain an icon wider than 12px.
+
+Both fail against the code as it stood before this pass.
+
+### 12. Gates re-run (2026-07-29)
+
+| Gate | Result |
+| ---- | ------ |
+| `pnpm lint` | pass |
+| `pnpm build` | pass — 28/28 pages |
+| `pnpm test` | pass — 9 files, 24 tests |
+| `pnpm test:rules` | pass — 2 files, 8 tests, emulator on `demo-serenity` |
+| `pnpm test:smoke` | pass — 9 routes 200 |
+| `pnpm test:e2e` | pass — **134 passed**, 52 skipped (staging-gated) |
+| `git diff --check` | clean |
+
+Bundle sizes held: `/` 7.63 kB / **117 kB** first load, `/login` 1.24 kB /
+**207 kB**, `/signup` 2.48 kB / **208 kB**. Horizontal overflow remains 0px
+across all 42 captured states.
+
+The rules emulator's default port 8080 was occupied by an unrelated local
+process, so that suite was run on alternate ports via a temporary, untracked
+config. No committed configuration changed.
+
+### 13. Firebase testing performed
+
+The operator permitted limited login/signup testing against the existing
+project. What was actually done, and why:
+
+- **Performed:** one sign-in attempt against the configured project using
+  `serenity-qa-does-not-exist@example.invalid`, an address that cannot exist.
+  Firebase rejected it before any write. This confirmed the client is wired
+  correctly, that `describeAuthError` renders *"Invalid email or password"*
+  rather than a raw `auth/...` code, and that the page stays on `/login`.
+  **No account was created, no record was read or modified, no email was sent.**
+- **Deliberately not performed:** account creation. Signup writes a permanent
+  `users/{uid}` document to the production project, a test account there is not
+  distinguishable from a real user, and cleanup is explicitly out of scope — so
+  there would be no way to remove it afterwards. Per this run's own instruction,
+  the UI was validated without completing account creation and the limitation is
+  recorded here. Full signup acceptance still needs the isolated staging project
+  described in `STAGING_SETUP.md`.
+
+Everything else was validated against a local production build started with
+**placeholder** Firebase config, which reaches no backend at all.
