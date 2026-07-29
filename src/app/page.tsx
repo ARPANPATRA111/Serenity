@@ -414,12 +414,13 @@ export default function HomePage() {
             <div className="mx-auto max-w-3xl">
               <SectionHeading eyebrow="FAQ" title="Frequently asked questions" align="center" />
               <dl className="mt-10 divide-y divide-[rgb(var(--sr-line))]">
+                {/* The reveal wrapper *is* the group div: a <dl> may hold one
+                    div per dt/dd pair, but nesting them two deep detaches the
+                    items from the list for assistive technology. */}
                 {faqs.map((item, index) => (
-                  <Reveal key={item.question} delay={(index % 3) * 50}>
-                    <div className="py-6">
-                      <dt className="sr-h3">{item.question}</dt>
-                      <dd className="sr-body mt-2">{item.answer}</dd>
-                    </div>
+                  <Reveal key={item.question} className="py-6" delay={(index % 3) * 50}>
+                    <dt className="sr-h3">{item.question}</dt>
+                    <dd className="sr-body mt-2">{item.answer}</dd>
                   </Reveal>
                 ))}
               </dl>
