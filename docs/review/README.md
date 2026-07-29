@@ -3,14 +3,23 @@
 First-viewport captures used to review the redesign in PR #2. Light theme,
 captured from a local production build with placeholder Firebase config.
 
-"Before" is `feature/serenity-production-modernization` at `6d4f02c`.
-"After" is the same branch with the landing and authentication redesign.
+"Before" is the branch prior to the landing and authentication redesign.
+"After" is the current branch head, including the runtime-audit fixes recorded
+in `MARKETING_REDESIGN_VALIDATION.md` §9.
 
 | View | Before | After |
 | --- | --- | --- |
 | Landing, 1440×1000 | `landing-desktop-before.webp` | `landing-desktop-after.webp` |
 | Landing, 390×844 | `landing-mobile-before.webp` | `landing-mobile-after.webp` |
 | Signup, 1440×1000 | `signup-desktop-before.webp` | `signup-desktop-after.webp` |
+| Mobile header, 390px | `nav-mobile-before.webp` | `nav-mobile-after.webp` |
+
+The mobile-header pair is a crop of the same page at the same width, isolating
+three defects the runtime audit found. Before: the theme toggle is the
+application's amber gradient rather than the marketing palette, "Start free"
+is squeezed onto two lines, and the menu button is an **empty outline** because
+its icon had collapsed to zero width. After: one line, a visible menu icon, and
+the toggle moved into the menu panel at this width.
 
 The full set — three pages × seven widths × two themes, 42 states — is
 reproducible rather than committed:
