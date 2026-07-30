@@ -14,6 +14,14 @@ in `MARKETING_REDESIGN_VALIDATION.md` §9.
 | Signup, 1440×1000 | `signup-desktop-before.webp` | `signup-desktop-after.webp` |
 | Mobile header, 390px | `nav-mobile-before.webp` | `nav-mobile-after.webp` |
 
+Dark theme has no "before" — the design it was rebuilt from has no dark mode at
+all, so these are new surfaces rather than comparisons:
+
+| View | Capture |
+| --- | --- |
+| Landing, 1440×1000, dark | `landing-desktop-dark.webp` |
+| Login, 1440×1000, dark | `login-desktop-dark.webp` |
+
 The mobile-header pair is a crop of the same page at the same width, isolating
 three defects the runtime audit found. Before: the theme toggle is the
 application's amber gradient rather than the marketing palette, "Start free"
