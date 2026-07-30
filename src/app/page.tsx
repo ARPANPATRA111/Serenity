@@ -164,8 +164,8 @@ export default async function HomePage() {
 
       <main id="main">
         {/* ------------------------------------------------------------ hero */}
-        <section className="sr-hero pb-16 pt-14 sm:pb-20 sm:pt-20 lg:pb-24">
-          <div className="sr-container grid items-center gap-14 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1fr)] lg:gap-16">
+        <section className="sr-hero pb-12 pt-10 sm:pb-20 sm:pt-20 lg:pb-24">
+          <div className="sr-container grid items-center gap-10 sm:gap-14 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1fr)] lg:gap-16">
             <Reveal eager>
               <p className="sr-pill">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />

@@ -132,6 +132,39 @@
   }
 }
 
+/*
+ * Phone density.
+ *
+ * Every section stacks on a phone, so the page is long by construction. Rather
+ * than dropping content — which would cost the message and the crawlable copy
+ * — the vertical rhythm tightens and the display sizes step down, which takes
+ * a large amount of scroll out without removing a single word.
+ */
+@media (max-width: 639px) {
+  .sr-scope {
+    --sr-section: 3.25rem;
+  }
+
+  .sr-h1 {
+    font-size: clamp(2.375rem, 10.5vw, 3rem);
+    letter-spacing: -0.032em;
+  }
+
+  .sr-h2 {
+    font-size: clamp(1.75rem, 7.6vw, 2.125rem);
+  }
+
+  .sr-lead {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .sr-card,
+  .sr-panel {
+    border-radius: var(--sr-r-md);
+  }
+}
+
 /* ---------------------------------------------------------------- layout */
 
 .sr-shell {
@@ -845,6 +878,21 @@
   border: 1px solid rgb(var(--sr-line));
   background: rgb(var(--sr-canvas-raised));
   box-shadow: var(--sr-shadow-1);
+}
+
+/* A thin, themed scrollbar for the phone-width template row. */
+.sr-rail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--sr-deep-line)) transparent;
+}
+
+.sr-rail-scroll::-webkit-scrollbar {
+  height: 5px;
+}
+
+.sr-rail-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(var(--sr-deep-line));
 }
 
 /* ------------------------------------------------------------- templates */

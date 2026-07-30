@@ -57,9 +57,15 @@ export function TemplateGallery({
         </div>
       )}
 
-      <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {/*
+        On a phone six stacked cards add roughly 1,700px of scroll. This is a
+        snap-scrolling row instead — every card stays in the DOM (so mobile-first
+        indexing still sees them) but the section costs one card of height. It
+        becomes an ordinary grid from `sm` up.
+      */}
+      <ul className="sr-rail-scroll mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 sm:grid sm:grid-cols-2 sm:gap-5 sm:overflow-visible sm:pb-0 lg:grid-cols-3">
         {visible.map((template) => (
-          <li key={template.id} className="sr-tpl">
+          <li key={template.id} className="sr-tpl w-[80%] shrink-0 snap-start sm:w-auto">
             <div className="sr-tpl-canvas">
               {template.thumbnail ? (
                 // Thumbnails are inline SVG/PNG data URIs generated from the

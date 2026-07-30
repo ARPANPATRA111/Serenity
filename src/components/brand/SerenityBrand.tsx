@@ -70,7 +70,13 @@ export function SerenityBrand({
             </span>
           </span>
         ) : (
-          <span className="sr-display text-lg">Serenity</span>
+          /*
+           * The wordmark is hidden *visually* below `sm` so app headers have
+           * room for their action buttons, but it stays in the accessibility
+           * tree — the mark itself is `aria-hidden`, so dropping the text
+           * outright would leave the home link with no accessible name.
+           */
+          <span className="sr-display sr-only text-lg sm:not-sr-only sm:inline">Serenity</span>
         ))}
     </span>
   );

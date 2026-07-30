@@ -17,7 +17,9 @@ export type WorkflowStep = {
  */
 export function WorkflowSteps({ steps }: { steps: WorkflowStep[] }) {
   return (
-    <ol className="sr-rail mt-14 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-6">
+    // Two columns even on a phone: six full-width blocks is a lot of scroll
+    // for six short captions.
+    <ol className="sr-rail mt-10 grid grid-cols-2 gap-x-4 gap-y-8 sm:mt-14 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-6">
       {steps.map((step, index) => (
         <Reveal as="li" key={step.title} delay={index * 70} className="relative lg:text-center">
           <div className="flex items-center gap-3 lg:flex-col lg:gap-2.5">
