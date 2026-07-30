@@ -55,50 +55,64 @@ export function PricingSection() {
   };
 
   return (
-    <section id="pricing" className="sr-section sr-section-subtle" style={{ scrollMarginTop: '4rem' }}>
+    <section id="pricing" className="sr-section sr-section-sunken" style={{ scrollMarginTop: '5rem' }}>
       <div className="sr-container">
         <div className="mx-auto max-w-2xl text-center">
           <p className="sr-eyebrow">Pricing</p>
-          <h2 className="sr-h2 mt-3">Start free. Talk to us when the programme grows.</h2>
-          <p className="sr-lead mt-4">
+          <h2 className="sr-h2 mt-4">
+            Start free and upgrade
+            <br className="hidden sm:block" /> when your workflow grows.
+          </h2>
+          <p className="sr-lead mt-5">
             The free plan covers the complete workflow, from design through verification, with a
             server-enforced allowance. Pro starts at $20 per month and is arranged through a
             request — there is no self-serve checkout yet.
           </p>
         </div>
 
-        <div className="mx-auto mt-12 grid max-w-3xl gap-6 md:grid-cols-2">
-          <div className="sr-card flex h-full flex-col p-7">
+        <div className="mx-auto mt-14 grid max-w-4xl items-start gap-6 md:grid-cols-2">
+          {/* ------------------------------------------------------- free */}
+          <div className="sr-card flex h-full flex-col p-8">
             <p className="sr-eyebrow">Available now</p>
-            <h3 className="sr-h3 mt-3 text-2xl">Free</h3>
-            <p className="mt-4 flex items-end gap-2">
-              <span className="font-display text-5xl font-bold leading-none">$0</span>
-              <span className="sr-hint pb-1">no card required</span>
+            <h3 className="sr-display mt-4 text-2xl">Free</h3>
+            <p className="mt-5 flex items-end gap-2">
+              <span className="sr-display text-6xl leading-none">$0</span>
+              <span className="sr-hint pb-1.5">no card required</span>
             </p>
-            <ul className="mt-7 flex-1 space-y-3">
+            <ul className="mt-8 flex-1 space-y-3.5">
               {freeFeatures.map((feature) => (
                 <li key={feature} className="sr-body flex gap-3">
-                  <Check className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-aqua))]" aria-hidden="true" />
+                  <Check
+                    className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-teal))]"
+                    aria-hidden="true"
+                  />
                   <span>{feature}</span>
                 </li>
               ))}
             </ul>
-            <Link href="/signup" className="sr-btn sr-btn-primary mt-8 w-full">
-              Create a free account
+            <Link href="/signup" className="sr-btn sr-btn-primary mt-9 w-full">
+              Get started free
             </Link>
           </div>
 
-          <div className="sr-card flex h-full flex-col border-[rgb(var(--sr-brand)/0.4)] p-7">
-            <p className="sr-eyebrow">By request</p>
-            <h3 className="sr-h3 mt-3 text-2xl">Pro</h3>
-            <p className="mt-4 flex items-end gap-2">
-              <span className="font-display text-5xl font-bold leading-none">$20</span>
-              <span className="sr-hint pb-1">per month, starting point</span>
+          {/* -------------------------------------------------------- pro */}
+          <div className="sr-section-deep relative flex h-full flex-col rounded-[var(--sr-r-lg)] p-8 shadow-[var(--sr-shadow-3)]">
+            <span className="absolute right-6 top-6 rounded-full bg-[rgb(var(--sr-teal-vivid))] px-3 py-1 text-[0.6875rem] font-bold uppercase tracking-[0.1em] text-[#04231F]">
+              By request
+            </span>
+            <p className="sr-eyebrow">Talk to us</p>
+            <h3 className="sr-display mt-4 text-2xl">Pro</h3>
+            <p className="mt-5 flex items-end gap-2">
+              <span className="sr-display text-6xl leading-none">$20</span>
+              <span className="sr-hint pb-1.5">per month, starting point</span>
             </p>
-            <ul className="mt-7 flex-1 space-y-3">
+            <ul className="mt-8 flex-1 space-y-3.5">
               {proFeatures.map((feature) => (
                 <li key={feature} className="sr-body flex gap-3">
-                  <Check className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-aqua))]" aria-hidden="true" />
+                  <Check
+                    className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-teal-vivid))]"
+                    aria-hidden="true"
+                  />
                   <span>{feature}</span>
                 </li>
               ))}
@@ -106,19 +120,19 @@ export function PricingSection() {
             <button
               type="button"
               onClick={() => setDialogOpen(true)}
-              className="sr-btn sr-btn-secondary mt-8 w-full"
+              className="sr-btn sr-btn-secondary mt-9 w-full"
             >
               Request a pricing conversation
             </button>
           </div>
         </div>
 
-        <p className="sr-body mx-auto mt-8 flex max-w-3xl items-start gap-3">
+        <p className="sr-body mx-auto mt-9 flex max-w-3xl items-start justify-center gap-3 text-center">
           <ShieldCheck
-            className="mt-0.5 h-5 w-5 shrink-0 text-[rgb(var(--sr-brand))]"
+            className="mt-0.5 h-5 w-5 shrink-0 text-[rgb(var(--sr-brand-text))]"
             aria-hidden="true"
           />
-          <span>
+          <span className="text-left">
             Usage limits and plan changes stay server-controlled. Nothing on this page can grant Pro
             access or reset a certificate count.
           </span>
@@ -132,7 +146,7 @@ export function PricingSection() {
         className="max-w-lg overflow-hidden p-0"
       >
         <div className="sr-scope">
-          <div className="relative border-b border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas-subtle))] px-6 py-6">
+          <div className="relative border-b border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas-sunken))] px-6 py-6">
             <button
               type="button"
               onClick={() => setDialogOpen(false)}

@@ -34,7 +34,7 @@ export function AuthShell({
       <header className="border-b border-[rgb(var(--sr-line))]">
         <div className="sr-container flex h-16 items-center justify-between">
           <Link href="/" className="rounded-lg" aria-label="Serenity Certificate Generator — home">
-            <SerenityBrand />
+            <SerenityBrand stacked />
           </Link>
           <ThemeToggle />
         </div>
@@ -48,8 +48,8 @@ export function AuthShell({
       >
         <div className="sr-container">
           <div className={split ? 'mx-auto max-w-4xl' : 'mx-auto max-w-md'}>
-            <h1 className="sr-h1 text-[clamp(1.9rem,4.2vw,2.5rem)]">{title}</h1>
-            <p className="sr-body mt-2">{subtitle}</p>
+            <h1 className="sr-h1 sr-h1-compact">{title}</h1>
+            <p className="sr-body mt-3">{subtitle}</p>
           </div>
 
           <div
@@ -87,7 +87,7 @@ export function AuthShell({
         </div>
       </main>
 
-      <footer className="border-t border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas-subtle))]">
+      <footer className="border-t border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas-sunken))]">
         <div className="sr-container flex flex-col gap-2 py-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="sr-hint">© 2026 Serenity Certificate Generator</p>
           <p className="sr-hint">

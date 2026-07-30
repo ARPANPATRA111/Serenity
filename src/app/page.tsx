@@ -7,6 +7,7 @@ import {
   Download,
   FileSpreadsheet,
   GraduationCap,
+  HeartHandshake,
   Layers,
   Mail,
   Paintbrush,
@@ -17,88 +18,97 @@ import {
 } from 'lucide-react';
 import { MarketingNav } from '@/components/marketing/MarketingNav';
 import { MarketingFooter } from '@/components/marketing/MarketingFooter';
+import { CapabilityMarquee } from '@/components/marketing/CapabilityMarquee';
+import { HeroShowcase } from '@/components/marketing/HeroShowcase';
 import { Reveal } from '@/components/marketing/Reveal';
 import { SectionHeading } from '@/components/marketing/SectionHeading';
 import { WorkflowSteps, type WorkflowStep } from '@/components/marketing/WorkflowSteps';
 import { FeatureStory } from '@/components/marketing/FeatureStory';
 import { ProductShot } from '@/components/marketing/ProductShot';
 import { UseCaseCard } from '@/components/marketing/UseCaseCard';
-import { CertificateFace, SealMotif } from '@/components/marketing/CertificateMotif';
+import { TemplateGallery } from '@/components/marketing/TemplateGallery';
+import { FaqAccordion } from '@/components/marketing/FaqAccordion';
 import { PricingSection } from '@/components/marketing/PricingSection';
 import { FREE_CERTIFICATE_LIMIT } from '@/lib/plans/certificateLimits';
 import { EVENTS_ENABLED } from '@/lib/featureFlags';
+import { getTemplateShowcase } from '@/lib/templates/publicShowcase';
 import { faqPageSchema, jsonLd, type FaqItem } from '@/lib/seo/structuredData';
 import '@/styles/marketing.css';
 
 /**
  * Public landing page.
  *
- * Server-rendered end to end: every product claim below maps to shipped
- * behaviour, the screenshots are captures of the real UI running against the
- * local emulator with synthetic recipients, and there is no invented social
- * proof, rating, customer, or usage count anywhere on the page.
+ * Server-rendered end to end. Every product claim maps to shipped behaviour,
+ * the screenshots are captures of the real UI running against the local
+ * emulator with synthetic recipients, the template gallery reads the real
+ * published templates from Firestore, and there is no invented social proof,
+ * rating, customer, or usage count anywhere on the page.
  */
+
+// Templates are read on the server and the page is re-generated periodically,
+// so the gallery stays a static document rather than a per-request Firestore
+// round trip.
+export const revalidate = 1800;
 
 const workflow: WorkflowStep[] = [
   {
     icon: Paintbrush,
     title: 'Design',
-    body: 'Lay out one reusable certificate on the canvas — text, logos, signatures, seals, and the verification field.',
+    body: 'Lay out one reusable certificate — text, logos, signatures, seals, and the verification field.',
   },
   {
     icon: FileSpreadsheet,
     title: 'Import',
-    body: 'Upload a CSV or Excel file of recipients. Serenity reads the header row and lists every column as a variable.',
+    body: 'Upload a CSV or Excel file. Serenity reads the header row and lists every column.',
   },
   {
     icon: Users,
-    title: 'Personalise',
-    body: 'Drop a column onto the design to bind it to a field, then step through the rows to preview real values.',
+    title: 'Map',
+    body: 'Drop a column onto the design to bind it to a field, then preview real rows.',
   },
   {
     icon: Layers,
     title: 'Generate',
-    body: 'Produce one personalised certificate per row and export the batch as PDF, PNG, or a ZIP archive.',
+    body: 'Produce one personalised certificate per row as PDF, PNG, or a ZIP archive.',
   },
   {
     icon: Mail,
     title: 'Deliver',
-    body: 'Download the batch, or email a generated certificate to its recipient after an ownership check.',
+    body: 'Download the batch, or email a certificate to its recipient after an ownership check.',
   },
   {
     icon: QrCode,
     title: 'Verify',
-    body: 'Every certificate carries a permanent verification URL and matching QR code that opens a public page.',
+    body: 'Every certificate carries a permanent verification URL and matching QR code.',
   },
 ];
 
 const useCases = [
   {
     icon: GraduationCap,
-    audience: 'Colleges and universities',
+    audience: 'Education and colleges',
     body: 'Issue course, semester, and programme certificates for a whole cohort from the registrar’s spreadsheet.',
   },
   {
     icon: CalendarCheck,
-    audience: 'Event organisers',
+    audience: 'Workshops and events',
     body: 'Turn a participant list into participation and speaker certificates once the event has closed.',
   },
   {
     icon: Building2,
-    audience: 'Companies',
-    body: 'Recognise internal training, compliance completion, and long-service milestones with a consistent template.',
+    audience: 'HR and employee recognition',
+    body: 'Recognise internal training, compliance completion, and long-service milestones from one template.',
   },
   {
     icon: Sparkles,
-    audience: 'Training providers',
+    audience: 'Training programmes',
     body: 'Reuse one branded design across every intake and give learners a link they can share with employers.',
   },
-];
-
-const templateDirections = [
-  { accent: '#4338CA', wash: '#DDE1FB', label: 'Course completion', name: 'Academic', note: 'Formal and composed' },
-  { accent: '#0D7C7C', wash: '#D3EEEE', label: 'Workshop participation', name: 'Workshop', note: 'Fresh and welcoming' },
-  { accent: '#B0761A', wash: '#F7E7C8', label: 'Achievement award', name: 'Recognition', note: 'Warm and celebratory' },
+  {
+    icon: HeartHandshake,
+    audience: 'Communities and nonprofits',
+    body: 'Thank volunteers and contributors with certificates that carry proof anyone can check.',
+  },
 ];
 
 const faqs: FaqItem[] = [
@@ -138,7 +148,9 @@ const faqs: FaqItem[] = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const showcase = await getTemplateShowcase(6);
+
   return (
     <div className="sr-scope sr-shell">
       <a
@@ -152,89 +164,92 @@ export default function HomePage() {
 
       <main id="main">
         {/* ------------------------------------------------------------ hero */}
-        <section className="sr-hero pb-16 pt-12 sm:pb-20 sm:pt-16 lg:pb-24 lg:pt-20">
-          <div className="sr-container grid items-center gap-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] lg:gap-14">
+        <section className="sr-hero pb-16 pt-14 sm:pb-20 sm:pt-20 lg:pb-24">
+          <div className="sr-container grid items-center gap-14 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1fr)] lg:gap-16">
             <Reveal eager>
-              <p className="sr-eyebrow">
-                <SealMotif className="h-4 w-4" />
-                Serenity Certificate Generator
-              </p>
-              <h1 className="sr-h1 mt-4">
-                From spreadsheet to verified certificates in minutes.
-              </h1>
-              <p className="sr-lead mt-5 max-w-xl">
-                Design one certificate, map a CSV or Excel column to every field, and generate a
-                personalised certificate for each recipient — each with its own verification page
-                and QR code.
+              <p className="sr-pill">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                Batch certificate generation
               </p>
 
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <h1 className="sr-h1 mt-6">
+                Create, send &amp; <span className="sr-accent">verify</span> professional
+                certificates at scale.
+              </h1>
+
+              <p className="sr-lead mt-6 max-w-xl">
+                Design a reusable template, import recipients from CSV or Excel, generate
+                personalised certificates, and deliver them by email — with built-in QR
+                verification.
+              </p>
+
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link href="/signup" className="sr-btn sr-btn-primary">
-                  Create a free account
+                  Create certificates
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
-                <a href="#how-it-works" className="sr-btn sr-btn-secondary">
-                  See how it works
+                <a href="#templates" className="sr-btn sr-btn-secondary">
+                  Explore templates
                 </a>
               </div>
 
-              <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2">
+              <p className="sr-body mt-5 flex items-center gap-2 text-sm">
+                <Check
+                  className="h-4 w-4 shrink-0 text-[rgb(var(--sr-teal))]"
+                  aria-hidden="true"
+                />
+                Start free · {FREE_CERTIFICATE_LIMIT} persisted certificates · No card required
+              </p>
+
+              {/*
+                The source design carries a "10K+ certificates / 500+ organizations"
+                strip here. Serenity has no verified usage to cite, so this states
+                what the product does instead of inventing adoption.
+              */}
+              <dl className="mt-10 grid max-w-lg grid-cols-3 gap-6 border-t border-[rgb(var(--sr-line))] pt-7">
                 {[
-                  `${FREE_CERTIFICATE_LIMIT} persisted certificates free`,
-                  'No card required',
-                  'PDF, PNG, and ZIP export',
-                ].map((item) => (
-                  <li key={item} className="sr-body flex items-center gap-2 text-sm">
-                    <Check
-                      className="h-4 w-4 shrink-0 text-[rgb(var(--sr-aqua))]"
-                      aria-hidden="true"
-                    />
-                    {item}
-                  </li>
+                  { value: 'CSV · XLSX', label: 'Recipient import' },
+                  { value: 'PDF · PNG', label: 'Batch export' },
+                  { value: 'QR + URL', label: 'On every certificate' },
+                ].map((stat) => (
+                  <div key={stat.label}>
+                    <dt className="sr-display text-lg sm:text-xl">{stat.value}</dt>
+                    <dd className="sr-hint mt-1.5">{stat.label}</dd>
+                  </div>
                 ))}
-              </ul>
+              </dl>
             </Reveal>
 
-            <Reveal eager delay={110}>
-              <ProductShot
-                src="/product/mapping.webp"
-                alt="The Serenity editor showing a certificate on the canvas beside the Data Source panel, where six imported spreadsheet records expose Name, Email, Course, and Date as variables and preview the first record."
-                caption="The Serenity editor with a spreadsheet connected. Sample data only."
-                width={1440}
-                height={900}
-                priority
-                sizes="(min-width: 1024px) 640px, 100vw"
-              />
+            <Reveal eager delay={120}>
+              <HeroShowcase />
             </Reveal>
           </div>
         </section>
 
+        <CapabilityMarquee />
+
         {/* --------------------------------------------------- how it works */}
-        <section
-          id="how-it-works"
-          className="sr-section sr-section-subtle"
-          style={{ scrollMarginTop: '4rem' }}
-        >
+        <section id="how-it-works" className="sr-section" style={{ scrollMarginTop: '5rem' }}>
           <div className="sr-container">
             <SectionHeading
               eyebrow="How it works"
-              title="Design once. Personalise every certificate."
-              lead="Six stages take a batch from a blank canvas to a certificate a recipient can share and anyone can check."
+              title="Six steps from template to inbox."
+              lead="Every stage below maps to a feature that ships today — nothing here is a roadmap item."
+              align="center"
             />
             <WorkflowSteps steps={workflow} />
           </div>
         </section>
 
         {/* ------------------------------------------------------- the editor */}
-        <section className="sr-section">
+        <section id="product" className="sr-section sr-section-deep" style={{ scrollMarginTop: '5rem' }}>
           <div className="sr-container">
             <FeatureStory
-              id="editor"
-              eyebrow="Visual editor"
-              title="A canvas built for certificates, not slides."
+              eyebrow="Certificate editor"
+              title="Design once. Personalise for everyone."
               lead="Compose the layout once with text, imported logos, signatures, and seals. Print boundaries, alignment guides, and an A4 landscape frame keep the design production-ready."
               points={[
-                'Reusable templates keep the layout, variables, and certificate details together',
+                'Reusable templates keep layout, variables, and certificate details together',
                 'Upload PNG, JPEG, or WebP media once and reuse it across designs',
                 'The verification field is a locked, mandatory part of every template',
                 'Undo, redo, alignment guides, and a print-boundary overlay',
@@ -253,11 +268,11 @@ export default function HomePage() {
         </section>
 
         {/* ------------------------------------------- data and generation */}
-        <section className="sr-section sr-section-subtle">
+        <section className="sr-section sr-section-tint">
           <div className="sr-container">
             <FeatureStory
-              eyebrow="Spreadsheet personalisation"
-              title="Your recipient list becomes the certificate."
+              eyebrow="Bulk personalisation"
+              title="One spreadsheet. A complete certificate batch."
               lead="Upload CSV, XLSX, XLS, or ODS. Serenity reads the header row, lists every column as a draggable variable, and previews any row against the live design before a single certificate is written."
               points={[
                 'Every column becomes a variable you can drop onto the canvas',
@@ -277,8 +292,11 @@ export default function HomePage() {
               }
               footer={
                 <div className="sr-card p-5">
-                  <p className="sr-h3 flex items-center gap-2 text-base">
-                    <Download className="h-4 w-4 text-[rgb(var(--sr-brand))]" aria-hidden="true" />
+                  <p className="sr-h3 flex items-center gap-2">
+                    <Download
+                      className="h-4 w-4 text-[rgb(var(--sr-brand-text))]"
+                      aria-hidden="true"
+                    />
                     Delivery
                   </p>
                   <p className="sr-body mt-2">
@@ -294,12 +312,11 @@ export default function HomePage() {
         </section>
 
         {/* ------------------------------------------------------ verification */}
-        <section className="sr-section">
+        <section id="verification" className="sr-section" style={{ scrollMarginTop: '5rem' }}>
           <div className="sr-container">
             <FeatureStory
-              id="verification"
-              eyebrow="QR and verification"
-              title="Every certificate can be checked by anyone, safely."
+              eyebrow="Verification"
+              title="Every certificate can prove it is genuine."
               lead="Each generated certificate carries a permanent verification URL and matching QR code. Opening it loads a public page that proves the certificate is genuine without leaking anything about the recipient."
               points={[
                 'The public page shows recipient name, title, issuer, issue date, and certificate ID',
@@ -314,19 +331,20 @@ export default function HomePage() {
                   caption="Public verification page. Sample certificate only."
                   width={900}
                   height={1194}
-                  sizes="(min-width: 1024px) 440px, 100vw"
-                  className="mx-auto max-w-md"
+                  sizes="(min-width: 1024px) 420px, 100vw"
+                  className="mx-auto max-w-sm"
                 />
               }
               footer={
                 <p className="sr-body flex items-start gap-3">
                   <ShieldCheck
-                    className="mt-0.5 h-5 w-5 shrink-0 text-[rgb(var(--sr-brand))]"
+                    className="mt-0.5 h-5 w-5 shrink-0 text-[rgb(var(--sr-brand-text))]"
                     aria-hidden="true"
                   />
                   <span>
-                    Firestore and Storage rules deny client access by default. Every private read and
-                    write is authenticated server-side and scoped to the account that owns the record.
+                    Firestore and Storage rules deny client access by default. Every private read
+                    and write is authenticated server-side and scoped to the account that owns the
+                    record.
                   </span>
                 </p>
               }
@@ -337,45 +355,27 @@ export default function HomePage() {
         {/* --------------------------------------------------------- templates */}
         <section
           id="templates"
-          className="sr-section sr-section-subtle"
-          style={{ scrollMarginTop: '4rem' }}
+          className="sr-section sr-section-deep"
+          style={{ scrollMarginTop: '5rem' }}
         >
           <div className="sr-container">
-            <SectionHeading
-              eyebrow="Templates"
-              title="Save a design once, reuse it every intake."
-              lead="A template keeps the layout, the bound variables, and the certificate details together, so the next cohort only needs a new spreadsheet."
-              align="center"
-            />
-            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {templateDirections.map((template, index) => (
-                <Reveal key={template.name} delay={index * 70}>
-                  <article className="sr-card sr-card-lift h-full overflow-hidden">
-                    <div className="p-4" style={{ background: template.wash }}>
-                      <CertificateFace
-                        accent={template.accent}
-                        wash={template.wash}
-                        label={template.label}
-                        className="rounded-md shadow-[var(--sr-shadow-2)]"
-                      />
-                    </div>
-                    <div className="border-t border-[rgb(var(--sr-line))] p-5">
-                      <h3 className="sr-h3">{template.name}</h3>
-                      <p className="sr-body mt-1 text-sm">{template.note}</p>
-                    </div>
-                  </article>
-                </Reveal>
-              ))}
-            </div>
-            <Reveal className="mt-10 text-center">
-              <p className="sr-hint">
-                Illustrative directions, not stock artwork. Template browsing opens once you have an
-                account.
-              </p>
-              <Link href="/signup" className="sr-btn sr-btn-secondary mt-4">
-                Create an account to browse templates
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div className="max-w-2xl">
+                <p className="sr-eyebrow">Template library</p>
+                <h2 className="sr-h2 mt-4">Start from a polished template.</h2>
+                <p className="sr-lead mt-4">
+                  {showcase.liveCount > 0
+                    ? 'Published templates from the Serenity library, ready to open in the editor and rename for your programme.'
+                    : 'Curated designs that ship with Serenity, ready to open in the editor and rename for your programme.'}
+                </p>
+              </div>
+              <Link href="/templates" className="sr-link inline-flex items-center gap-1.5">
+                View all templates
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
-            </Reveal>
+            </div>
+
+            <TemplateGallery templates={showcase.templates} categories={showcase.categories} />
           </div>
         </section>
 
@@ -383,17 +383,37 @@ export default function HomePage() {
         <section className="sr-section">
           <div className="sr-container">
             <SectionHeading
-              eyebrow="Who it is for"
-              title="Built for the people who issue certificates in batches."
+              eyebrow="Use cases"
+              title="Built for every team that recognises achievement."
               lead="If recognition currently means editing the same file once per person, this is the part Serenity replaces."
+              align="center"
             />
-            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {useCases.map((useCase, index) => (
-                <Reveal key={useCase.audience} delay={(index % 4) * 60}>
+                <Reveal key={useCase.audience} delay={(index % 3) * 70}>
                   <UseCaseCard {...useCase} />
                 </Reveal>
               ))}
+
+              <Reveal delay={140}>
+                <div className="sr-section-brand flex h-full flex-col justify-between rounded-[var(--sr-r-lg)] p-7">
+                  <div>
+                    <h3 className="sr-display text-xl leading-tight">
+                      Not sure how it maps to your programme?
+                    </h3>
+                    <p className="sr-body mt-3">
+                      Create a free account and take one certificate all the way from a blank canvas
+                      to a verification page.
+                    </p>
+                  </div>
+                  <Link href="/signup" className="sr-btn sr-btn-primary mt-7 self-start">
+                    Try it free
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              </Reveal>
             </div>
+
             {EVENTS_ENABLED && (
               <Reveal className="mt-8">
                 <p className="sr-body">
@@ -408,44 +428,33 @@ export default function HomePage() {
         <PricingSection />
 
         {/* --------------------------------------------------------------- faq */}
-        <section id="faq" className="sr-section" style={{ scrollMarginTop: '4rem' }}>
+        <section id="faq" className="sr-section" style={{ scrollMarginTop: '5rem' }}>
           <script {...jsonLd(faqPageSchema(faqs))} />
           <div className="sr-container">
             <div className="mx-auto max-w-3xl">
-              <SectionHeading eyebrow="FAQ" title="Frequently asked questions" align="center" />
-              <dl className="mt-10 divide-y divide-[rgb(var(--sr-line))]">
-                {/* The reveal wrapper *is* the group div: a <dl> may hold one
-                    div per dt/dd pair, but nesting them two deep detaches the
-                    items from the list for assistive technology. */}
-                {faqs.map((item, index) => (
-                  <Reveal key={item.question} className="py-6" delay={(index % 3) * 50}>
-                    <dt className="sr-h3">{item.question}</dt>
-                    <dd className="sr-body mt-2">{item.answer}</dd>
-                  </Reveal>
-                ))}
-              </dl>
+              <SectionHeading eyebrow="FAQ" title="Common questions" align="center" />
+              <FaqAccordion items={faqs} />
             </div>
           </div>
         </section>
 
         {/* ---------------------------------------------------------- final CTA */}
-        <section className="sr-section sr-section-deep">
+        <section className="sr-section sr-section-brand">
           <Reveal className="sr-container text-center">
-            <div className="mx-auto max-w-2xl">
-            <h2 className="sr-h2">Issue your next batch with verification built in.</h2>
-            <p className="sr-lead mt-4">
-              Create a free account and take one certificate all the way from a blank canvas to a
-              verification page.
-            </p>
-            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/signup" className="sr-btn sr-btn-primary">
-                Create a free account
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-              <Link href="/login" className="sr-btn sr-btn-secondary">
-                Sign in
-              </Link>
-            </div>
+            <div className="mx-auto max-w-3xl">
+              <h2 className="sr-h2">Your next certificate batch starts with one template.</h2>
+              <p className="sr-lead mt-5">
+                Design, personalise, deliver, and verify — all in one focused workflow.
+              </p>
+              <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
+                <Link href="/signup" className="sr-btn sr-btn-primary">
+                  Start creating
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <a href="#templates" className="sr-btn sr-btn-secondary">
+                  Browse templates
+                </a>
+              </div>
             </div>
           </Reveal>
         </section>

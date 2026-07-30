@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -7,10 +7,9 @@ import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const links = [
-  { href: '#how-it-works', label: 'How it works' },
-  { href: '#editor', label: 'Product' },
-  { href: '#verification', label: 'Verification' },
+  { href: '#product', label: 'Product' },
   { href: '#templates', label: 'Templates' },
+  { href: '#how-it-works', label: 'How it works' },
   { href: '#pricing', label: 'Pricing' },
   { href: '#faq', label: 'FAQ' },
 ];
@@ -35,23 +34,32 @@ export function MarketingNav() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas)/0.88)] backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas)/0.85)] backdrop-blur-md">
       <nav
-        className="sr-container flex h-16 items-center justify-between gap-3"
+        className="sr-container flex h-[4.5rem] items-center justify-between gap-3"
         aria-label="Primary"
       >
+        {/* "Create certificates" is a long CTA. Below `sm` the full lockup plus
+            that button plus the menu control exceed 360px, which clipped the
+            menu button off the bar entirely — so the brand drops to the mark
+            alone and the row fits with room to spare. */}
         <Link
           href="/"
           className="shrink-0 rounded-lg"
           aria-label="Serenity Certificate Generator — home"
         >
-          <SerenityBrand />
+          <SerenityBrand stacked className="hidden sm:inline-flex" />
+          <SerenityBrand compact className="sm:hidden" />
         </Link>
 
+        {/* The full link set plus the brand lockup plus the actions need ~1050px.
+            At `lg` (1024) they fit only by wrapping "How it works" onto two
+            lines and pushing the bar out of its own height, so the inline list
+            starts at `xl` and the menu covers everything below it. */}
         <ul className="hidden items-center gap-1 xl:flex">
           {links.map((link) => (
             <li key={link.href}>
-              <a href={link.href} className="sr-btn sr-btn-quiet text-sm">
+              <a href={link.href} className="sr-btn sr-btn-quiet whitespace-nowrap text-sm">
                 {link.label}
               </a>
             </li>
@@ -61,21 +69,21 @@ export function MarketingNav() {
         <div className="flex shrink-0 items-center gap-2">
           {/* Wrappers carry the responsive display so Tailwind's utility never
               has to out-specify the `.sr-btn` display rule. Below `sm` the bar
-              would squeeze the CTA onto two lines, so the toggle and "Sign in"
+              would squeeze the CTA onto two lines, so the toggle and "Log in"
               move into the menu panel and the CTA keeps its single line. */}
           <div className="hidden sm:block">
             <ThemeToggle />
           </div>
           <div className="hidden sm:block">
             <Link href="/login" className="sr-btn sr-btn-quiet text-sm">
-              Sign in
+              Log in
             </Link>
           </div>
           <Link
             href="/signup"
             className="sr-btn sr-btn-primary shrink-0 whitespace-nowrap text-sm"
           >
-            Start free
+            Create certificates
           </Link>
           <div className="xl:hidden">
             <button
@@ -115,7 +123,7 @@ export function MarketingNav() {
                 onClick={() => setOpen(false)}
                 className="sr-btn sr-btn-secondary w-full"
               >
-                Sign in
+                Log in
               </Link>
             </li>
             {/* The bar drops the toggle below `sm`; the panel carries it there. */}
@@ -129,4 +137,3 @@ export function MarketingNav() {
     </header>
   );
 }
-

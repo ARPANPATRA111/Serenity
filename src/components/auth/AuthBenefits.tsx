@@ -35,7 +35,7 @@ export function AuthBenefits() {
         {benefits.map((benefit) => (
           <li key={benefit} className="sr-body flex gap-3">
             <Check
-              className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-aqua))]"
+              className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-teal))]"
               aria-hidden="true"
             />
             <span>{benefit}</span>
@@ -56,7 +56,7 @@ export function AuthBenefitsCompact() {
         'QR verification',
       ].map((item) => (
         <li key={item} className="sr-body flex items-center gap-1.5 text-sm">
-          <Check className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--sr-aqua))]" aria-hidden="true" />
+          <Check className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--sr-teal))]" aria-hidden="true" />
           {item}
         </li>
       ))}

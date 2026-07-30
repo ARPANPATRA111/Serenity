@@ -10,22 +10,26 @@ export type WorkflowStep = {
 /**
  * The six stages a certificate actually moves through in Serenity.
  * Each stage maps to an implemented feature, not an aspiration.
+ *
+ * Laid out as a single connected rail on wide screens (the hairline lives in
+ * `.sr-rail`), and as a plain stacked list below that, where a horizontal
+ * connector would only add noise.
  */
 export function WorkflowSteps({ steps }: { steps: WorkflowStep[] }) {
   return (
-    <ol className="sr-rail mt-12 grid gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
+    <ol className="sr-rail mt-14 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-6">
       {steps.map((step, index) => (
-        <Reveal as="li" key={step.title} delay={index * 60} className="relative">
-          <div className="flex items-center gap-3">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full border border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas))] text-[rgb(var(--sr-brand))] shadow-[var(--sr-shadow-1)]">
-              <step.icon className="h-5 w-5" aria-hidden="true" />
+        <Reveal as="li" key={step.title} delay={index * 70} className="relative lg:text-center">
+          <div className="flex items-center gap-3 lg:flex-col lg:gap-2.5">
+            <span className="sr-rail-marker text-[rgb(var(--sr-brand))]">
+              <step.icon className="h-[1.375rem] w-[1.375rem]" aria-hidden="true" />
             </span>
-            <span className="sr-hint font-mono text-xs">
+            <span className="font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-[rgb(var(--sr-ink-faint))]">
               Step {String(index + 1).padStart(2, '0')}
             </span>
           </div>
-          <h3 className="sr-h3 mt-4">{step.title}</h3>
-          <p className="sr-body mt-2">{step.body}</p>
+          <h3 className="sr-h3 mt-3.5">{step.title}</h3>
+          <p className="sr-body mt-1.5 text-[0.9062rem] lg:mx-auto lg:max-w-[15rem]">{step.body}</p>
         </Reveal>
       ))}
     </ol>

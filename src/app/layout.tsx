@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, Space_Grotesk } from 'next/font/google';
+import { Bricolage_Grotesque, Inter, Space_Grotesk } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { FirebaseProvider } from '@/components/providers/FirebaseProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -26,6 +26,21 @@ const spaceGrotesk = Space_Grotesk({
   weight: ['400', '500', '600', '700'],
   display: 'swap',
   fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+});
+
+/**
+ * Display face for the public marketing and authentication pages only.
+ *
+ * The variable is declared on `<body>` so the class is available everywhere,
+ * but it is referenced solely from `.sr-scope`, so the authenticated
+ * application keeps Space Grotesk and its type does not shift.
+ */
+const bricolage = Bricolage_Grotesque({
+  subsets: ['latin'],
+  variable: '--font-marketing',
+  weight: ['600', '700', '800'],
+  display: 'swap',
+  fallback: ['Space Grotesk', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
 });
 
 const SITE_URL =
@@ -91,7 +106,9 @@ export default function RootLayout({
         <script {...jsonLd(websiteSchema())} />
         <script {...jsonLd(softwareApplicationSchema())} />
       </head>
-      <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans antialiased`}>
+      <body
+        className={`${inter.variable} ${spaceGrotesk.variable} ${bricolage.variable} font-sans antialiased`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

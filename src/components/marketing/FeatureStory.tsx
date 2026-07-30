@@ -41,7 +41,7 @@ export function FeatureStory({
             {points.map((point) => (
               <li key={point} className="sr-body flex gap-3">
                 <Check
-                  className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-aqua))]"
+                  className="mt-1 h-4 w-4 shrink-0 text-[rgb(var(--sr-teal))]"
                   aria-hidden="true"
                 />
                 <span>{point}</span>

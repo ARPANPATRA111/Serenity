@@ -19,8 +19,8 @@ export function SectionHeading({
   return (
     <Reveal className={centered ? 'mx-auto max-w-2xl text-center' : 'max-w-2xl'}>
       <p className="sr-eyebrow">{eyebrow}</p>
-      <h2 className="sr-h2 mt-3">{title}</h2>
-      {lead && <p className="sr-lead mt-4">{lead}</p>}
+      <h2 className="sr-h2 mt-4">{title}</h2>
+      {lead && <p className="sr-lead mt-5">{lead}</p>}
       {children}
     </Reveal>
   );
