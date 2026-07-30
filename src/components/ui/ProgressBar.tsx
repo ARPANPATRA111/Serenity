@@ -82,11 +82,11 @@ export function GenerationProgress({
       <ProgressBar value={percentage} size="lg" />
 
       {errors.length > 0 && (
-        <div className="rounded-lg bg-red-500/10 p-3">
-          <p className="text-sm font-medium text-red-500">
+        <div className="rounded-lg bg-error/10 p-3">
+          <p className="text-sm font-medium text-error">
             {errors.length} error{errors.length > 1 ? 's' : ''} encountered
           </p>
-          <ul className="mt-1 text-xs text-red-400">
+          <ul className="mt-1 text-xs text-error">
             {errors.slice(0, 3).map((err) => (
               <li key={err.index}>Row {err.index + 1}: {err.message}</li>
             ))}

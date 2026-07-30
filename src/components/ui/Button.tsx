@@ -16,7 +16,7 @@ const variantClasses = {
   accent: 'bg-accent text-accent-foreground hover:opacity-90',
   outline: 'border border-border bg-transparent hover:bg-muted',
   ghost: 'bg-transparent hover:bg-muted',
-  destructive: 'bg-red-600 text-white hover:bg-red-700',
+  destructive: 'bg-error text-white hover:bg-error',
 };
 
 const sizeClasses = {

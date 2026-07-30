@@ -313,7 +313,7 @@ export default function MyTemplatesPage() {
                     <div className="absolute top-3 left-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                         template.isPublic
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                          ? 'bg-success dark:bg-success/30 text-success dark:text-success'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                       }`}>
                         {template.isPublic ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
@@ -351,7 +351,7 @@ export default function MyTemplatesPage() {
                           </button>
                           <button
                             onClick={() => { setDeleteConfirm(template.id); setActiveMenu(null); }}
-                            className="flex items-center gap-2 px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm text-red-600 dark:text-red-400 transition-colors w-full text-left"
+                            className="flex items-center gap-2 px-4 py-3 hover:bg-error dark:hover:bg-error/20 text-sm text-error transition-colors w-full text-left"
                           >
                             <Trash2 className="w-4 h-4" />
                             Delete
@@ -455,8 +455,8 @@ export default function MyTemplatesPage() {
               className="bg-card rounded-2xl border border-border shadow-2xl p-6 max-w-sm w-full"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                  <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+                <div className="w-10 h-10 rounded-full bg-error dark:bg-error/30 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-error" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground">Delete Template?</h3>
               </div>
@@ -472,7 +472,7 @@ export default function MyTemplatesPage() {
                 </button>
                 <button
                   onClick={() => handleDelete(deleteConfirm)}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition-colors"
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-error hover:bg-error text-white font-medium text-sm transition-colors"
                 >
                   Delete
                 </button>

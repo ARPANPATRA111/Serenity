@@ -254,10 +254,10 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
               <div className="order-2 flex flex-col">
                 {/* Verification Badge */}
                 <div className="mb-4 flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/20">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/20">
+                    <CheckCircle className="h-4 w-4 text-success" />
                   </div>
-                  <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                  <span className="text-sm font-medium text-success">
                     Verified Certificate
                   </span>
                 </div>
@@ -385,7 +385,7 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
             </div>
 
             {/* Security Notice */}
-            <div className="mt-8 rounded-lg bg-green-500/10 p-4 text-center text-sm text-green-600 dark:text-green-400">
+            <div className="mt-8 rounded-lg bg-success/10 p-4 text-center text-sm text-success">
               <CheckCircle className="mx-auto mb-2 h-5 w-5" />
               This certificate was verified on our secure system.
               <br className="hidden sm:block" />
@@ -395,15 +395,15 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
         ) : (
           <div className="animate-fade-in text-center">
             {/* Error/Invalid State */}
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-red-500/20">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-error/20">
               {error?.includes('not found') ? (
-                <AlertTriangle className="h-10 w-10 text-yellow-500" />
+                <AlertTriangle className="h-10 w-10 text-warning" />
               ) : (
-                <XCircle className="h-10 w-10 text-red-500" />
+                <XCircle className="h-10 w-10 text-error" />
               )}
             </div>
             
-            <h1 className="font-display text-3xl font-bold text-red-500">
+            <h1 className="font-display text-3xl font-bold text-error">
               {error?.includes('not found') ? 'Certificate Not Found' : 'Verification Failed'}
             </h1>
             
@@ -518,7 +518,7 @@ export function VerificationClient({ certificateId }: VerificationClientProps) {
               className="flex items-center gap-3 w-full p-4 rounded-lg border border-border hover:bg-muted transition-colors"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                {copied ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}
+                {copied ? <Check className="h-5 w-5 text-success" /> : <Copy className="h-5 w-5" />}
               </div>
               <div className="text-left">
                 <p className="font-medium">{copied ? 'Link Copied!' : 'Copy Link'}</p>

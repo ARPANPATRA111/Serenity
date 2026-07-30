@@ -44,18 +44,11 @@ export function TemplateCard({ template }: TemplateCardProps) {
     }
   };
 
-  // Generate gradient color based on template id or name
-  const getGradientColor = () => {
-    const colors = [
-      'from-amber-500 to-orange-600',
-      'from-blue-500 to-purple-600',
-      'from-green-500 to-teal-600',
-      'from-purple-500 to-pink-600',
-      'from-rose-500 to-red-600',
-      'from-cyan-500 to-blue-600',
-    ];
-    const index = template.id.charCodeAt(0) % colors.length;
-    return colors[index];
+  // Flat palette tint standing in for a missing thumbnail, picked from the
+  // template id so a card keeps the same colour between renders.
+  const getPlaceholderTint = () => {
+    const tints = ['bg-primary/15', 'bg-secondary/15', 'bg-accent/15', 'bg-warning/15'];
+    return tints[template.id.charCodeAt(0) % tints.length];
   };
 
   return (
@@ -71,8 +64,8 @@ export function TemplateCard({ template }: TemplateCardProps) {
             unoptimized // Data URLs don't need optimization
           />
         ) : (
-          <div className={`h-full w-full bg-gradient-to-br ${getGradientColor()} flex items-center justify-center`}>
-            <div className="rounded bg-white/20 px-4 py-2 text-white backdrop-blur-sm">
+          <div className={`flex h-full w-full items-center justify-center ${getPlaceholderTint()}`}>
+            <div className="rounded bg-card/80 px-4 py-2 text-sm font-medium text-foreground">
               Preview
             </div>
           </div>

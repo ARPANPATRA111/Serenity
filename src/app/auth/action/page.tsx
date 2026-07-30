@@ -211,8 +211,8 @@ function AuthActionContent() {
 
           {status === 'success' && (
             <div className="flex flex-col items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center">
-                <CheckCircle2 className="h-8 w-8 text-green-500" />
+              <div className="h-16 w-16 rounded-full bg-success/10 flex items-center justify-center">
+                <CheckCircle2 className="h-8 w-8 text-success" />
               </div>
               <h1 className="text-2xl font-bold">Success!</h1>
               <p className="text-muted-foreground">{message}</p>
@@ -227,8 +227,8 @@ function AuthActionContent() {
 
           {status === 'error' && (
             <div className="flex flex-col items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-red-500/10 flex items-center justify-center">
-                <XCircle className="h-8 w-8 text-red-500" />
+              <div className="h-16 w-16 rounded-full bg-error/10 flex items-center justify-center">
+                <XCircle className="h-8 w-8 text-error" />
               </div>
               <h1 className="text-2xl font-bold">Verification Failed</h1>
               <p className="text-muted-foreground">{message}</p>

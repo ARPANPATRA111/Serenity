@@ -31,13 +31,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             'ring-offset-background placeholder:text-muted-foreground',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
             'disabled:cursor-not-allowed disabled:opacity-50',
-            error ? 'border-red-500 focus-visible:ring-red-500' : 'border-input',
+            error ? 'border-error focus-visible:ring-error' : 'border-input',
             className
           )}
           {...props}
         />
         {error && (
-          <p className="mt-1.5 text-xs text-red-500">{error}</p>
+          <p className="mt-1.5 text-xs text-error">{error}</p>
         )}
         {helperText && !error && (
           <p className="mt-1.5 text-xs text-muted-foreground">{helperText}</p>

@@ -161,10 +161,10 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
                 <div className="order-2 space-y-3">
                   {/* Verification Badge */}
                   <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500/20">
-                      <CheckCircle className="h-3 w-3 text-green-500" />
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-success/20">
+                      <CheckCircle className="h-3 w-3 text-success" />
                     </div>
-                    <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                    <span className="text-xs font-medium text-success">
                       Verified Certificate
                     </span>
                   </div>
@@ -233,9 +233,9 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
               </div>
 
               {/* Security Notice */}
-              <div className="mt-4 rounded-md bg-green-500/10 p-3 text-center">
-                <CheckCircle className="mx-auto mb-1 h-4 w-4 text-green-500" />
-                <p className="text-xs text-green-600 dark:text-green-400">
+              <div className="mt-4 rounded-md bg-success/10 p-3 text-center">
+                <CheckCircle className="mx-auto mb-1 h-4 w-4 text-success" />
+                <p className="text-xs text-success">
                   This certificate was verified on our secure system.
                 </p>
               </div>
@@ -326,7 +326,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
                 className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <div className="flex justify-end mt-1">
-                <span className={`text-xs ${description.length >= 450 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                <span className={`text-xs ${description.length >= 450 ? 'text-warning' : 'text-muted-foreground'}`}>
                   {description.length}/500
                 </span>
               </div>
@@ -380,7 +380,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
 
             {/* Status indicator */}
             <div className={`flex items-center gap-2 rounded-lg p-3 ${
-              isComplete ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+              isComplete ? 'bg-success/10 text-success dark:text-success' : 'bg-warning/10 text-warning dark:text-warning'
             }`}>
               {isComplete ? (
                 <>

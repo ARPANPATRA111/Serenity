@@ -39,19 +39,19 @@ export default function VerifyPage() {
       icon: ShieldCheck,
       title: 'Verify Authenticity',
       description: 'Confirm the certificate is genuine and has not been tampered with',
-      color: 'from-green-500 to-emerald-500',
+      tile: 'tile-accent',
     },
     {
       icon: FileSearch,
       title: 'View Details',
       description: 'See issuer information, recipient, and issuance date',
-      color: 'from-blue-500 to-cyan-500',
+      tile: 'tile-primary',
     },
     {
       icon: QrCode,
       title: 'QR Code Support',
       description: 'Paste verification URLs from scanned QR codes',
-      color: 'from-violet-500 to-purple-500',
+      tile: 'tile-secondary',
     },
   ];
 
@@ -164,8 +164,8 @@ export default function VerifyPage() {
                 transition={{ delay: 0.5 + index * 0.1 }}
                 className="rounded-xl border border-border bg-card p-5 text-left hover:border-primary/30 hover:bg-card/80 transition-all"
               >
-                <div className={`inline-flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${feature.color} mb-3`}>
-                  <feature.icon className="h-5 w-5 text-white" />
+                <div className={`${feature.tile} mb-3 h-10 w-10`}>
+                  <feature.icon className="h-5 w-5" />
                 </div>
                 <h3 className="font-semibold text-sm mb-1">{feature.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{feature.description}</p>

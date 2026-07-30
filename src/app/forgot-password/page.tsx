@@ -59,8 +59,8 @@ export default function ForgotPasswordPage() {
               transition={{ duration: 0.3 }}
             >
               <div className="mb-6 flex items-center justify-center">
-                <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <CheckCircle className="h-8 w-8 text-green-500" />
+                <div className="h-16 w-16 rounded-full bg-success/10 flex items-center justify-center">
+                  <CheckCircle className="h-8 w-8 text-success" />
                 </div>
               </div>
               <h1 className="font-display text-3xl font-bold text-center mb-2">Check your email</h1>

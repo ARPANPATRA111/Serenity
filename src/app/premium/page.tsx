@@ -13,7 +13,7 @@ export default function PremiumPage() {
           </Link>
         </div>
         <section className="mt-12 rounded-3xl border border-border bg-card p-7 shadow-xl sm:p-12">
-          <span className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+          <span className="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">
             <MessageCircle className="h-3.5 w-3.5" /> Pro access by conversation
           </span>
           <h1 className="mt-6 font-display text-4xl font-bold tracking-tight sm:text-5xl">Pro starts at $20 per month.</h1>
@@ -29,7 +29,7 @@ export default function PremiumPage() {
                 'PDF generation and verification links',
                 'Up to five persisted generated certificates',
               ].map((feature) => (
-                <li key={feature} className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />{feature}</li>
+                <li key={feature} className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />{feature}</li>
               ))}
             </ul>
           </div>

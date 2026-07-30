@@ -296,7 +296,7 @@ export function LeftSidebar() {
         <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <HardDrive className="h-3 w-3" />
           <span>Storage: {formatFileSize(totalStorage)}</span>
-          <span className="ml-auto flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+          <span className="ml-auto flex items-center gap-1 text-success">
             <Zap className="h-3 w-3" />
             <span>Optimized</span>
           </span>
@@ -337,8 +337,8 @@ export function LeftSidebar() {
 
       {/* Preview Mode Notice */}
       {isPreviewMode && (
-        <div className="border-t border-border bg-amber-500/10 p-3 text-center">
-          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+        <div className="border-t border-border bg-warning/10 p-3 text-center">
+          <p className="text-xs font-medium text-warning">
             Preview Mode Active - Editing Disabled
           </p>
         </div>

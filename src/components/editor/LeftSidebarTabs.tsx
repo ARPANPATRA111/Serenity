@@ -394,8 +394,8 @@ export function LeftSidebarTabs() {
 
       {/* Preview Mode Notice */}
       {isPreviewMode && (
-        <div className="border-t border-border bg-amber-500/10 p-3 text-center">
-          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+        <div className="border-t border-border bg-warning/10 p-3 text-center">
+          <p className="text-xs font-medium text-warning">
             Preview Mode Active - Editing Disabled
           </p>
         </div>
@@ -507,7 +507,7 @@ function MediaTabContent({
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground px-1">
         <HardDrive className="h-3 w-3" />
         <span>{formatFileSize(totalStorage)} used</span>
-        <span className="ml-auto flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+        <span className="ml-auto flex items-center gap-1 text-success">
           <Zap className="h-3 w-3" />
           Optimized
         </span>
@@ -659,8 +659,8 @@ function ColorsTabContent({ isPremium }: ColorsTabContentProps) {
       {isPremium && isShape && (
         <div className="pt-3 border-t border-border">
           <div className="flex items-center gap-2 mb-2">
-            <Palette className="h-3 w-3 text-amber-500" />
-            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Premium Gradients</span>
+            <Palette className="h-3 w-3 text-warning" />
+            <span className="text-xs font-medium text-warning">Premium Gradients</span>
           </div>
           <div className="grid grid-cols-4 gap-1">
             {[

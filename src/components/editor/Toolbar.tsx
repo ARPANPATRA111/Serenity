@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
@@ -777,14 +777,14 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
   const isVerificationSelected = selectedObject && (selectedObject as any).isVerificationUrl;
 
   return (
-    <div className={`flex flex-col ${isPreviewMode ? 'bg-amber-500/10' : ''}`}>
+    <div className={`flex flex-col ${isPreviewMode ? 'bg-warning/10' : ''}`}>
       {/* Primary Toolbar Row - Always visible */}
       <div className="toolbar border-b border-border">
         {/* Preview Mode Indicator */}
         {isPreviewMode && (
-          <div className="flex items-center gap-1 mr-2 px-2 py-0.5 bg-amber-500/20 rounded-full flex-shrink-0">
-            <Eye className="h-3 w-3 text-amber-600" />
-            <span className="text-xs font-semibold text-amber-600 hidden sm:inline">Preview</span>
+          <div className="flex items-center gap-1 mr-2 px-2 py-0.5 bg-warning/20 rounded-full flex-shrink-0">
+            <Eye className="h-3 w-3 text-warning" />
+            <span className="text-xs font-semibold text-warning hidden sm:inline">Preview</span>
           </div>
         )}
         
@@ -804,7 +804,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
              placeholder="Untitled"
            />
            {isPremiumUser && !isPreviewMode && (
-             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400/20 to-orange-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-semibold whitespace-nowrap" title="Premium features enabled">
+             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-warning text-[10px] font-semibold whitespace-nowrap" title="Premium features enabled">
                <BadgeCheck className="h-3 w-3" />
                PRO
              </span>
@@ -875,7 +875,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         </button>
         <button
           onClick={handleToggleLock}
-          className={`toolbar-button ${isLocked ? 'bg-red-500/20 text-red-500' : ''}`}
+          className={`toolbar-button ${isLocked ? 'bg-error/20 text-error' : ''}`}
           title={isLocked ? 'Unlock Element' : 'Lock Element'}
           disabled={!isObjectSelected || isPreviewMode}
         >
@@ -888,7 +888,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         {/* Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
            {saveStatus === 'saved' && (
-             <span className="text-xs text-green-600 hidden sm:flex items-center gap-1">
+             <span className="text-xs text-success hidden sm:flex items-center gap-1">
                <Check className="h-3.5 w-3.5" />
                Saved
              </span>
@@ -897,7 +897,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
            <button
              onClick={handleTogglePreview}
              title={isPreviewMode ? "Exit Preview" : "Preview"}
-             className={`toolbar-button ${isPreviewMode ? 'bg-amber-500 text-white' : ''}`}
+             className={`toolbar-button ${isPreviewMode ? 'bg-warning text-white' : ''}`}
            >
               {isPreviewMode ? <EyeOff /> : <Eye />}
            </button>
@@ -913,7 +913,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
            >
               <Info />
               {!isCertificateInfoComplete && (
-                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-orange-500 border border-background" />
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-warning border border-background" />
               )}
            </button>
 

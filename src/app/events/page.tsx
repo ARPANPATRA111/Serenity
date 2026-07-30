@@ -255,7 +255,7 @@ export default function EventsPage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
-        {error && !showForm && <p className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-300">{error}</p>}
+        {error && !showForm && <p className="mb-6 rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error">{error}</p>}
         {loadingEvents ? (
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map((item) => <div key={item} className="h-72 animate-pulse rounded-3xl border border-border bg-muted/40" />)}
@@ -271,7 +271,7 @@ export default function EventsPage() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {events.map((event) => (
               <article key={event.id} className="group overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl">
-                <div className="relative h-36 overflow-hidden bg-gradient-to-br from-indigo-500/25 via-violet-500/20 to-pink-500/25">
+                <div className="relative h-36 overflow-hidden bg-primary/10">
                   {event.coverImageUrl ? <Image src={event.coverImageUrl} alt="" fill unoptimized sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" /> : <CalendarDays className="absolute bottom-5 right-5 h-16 w-16 text-primary/25" />}
                   <span className="absolute left-4 top-4 rounded-full border border-white/20 bg-slate-950/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">{event.type}</span>
                 </div>
@@ -290,7 +290,7 @@ export default function EventsPage() {
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => openEdit(event)} className="toolbar-button" aria-label={`Edit ${event.name}`}><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => void archive(event)} className="toolbar-button text-red-500" aria-label={`Archive ${event.name}`}><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => void archive(event)} className="toolbar-button text-error" aria-label={`Archive ${event.name}`}><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                 </div>
@@ -313,7 +313,7 @@ export default function EventsPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8 p-6 sm:p-8">
-              {error && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-300">{error}</p>}
+              {error && <p className="rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error">{error}</p>}
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Event name" optional={false}><input required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="input" placeholder="Serenity Buildathon 2026" /></Field>
                 <Field label="Event type" optional={false}><select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} className="input">{EVENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></Field>

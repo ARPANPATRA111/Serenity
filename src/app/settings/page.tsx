@@ -183,7 +183,7 @@ export default function SettingsPage() {
 
               {/* Error Message */}
               {errorMessage && (
-                <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-500">
+                <div className="flex items-center gap-2 rounded-lg bg-error/10 border border-error/20 px-4 py-3 text-sm text-error">
                   <Trash2 className="h-4 w-4 flex-shrink-0" />
                   {errorMessage}
                 </div>

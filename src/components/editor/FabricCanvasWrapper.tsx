@@ -188,7 +188,7 @@ export function FabricCanvasWrapper() {
     <div
       ref={containerRef}
       className={`canvas-container flex h-full w-full items-center justify-center overflow-auto ${isMobile ? 'p-4' : 'p-12'} ${
-        isPreviewMode ? 'bg-emerald-500/5' : 'bg-muted/30'
+        isPreviewMode ? 'bg-success/5' : 'bg-muted/30'
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -235,7 +235,7 @@ export function FabricCanvasWrapper() {
       <div className="relative">
         <div
           className={`fabric-canvas-container relative shadow-2xl border-2 rounded-lg transition-all ${
-            isDragOver ? 'border-primary ring-4 ring-primary/20' : isPreviewMode ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-border'
+            isDragOver ? 'border-primary ring-4 ring-primary/20' : isPreviewMode ? 'border-success ring-2 ring-success/20' : 'border-border'
           }`}
           style={{
             transform: `scale(${effectiveScale})`,
@@ -255,7 +255,7 @@ export function FabricCanvasWrapper() {
           
           {/* Preview Mode overlay */}
           {isPreviewMode && (
-            <div className="absolute top-2 right-2 bg-emerald-500 text-white px-2 py-1 rounded text-xs font-medium z-10">
+            <div className="absolute top-2 right-2 bg-success text-white px-2 py-1 rounded text-xs font-medium z-10">
               Preview Mode
             </div>
           )}
@@ -269,7 +269,7 @@ export function FabricCanvasWrapper() {
             ) : (
               <>
                 A4 Landscape ({A4_LANDSCAPE.width} × {A4_LANDSCAPE.height}px) | 
-                <span className="text-red-500 ml-1">Red dashed line = Print boundary</span> | 
+                <span className="text-error ml-1">Red dashed line = Print boundary</span> |
                 Zoom: {Math.round(zoomLevel * 100)}%
               </>
             )}
@@ -281,12 +281,12 @@ export function FabricCanvasWrapper() {
           <div className="absolute -bottom-20 left-0 right-0 text-center">
             <span className="text-[10px] text-muted-foreground/70 bg-background/50 px-2 py-1 rounded">
               <span className="font-medium">Shortcuts:</span>{' '}
-              <span className="text-blue-500">Ctrl+S</span> Save |{' '}
-              <span className="text-blue-500">Ctrl+Z</span> Undo |{' '}
-              <span className="text-blue-500">Ctrl+Y</span> Redo |{' '}
-              <span className="text-blue-500">Ctrl+Q</span> Preview |{' '}
-              <span className="text-blue-500">Alt+Drag</span> Pan |{' '}
-              <span className="text-blue-500">Del</span> Delete
+              <span className="text-primary">Ctrl+S</span> Save |{' '}
+              <span className="text-primary">Ctrl+Z</span> Undo |{' '}
+              <span className="text-primary">Ctrl+Y</span> Redo |{' '}
+              <span className="text-primary">Ctrl+Q</span> Preview |{' '}
+              <span className="text-primary">Alt+Drag</span> Pan |{' '}
+              <span className="text-primary">Del</span> Delete
             </span>
           </div>
         )}
