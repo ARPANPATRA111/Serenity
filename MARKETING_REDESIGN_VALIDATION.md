@@ -280,3 +280,89 @@ project. What was actually done, and why:
 
 Everything else was validated against a local production build started with
 **placeholder** Firebase config, which reaches no backend at all.
+
+---
+
+## Third pass — rebuild on a supplied reference (2026-07-30)
+
+The operator supplied a reference layout to implement and asked for it to be
+extended. The reference was rendered in a headless browser and its computed
+styles sampled; the palette, type scale, radii, and section order informed the
+rebuild.
+
+### 14. Visual direction
+
+A warm bone canvas (`#F8F5F0`) instead of clinical white, deep navy ink
+(`#0B1829`), one vivid blue (`#1A5CFF`) carrying every primary action, and a
+small accent set — teal for verification, violet for personalisation, amber for
+recognition — used as flat colour fields rather than gradients. Display type is
+Bricolage Grotesque at heavy weights, scoped to `.sr-scope` so the
+authenticated application keeps Space Grotesk and its type does not shift.
+
+Structure: hero with an original certificate composition → scrolling capability
+strip → six-step workflow rail → editor story → spreadsheet story →
+verification → template gallery → use cases → pricing → FAQ → closing CTA →
+footer.
+
+### 15. What was added beyond the reference
+
+| Gap in the reference | What ships here |
+| --- | --- |
+| No dark theme at all | Every token has a dark counterpart; the inverted bands lift away from the page rather than sinking into it. A test asserts the bands change between themes. |
+| Placeholder template cards | The gallery reads the real published templates from Firestore on the server, topped up with the curated designs, filterable by category. |
+| Pro tier priced "TBD" | Real pricing: `$0` free with the server-enforced allowance, `$20` Pro by request. A test fails on "TBD". |
+| A fabricated stat strip | The reference carries "10K+ certificates / 500+ organizations / 99.9% uptime". Serenity has no verified usage to cite, so that band states capabilities instead. The fabricated-claim guard gained an uptime pattern. |
+
+### 16. Template privacy and moderation
+
+Only a name, a category, and a thumbnail cross the server boundary. `userId`,
+`creatorEmail`, `creatorName`, and `canvasJSON` never reach the marketing HTML.
+Thumbnails are accepted only as `data:image/` or `https://` values.
+
+Review status **ranks** rather than excludes. A read-only probe of the
+collection found four public templates, all of them legacy records carrying
+`isPublic: true` and nothing else — no `publicationStatus`, no `reviewedAt`, no
+`category` — so an initial reviewed-only filter hid every real template on the
+site. Reviewed designs now sort first and the rest follow.
+
+**Operator decision required:** the homepage shows the same templates the
+public `/templates` gallery already lists, including any names or photography
+baked into those designs. If community publishing is opened up, enable
+`PUBLIC_TEMPLATE_PUBLISHING_V2` so `reviewedAt` becomes meaningful and this
+list can be tightened back to reviewed-only.
+
+### 17. Defects the rebuild surfaced
+
+| Defect | Fix |
+| --- | --- |
+| The long "Create certificates" CTA clipped the menu button off the bar below `sm`. | The brand drops to the mark alone at that width. |
+| The inline link set needs ~1050px and wrapped "How it works" onto two lines at `lg`, pushing the bar out of its own height. | The inline list starts at `xl`; the menu covers everything below. |
+| The pinned hero panels were clipped in the narrow `lg` column. | They show only where there is room for the overhang. |
+| `.sr-h1`'s 5.25rem hero size beat the auth pages' Tailwind `text-[clamp()]` on source order, so "Create your free account" filled the viewport. | An `.sr-h1-compact` variant — the third instance of this specificity trap, after `px-0` and `h-10`. |
+
+### 18. Accessibility
+
+axe found three real contrast failures introduced by the new palette, all
+fixed: the brand-blue link step on the inverted band (2.67:1), the brand
+sub-lockup on dark (3.14:1), and white-on-light-blue template buttons in dark
+mode (2.78:1). The suite is green again. Still not a conformance claim.
+
+### 19. Gates re-run (2026-07-30)
+
+| Gate | Result |
+| --- | --- |
+| `pnpm lint` | pass |
+| `pnpm build` | pass — 28/28 pages, `/` still statically prerendered with ISR |
+| `pnpm test` | pass — 24 tests |
+| `pnpm test:rules` | pass — 8 tests |
+| `pnpm test:smoke` | pass — 9 routes 200 |
+| `pnpm test:e2e` | pass — **142 passed**, 52 skipped |
+
+The e2e suite was verified twice consecutively, and against both live Firestore
+rows and the curated fallback, since the gallery's data source differs between
+a credentialed build and a placeholder one.
+
+Landing is **5.1 kB / 118 kB** first load (was 7.6 kB / 117 kB): the route
+shrank because the FAQ dropped its per-item client wrapper for native
+`details`, and first-load grew ~1 kB for the gallery's filter state.
+Horizontal overflow remains 0px across all 42 captured states.
