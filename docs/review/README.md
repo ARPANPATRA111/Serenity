@@ -22,6 +22,29 @@ all, so these are new surfaces rather than comparisons:
 | Landing, 1440×1000, dark | `landing-desktop-dark.webp` |
 | Login, 1440×1000, dark | `login-desktop-dark.webp` |
 
+## Signed-in application
+
+The application palette now mirrors the public one, so these are captures of
+the same design system applied behind the login. Taken against the local
+Firebase emulator with the seeded `user-a@example.test` fixture — no production
+data.
+
+| View | Capture |
+| --- | --- |
+| Dashboard, 1440×1000, light | `app-dashboard-light.webp` |
+| Dashboard, 1440×1000, dark | `app-dashboard-dark.webp` |
+| History, 390×844, light | `app-history-mobile.webp` |
+| Templates, 390×844, dark | `app-templates-mobile-dark.webp` |
+
+Reproduce the full signed-in set (8 routes × 2 widths × 2 themes) by starting
+the emulator, seeding it, and running the app against it:
+
+```powershell
+pnpm emulators          # terminal 1
+pnpm seed:emulator      # terminal 2
+pnpm dev:emulator       # terminal 2
+```
+
 The mobile-header pair is a crop of the same page at the same width, isolating
 three defects the runtime audit found. Before: the theme toggle is the
 application's amber gradient rather than the marketing palette, "Start free"
