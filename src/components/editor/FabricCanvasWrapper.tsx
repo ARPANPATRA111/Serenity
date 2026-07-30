@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useFabric, A4_LANDSCAPE, createVariableTextbox } from '@/lib/fabric';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore } from '@/store/editorStore';
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, Smartphone } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 export function FabricCanvasWrapper() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -13,9 +13,13 @@ export function FabricCanvasWrapper() {
   const [manualZoom, setManualZoom] = useState(1);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(true);
-  const [showMobileHint, setShowMobileHint] = useState(true);
   const initRef = useRef(false);
+  const gestureRef = useRef<{
+    distance: number;
+    zoom: number;
+    midpointX: number;
+    midpointY: number;
+  } | null>(null);
   
   const { setFabricInstance } = useFabricContext();
   const { zoomLevel, isPreviewMode } = useEditorStore();
@@ -48,9 +52,7 @@ export function FabricCanvasWrapper() {
   useEffect(() => {
     const checkMobileAndOrientation = () => {
       const isMobileDevice = window.innerWidth < 768 || ('ontouchstart' in window);
-      const isLandscapeOrientation = window.innerWidth > window.innerHeight;
       setIsMobile(isMobileDevice);
-      setIsLandscape(isLandscapeOrientation);
     };
 
     checkMobileAndOrientation();
@@ -98,6 +100,40 @@ export function FabricCanvasWrapper() {
 
   const handleResetZoom = useCallback(() => {
     setManualZoom(1);
+  }, []);
+
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2) return;
+    const [first, second] = Array.from(event.touches);
+    gestureRef.current = {
+      distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY),
+      zoom: manualZoom,
+      midpointX: (first.clientX + second.clientX) / 2,
+      midpointY: (first.clientY + second.clientY) / 2,
+    };
+  }, [manualZoom]);
+
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || event.touches.length !== 2) return;
+    event.preventDefault();
+
+    const [first, second] = Array.from(event.touches);
+    const distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+    const midpointX = (first.clientX + second.clientX) / 2;
+    const midpointY = (first.clientY + second.clientY) / 2;
+    setManualZoom(Math.min(3, Math.max(0.5, gesture.zoom * (distance / gesture.distance))));
+
+    if (containerRef.current) {
+      containerRef.current.scrollLeft -= midpointX - gesture.midpointX;
+      containerRef.current.scrollTop -= midpointY - gesture.midpointY;
+    }
+    gesture.midpointX = midpointX;
+    gesture.midpointY = midpointY;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    gestureRef.current = null;
   }, []);
 
   // Handle drag and drop
@@ -152,31 +188,15 @@ export function FabricCanvasWrapper() {
     <div
       ref={containerRef}
       className={`canvas-container flex h-full w-full items-center justify-center overflow-auto ${isMobile ? 'p-4' : 'p-12'} ${
-        isPreviewMode ? 'bg-emerald-500/5' : 'bg-muted/30'
+        isPreviewMode ? 'bg-success/5' : 'bg-muted/30'
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
-      {/* Mobile Landscape Hint */}
-      {isMobile && !isLandscape && showMobileHint && (
-        <div className="fixed top-16 left-4 right-4 z-50 bg-amber-500/90 text-white rounded-lg p-3 shadow-lg animate-in fade-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-3">
-            <Smartphone className="h-5 w-5 flex-shrink-0 rotate-90" />
-            <div className="flex-1 text-sm">
-              <p className="font-medium">Rotate for better editing</p>
-              <p className="text-xs opacity-90">Landscape mode works better for A4 certificates</p>
-            </div>
-            <button 
-              onClick={() => setShowMobileHint(false)}
-              className="text-white/80 hover:text-white text-xl leading-none"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Mobile Zoom Controls */}
       {isMobile && (
         <div className="fixed bottom-20 right-4 z-40 flex flex-col gap-2">
@@ -184,6 +204,7 @@ export function FabricCanvasWrapper() {
             onClick={handleZoomIn}
             className="p-3 bg-card border border-border rounded-full shadow-lg hover:bg-muted transition-colors"
             title="Zoom in"
+            aria-label="Zoom in"
           >
             <ZoomIn className="h-5 w-5" />
           </button>
@@ -191,6 +212,7 @@ export function FabricCanvasWrapper() {
             onClick={handleZoomOut}
             className="p-3 bg-card border border-border rounded-full shadow-lg hover:bg-muted transition-colors"
             title="Zoom out"
+            aria-label="Zoom out"
           >
             <ZoomOut className="h-5 w-5" />
           </button>
@@ -199,6 +221,7 @@ export function FabricCanvasWrapper() {
               onClick={handleResetZoom}
               className="p-3 bg-card border border-border rounded-full shadow-lg hover:bg-muted transition-colors"
               title="Reset zoom"
+              aria-label="Reset zoom"
             >
               <RotateCcw className="h-4 w-4" />
             </button>
@@ -212,7 +235,7 @@ export function FabricCanvasWrapper() {
       <div className="relative">
         <div
           className={`fabric-canvas-container relative shadow-2xl border-2 rounded-lg transition-all ${
-            isDragOver ? 'border-primary ring-4 ring-primary/20' : isPreviewMode ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-border'
+            isDragOver ? 'border-primary ring-4 ring-primary/20' : isPreviewMode ? 'border-success ring-2 ring-success/20' : 'border-border'
           }`}
           style={{
             transform: `scale(${effectiveScale})`,
@@ -232,7 +255,7 @@ export function FabricCanvasWrapper() {
           
           {/* Preview Mode overlay */}
           {isPreviewMode && (
-            <div className="absolute top-2 right-2 bg-emerald-500 text-white px-2 py-1 rounded text-xs font-medium z-10">
+            <div className="absolute top-2 right-2 bg-success text-white px-2 py-1 rounded text-xs font-medium z-10">
               Preview Mode
             </div>
           )}
@@ -246,7 +269,7 @@ export function FabricCanvasWrapper() {
             ) : (
               <>
                 A4 Landscape ({A4_LANDSCAPE.width} × {A4_LANDSCAPE.height}px) | 
-                <span className="text-red-500 ml-1">Red dashed line = Print boundary</span> | 
+                <span className="text-error ml-1">Red dashed line = Print boundary</span> |
                 Zoom: {Math.round(zoomLevel * 100)}%
               </>
             )}
@@ -258,12 +281,12 @@ export function FabricCanvasWrapper() {
           <div className="absolute -bottom-20 left-0 right-0 text-center">
             <span className="text-[10px] text-muted-foreground/70 bg-background/50 px-2 py-1 rounded">
               <span className="font-medium">Shortcuts:</span>{' '}
-              <span className="text-blue-500">Ctrl+S</span> Save |{' '}
-              <span className="text-blue-500">Ctrl+Z</span> Undo |{' '}
-              <span className="text-blue-500">Ctrl+Y</span> Redo |{' '}
-              <span className="text-blue-500">Ctrl+Q</span> Preview |{' '}
-              <span className="text-blue-500">Alt+Drag</span> Pan |{' '}
-              <span className="text-blue-500">Del</span> Delete
+              <span className="text-primary">Ctrl+S</span> Save |{' '}
+              <span className="text-primary">Ctrl+Z</span> Undo |{' '}
+              <span className="text-primary">Ctrl+Y</span> Redo |{' '}
+              <span className="text-primary">Ctrl+Q</span> Preview |{' '}
+              <span className="text-primary">Alt+Drag</span> Pan |{' '}
+              <span className="text-primary">Del</span> Delete
             </span>
           </div>
         )}

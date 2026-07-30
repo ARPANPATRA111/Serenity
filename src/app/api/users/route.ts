@@ -1,40 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 
-// GET - Fetch user profile
+function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
+  if (clientUserId && typeof clientUserId === 'string' && clientUserId !== uid) {
+    return forbiddenResponse('Authenticated user does not match requested user ID');
+  }
+
+  return null;
+}
+
+// GET - Fetch the authenticated user's own profile
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('id');
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'Missing user ID' }, { status: 400 });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const { searchParams } = new URL(request.url);
+    const mismatch = rejectMismatchedUserId(searchParams.get('id'), authUser.uid);
+    if (mismatch) return mismatch;
+
     const db = getAdminFirestore();
-    const userDoc = await db.collection('users').doc(userId).get();
+    const userDoc = await db.collection('users').doc(authUser.uid).get();
 
     if (!userDoc.exists) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
     const userData = userDoc.data();
-    
-    // Check if account is deleted
+
     if (userData?.isDeleted) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       user: {
-        id: userData?.id,
+        id: authUser.uid,
         name: userData?.name,
-        email: userData?.email,
+        email: userData?.email || authUser.email,
         avatar: userData?.avatar,
         isPremium: userData?.isPremium || false,
         certificatesGenerated: userData?.certificatesGenerated || 0,
-      }
+      },
     });
   } catch (error) {
     console.error('[API Users] Error fetching user:', error);
@@ -44,42 +54,47 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, email, name, avatar, emailVerified } = body;
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
+    }
 
-    if (!id || !email) {
-      return NextResponse.json({ success: false, error: 'Missing required fields (id, email)' }, { status: 400 });
+    const body = await request.json();
+    const { id, email, name, avatar } = body;
+    const mismatch = rejectMismatchedUserId(id, authUser.uid);
+    if (mismatch) return mismatch;
+
+    const trustedEmail = authUser.email || email;
+    if (!trustedEmail) {
+      return NextResponse.json({ success: false, error: 'Missing authenticated email' }, { status: 400 });
     }
 
     const db = getAdminFirestore();
-    const userRef = db.collection('users').doc(id);
+    const userRef = db.collection('users').doc(authUser.uid);
     const userDoc = await userRef.get();
 
     if (userDoc.exists) {
       const userData = userDoc.data();
-      
-      // Check if account has been soft-deleted
+
       if (userData?.isDeleted) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'This account has been deleted. Please contact support if you wish to restore it.' 
+        return NextResponse.json({
+          success: false,
+          error: 'This account has been deleted. Please contact support if you wish to restore it.',
         }, { status: 403 });
       }
-      
-      const updateData: Record<string, any> = {
+
+      await userRef.update({
+        email: trustedEmail,
+        emailVerified: authUser.emailVerified,
         lastLoginAt: new Date(),
-      };
-      if (emailVerified !== undefined) {
-        updateData.emailVerified = emailVerified;
-      }
-      await userRef.update(updateData);
+      });
     } else {
       await userRef.set({
-        id,
-        email,
-        name: name || email.split('@')[0],
+        id: authUser.uid,
+        email: trustedEmail,
+        name: name || trustedEmail.split('@')[0],
         avatar: avatar || null,
-        emailVerified: emailVerified || false,
+        emailVerified: authUser.emailVerified,
         isPremium: false,
         certificatesGenerated: 0,
         createdAt: new Date(),
@@ -96,18 +111,20 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, emailVerified } = body;
-
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Missing user ID' }, { status: 400 });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const body = await request.json();
+    const mismatch = rejectMismatchedUserId(body.id, authUser.uid);
+    if (mismatch) return mismatch;
+
     const db = getAdminFirestore();
-    const userRef = db.collection('users').doc(id);
-    
+    const userRef = db.collection('users').doc(authUser.uid);
+
     await userRef.update({
-      emailVerified: emailVerified ?? true,
+      emailVerified: authUser.emailVerified,
       lastLoginAt: new Date(),
     });
 
@@ -118,25 +135,27 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// PUT - Update user profile (name, etc.)
+// PUT - Update the authenticated user's profile
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, name } = body;
-
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Missing user ID' }, { status: 400 });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const body = await request.json();
+    const mismatch = rejectMismatchedUserId(body.id, authUser.uid);
+    if (mismatch) return mismatch;
+
     const db = getAdminFirestore();
-    const userRef = db.collection('users').doc(id);
-    
+    const userRef = db.collection('users').doc(authUser.uid);
+
     const updateData: Record<string, any> = {
       updatedAt: new Date(),
     };
-    
-    if (name !== undefined) {
-      updateData.name = name;
+
+    if (typeof body.name === 'string') {
+      updateData.name = body.name;
     }
 
     await userRef.update(updateData);
@@ -148,22 +167,22 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE - Soft delete user account (marks as deleted, does not remove data)
+// DELETE - Soft delete authenticated user account (marks as deleted, does not remove data)
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('id');
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'Missing user ID' }, { status: 400 });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const { searchParams } = new URL(request.url);
+    const mismatch = rejectMismatchedUserId(searchParams.get('id'), authUser.uid);
+    if (mismatch) return mismatch;
+
     const db = getAdminFirestore();
-    
-    // Soft delete: mark user as deleted instead of removing data
-    const userRef = db.collection('users').doc(userId);
+    const userRef = db.collection('users').doc(authUser.uid);
     const userDoc = await userRef.get();
-    
+
     if (!userDoc.exists) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
@@ -173,8 +192,8 @@ export async function DELETE(request: NextRequest) {
       deletedAt: new Date(),
     });
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: 'Account marked as deleted',
     });
   } catch (error) {

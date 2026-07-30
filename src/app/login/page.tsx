@@ -1,262 +1,125 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Chrome, AlertCircle, CheckCircle, Award, Sparkles } from 'lucide-react';
-import { useAuth, AuthLoading } from '@/contexts/AuthContext';
 import { useSearchParams } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { AuthShell } from '@/components/auth/AuthShell';
+import {
+  AuthMessage,
+  FormField,
+  PasswordField,
+  ProviderButton,
+} from '@/components/auth/AuthFields';
+import { describeAuthError } from '@/lib/auth/authErrors';
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { login, loginWithGoogle, isLoading, user } = useAuth();
   const searchParams = useSearchParams();
-  const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const message = searchParams?.get('message');
-    if (message === 'verification-sent') {
-      setSuccessMessage('A verification email has been sent! Please check your inbox and verify your email before logging in [Check spam folder as well]');
-    } else if (message === 'email-verified') {
-      setSuccessMessage('Your email has been verified! You can now log in.');
-    } else if (message === 'password-reset') {
-      setSuccessMessage('Your password has been reset successfully! You can now log in with your new password.');
-    }
-  }, [searchParams]);
+  const message =
+    searchParams.get('message') === 'verification-sent'
+      ? 'Account created. Open the verification link we emailed you, then sign in.'
+      : null;
 
-  if (isAuthenticated) {
-    return <AuthLoading />;
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError('');
-    setSuccessMessage('');
-    
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
     try {
-      await login(formData.email, formData.password);
-    } catch (err: any) {
-      setError(err.message || 'Invalid email or password. Please try again.');
+      await login(email, password);
+    } catch (reason) {
+      setError(describeAuthError(reason, 'Unable to sign in. Try again.'));
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setError('');
+  const handleGoogle = async () => {
+    setError(null);
+    setSubmitting(true);
     try {
       await loginWithGoogle();
-    } catch (err: any) {
-      if (err.message === 'Login cancelled') {
-        return;
-      }
-      setError('Failed to sign in with Google. Please try again.');
+    } catch (reason) {
+      setError(describeAuthError(reason, 'Unable to sign in with Google. Try again.'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const isLoading = isSubmitting || authLoading;
+  if (isLoading || user) {
+    return (
+      <AuthShell title="Welcome back" subtitle="Checking your secure session…" loading />
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left Panel - Form */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="w-full max-w-md"
-        >
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 mb-8">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-              <Award className="h-5 w-5 text-white" />
-            </div>
-            <span className="font-display text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to design, generate, and verify certificates with Serenity."
+      footer={
+        <p className="sr-body text-center text-sm">
+          New to Serenity?{' '}
+          <Link href="/signup" className="sr-link">
+            Create a free account
           </Link>
-
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="font-display text-3xl font-bold">Welcome back</h1>
-            <p className="mt-2 text-muted-foreground">
-              Sign in to your account to continue creating certificates
-            </p>
-          </div>
-
-          {/* Success Message */}
-          {successMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-4 py-3 text-sm text-green-600 dark:text-green-400"
-            >
-              <CheckCircle className="h-4 w-4 flex-shrink-0" />
-              {successMessage}
-            </motion.div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6 flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive"
-            >
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              {error}
-            </motion.div>
-          )}
-
-          {/* Social Login */}
-          <div className="space-y-3 mb-6">
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-3 rounded-xl border border-border bg-card px-4 py-3 font-medium hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Chrome className="h-5 w-5" />
-              Continue with Google
-            </motion.button>
-          </div>
-
-          {/* Divider */}
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-background px-4 text-muted-foreground">Or continue with email</span>
-            </div>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-2">
-                Email address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="input pl-10"
-                  placeholder="you@example.com"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label htmlFor="password" className="block text-sm font-medium">
-                  Password
-                </label>
-                <Link href="/forgot-password" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="input pl-10 pr-10"
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              type="submit"
-              disabled={isLoading}
-              className="btn-primary w-full py-3"
-            >
-              {isLoading ? (
-                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </motion.button>
-          </form>
-
-          {/* Sign Up Link */}
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link href="/signup" className="font-medium text-primary hover:underline">
-              Sign up for free
-            </Link>
-          </p>
-        </motion.div>
-      </div>
-
-      {/* Right Panel - Decorative */}
-      <div className="hidden lg:flex lg:flex-1 relative bg-gradient-to-br from-primary to-accent overflow-hidden">
-        {/* Background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
-            backgroundSize: '32px 32px'
-          }} />
+        </p>
+      }
+    >
+      <div className="sr-card p-6 sm:p-7">
+        <div className="space-y-4">
+          {message && <AuthMessage tone="success">{message}</AuthMessage>}
+          {error && <AuthMessage tone="error">{error}</AuthMessage>}
         </div>
 
-        <div className="relative z-10 flex flex-col items-center justify-center w-full p-12 text-white">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-center"
-          >
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm mb-6">
-              <Sparkles className="h-10 w-10" />
-            </div>
-            <h2 className="font-display text-3xl font-bold mb-4">
-              Create beautiful certificates
-            </h2>
-            <p className="text-lg text-white/80 max-w-sm">
-              Design, generate, and distribute professional certificates at scale. 
-              All in your browser, completely private.
-            </p>
-          </motion.div>
-
-          {/* Floating elements */}
-          <motion.div
-            animate={{ y: [0, -10, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-20 right-20 w-32 h-32 rounded-2xl bg-white/10 backdrop-blur-sm"
-          />
-          <motion.div
-            animate={{ y: [0, 10, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute bottom-20 left-20 w-24 h-24 rounded-xl bg-white/10 backdrop-blur-sm"
-          />
+        <div className={message || error ? 'mt-5' : ''}>
+          <ProviderButton onClick={handleGoogle} disabled={submitting} label="Continue with Google" />
         </div>
+
+        <p className="sr-divider-text my-6">or use your email</p>
+
+        <form onSubmit={handleSubmit} className="space-y-5" noValidate={false}>
+          <FormField
+            id="login-email"
+            label="Email address"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+
+          <PasswordField
+            id="login-password"
+            label="Password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            action={
+              <Link href="/forgot-password" className="sr-link text-sm">
+                Forgot password?
+              </Link>
+            }
+          />
+
+          <button type="submit" disabled={submitting} className="sr-btn sr-btn-primary w-full">
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Signing in…
+              </>
+            ) : (
+              'Sign in'
+            )}
+          </button>
+        </form>
       </div>
-    </div>
+    </AuthShell>
   );
 }

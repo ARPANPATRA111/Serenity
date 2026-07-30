@@ -16,9 +16,9 @@ export default function Error({
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
-      <div className="mb-4 h-16 w-16 rounded-full bg-red-500/10 p-4">
+      <div className="mb-4 h-16 w-16 rounded-full bg-error/10 p-4">
         <svg
-          className="h-8 w-8 text-red-500"
+          className="h-8 w-8 text-error"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

@@ -12,9 +12,9 @@ import {
   Save,
   Check,
   Loader2,
-  Camera,
-  Award
+  Camera
 } from 'lucide-react';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 interface UserSettings {
   name: string;
@@ -92,16 +92,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-screen bg-background">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
-          </Link>
+      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
+        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
+          <Link href="/"><SerenityBrand /></Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />
             <Link href="/dashboard" className="btn-primary">
@@ -188,7 +183,7 @@ export default function SettingsPage() {
 
               {/* Error Message */}
               {errorMessage && (
-                <div className="flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-500">
+                <div className="flex items-center gap-2 rounded-lg bg-error/10 border border-error/20 px-4 py-3 text-sm text-error">
                   <Trash2 className="h-4 w-4 flex-shrink-0" />
                   {errorMessage}
                 </div>

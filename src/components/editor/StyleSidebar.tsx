@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { X, Type, Palette } from 'lucide-react';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore } from '@/store/editorStore';
-import { getAllFonts, loadGoogleFont, isGoogleFont, loadAllGoogleFonts } from '@/lib/fonts/googleFonts';
+import { getAllFonts, loadGoogleFont, isGoogleFont } from '@/lib/fonts/googleFonts';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 
 type SidebarMode = 'font' | 'color' | null;
@@ -25,24 +25,14 @@ type FabricObject = Record<string, unknown> & {
 export function StyleSidebar({ mode, onClose, colorProperty = 'fill' }: StyleSidebarProps) {
   const { fabricInstance } = useFabricContext();
   const { selectedObject } = useEditorStore();
-  const [availableFonts, setAvailableFonts] = useState<string[]>([]);
-  const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [availableFonts] = useState<string[]>(() => getAllFonts());
+  const fontsLoaded = true;
   const [searchQuery, setSearchQuery] = useState('');
   const [originalFont, setOriginalFont] = useState<string | null>(null);
   const [originalColor, setOriginalColor] = useState<string | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   
   const object = selectedObject as unknown as FabricObject | null;
-
-  // Load fonts on mount
-  useEffect(() => {
-    const loadFonts = async () => {
-      await loadAllGoogleFonts();
-      setAvailableFonts(getAllFonts());
-      setFontsLoaded(true);
-    };
-    loadFonts();
-  }, []);
 
   // Store original value when sidebar opens
   useEffect(() => {

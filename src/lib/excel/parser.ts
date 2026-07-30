@@ -3,6 +3,13 @@ import type { ParsedDataSource, DataRow } from '@/types/fabric.d';
 
 export const SUPPORTED_EXTENSIONS = ['.xlsx', '.xls', '.csv', '.ods'];
 
+export const SPREADSHEET_LIMITS = {
+  maxFileSizeBytes: 10 * 1024 * 1024,
+  maxRows: 1000,
+  maxColumns: 100,
+  maxCellCharacters: 2000,
+} as const;
+
 export interface SheetInfo {
   name: string;
   rowCount: number;
@@ -13,10 +20,73 @@ export function isSupportedFile(file: File): boolean {
   return SUPPORTED_EXTENSIONS.includes(extension);
 }
 
+export function validateSpreadsheetFile(file: File): void {
+  if (!isSupportedFile(file)) {
+    throw new Error(`Unsupported file format. Supported: ${SUPPORTED_EXTENSIONS.join(', ')}`);
+  }
+
+  if (file.size > SPREADSHEET_LIMITS.maxFileSizeBytes) {
+    throw new Error(
+      `Spreadsheet is too large. Maximum size is ${formatLimitBytes(SPREADSHEET_LIMITS.maxFileSizeBytes)}.`
+    );
+  }
+}
+
+function formatLimitBytes(bytes: number): string {
+  const megabytes = bytes / (1024 * 1024);
+  return `${megabytes.toFixed(megabytes % 1 === 0 ? 0 : 1)} MB`;
+}
+
+function getWorksheetShape(worksheet: XLSX.WorkSheet): { rowCount: number; columnCount: number } {
+  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+  return {
+    rowCount: Math.max(0, range.e.r - range.s.r),
+    columnCount: Math.max(0, range.e.c - range.s.c + 1),
+  };
+}
+
+function validateWorksheetShape(rowCount: number, columnCount: number): void {
+  if (rowCount > SPREADSHEET_LIMITS.maxRows) {
+    throw new Error(
+      `Spreadsheet has ${rowCount} data rows. The editor supports up to ${SPREADSHEET_LIMITS.maxRows} rows per import.`
+    );
+  }
+
+  if (columnCount > SPREADSHEET_LIMITS.maxColumns) {
+    throw new Error(
+      `Spreadsheet has ${columnCount} columns. The editor supports up to ${SPREADSHEET_LIMITS.maxColumns} columns per import.`
+    );
+  }
+}
+
+function normalizeRows(jsonData: Record<string, unknown>[]): { headers: string[]; rows: DataRow[] } {
+  const headers = Object.keys(jsonData[0] || {}).filter((key) => key !== '__rowNum__');
+  validateWorksheetShape(jsonData.length, headers.length);
+
+  const rows: DataRow[] = jsonData.map((row, rowIndex) => {
+    const cleanRow: DataRow = {};
+    headers.forEach((header) => {
+      const value = row[header];
+      const stringValue = value !== undefined ? String(value) : '';
+      if (stringValue.length > SPREADSHEET_LIMITS.maxCellCharacters) {
+        throw new Error(
+          `Cell value in row ${rowIndex + 1}, column "${header}" is too long. Maximum length is ${SPREADSHEET_LIMITS.maxCellCharacters} characters.`
+        );
+      }
+      cleanRow[header] = stringValue;
+    });
+    return cleanRow;
+  });
+
+  return { headers, rows };
+}
+
 export async function getSheetNames(file: File): Promise<SheetInfo[]> {
   return new Promise((resolve, reject) => {
-    if (!isSupportedFile(file)) {
-      reject(new Error(`Unsupported file format. Supported: ${SUPPORTED_EXTENSIONS.join(', ')}`));
+    try {
+      validateSpreadsheetFile(file);
+    } catch (error) {
+      reject(error);
       return;
     }
 
@@ -34,10 +104,11 @@ export async function getSheetNames(file: File): Promise<SheetInfo[]> {
         
         const sheets: SheetInfo[] = workbook.SheetNames.map(name => {
           const worksheet = workbook.Sheets[name];
-          const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+          const { rowCount, columnCount } = getWorksheetShape(worksheet);
+          validateWorksheetShape(rowCount, columnCount);
           return {
             name,
-            rowCount: range.e.r - range.s.r, // Approximate row count
+            rowCount,
           };
         });
 
@@ -54,8 +125,10 @@ export async function getSheetNames(file: File): Promise<SheetInfo[]> {
 
 export async function parseSpreadsheet(file: File, sheetName?: string): Promise<ParsedDataSource> {
   return new Promise((resolve, reject) => {
-    if (!isSupportedFile(file)) {
-      reject(new Error(`Unsupported file format. Supported: ${SUPPORTED_EXTENSIONS.join(', ')}`));
+    try {
+      validateSpreadsheetFile(file);
+    } catch (error) {
+      reject(error);
       return;
     }
 
@@ -80,6 +153,8 @@ export async function parseSpreadsheet(file: File, sheetName?: string): Promise<
         }
 
         const worksheet = workbook.Sheets[targetSheetName];
+        const { rowCount, columnCount } = getWorksheetShape(worksheet);
+        validateWorksheetShape(rowCount, columnCount);
 
         // Convert to JSON with header row
         const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
@@ -92,18 +167,7 @@ export async function parseSpreadsheet(file: File, sheetName?: string): Promise<
           return;
         }
 
-        // Extract headers from first row keys
-        const headers = Object.keys(jsonData[0]).filter((key) => key !== '__rowNum__');
-
-        // Clean and normalize rows
-        const rows: DataRow[] = jsonData.map((row) => {
-          const cleanRow: DataRow = {};
-          headers.forEach((header) => {
-            const value = row[header];
-            cleanRow[header] = value !== undefined ? String(value) : '';
-          });
-          return cleanRow;
-        });
+        const { headers, rows } = normalizeRows(jsonData);
 
         const result: ParsedDataSource = {
           headers,
@@ -130,9 +194,17 @@ export async function parseSpreadsheet(file: File, sheetName?: string): Promise<
 }
 
 export function parseCSVString(csvString: string): ParsedDataSource {
+  if (new TextEncoder().encode(csvString).length > SPREADSHEET_LIMITS.maxFileSizeBytes) {
+    throw new Error(
+      `CSV data is too large. Maximum size is ${formatLimitBytes(SPREADSHEET_LIMITS.maxFileSizeBytes)}.`
+    );
+  }
+
   const workbook = XLSX.read(csvString, { type: 'string' });
   const firstSheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheetName];
+  const { rowCount, columnCount } = getWorksheetShape(worksheet);
+  validateWorksheetShape(rowCount, columnCount);
 
   const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
     defval: '',
@@ -143,14 +215,7 @@ export function parseCSVString(csvString: string): ParsedDataSource {
     throw new Error('No data found in CSV');
   }
 
-  const headers = Object.keys(jsonData[0]).filter((key) => key !== '__rowNum__');
-  const rows: DataRow[] = jsonData.map((row) => {
-    const cleanRow: DataRow = {};
-    headers.forEach((header) => {
-      cleanRow[header] = row[header] !== undefined ? String(row[header]) : '';
-    });
-    return cleanRow;
-  });
+  const { headers, rows } = normalizeRows(jsonData);
 
   return {
     headers,

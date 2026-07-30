@@ -149,7 +149,7 @@ export function ComingSoonModal({
         </div>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          Upgrade to Pro for unlimited bulk operations
+          Billing and paid-plan upgrades are not currently available.
         </p>
       </div>
     </Modal>

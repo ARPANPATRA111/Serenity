@@ -4,14 +4,13 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 // Allowed MIME types
 const ALLOWED_TYPES = [
   'image/jpeg',
+  'image/jpg',
   'image/png',
-  'image/gif',
-  'image/svg+xml',
   'image/webp',
 ];
 
 // Allowed extensions
-const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp'];
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 
 // Database name and version
 const DB_NAME = 'serenity-media-db';
@@ -71,7 +70,7 @@ export function validateMediaFile(file: File): { valid: boolean; error?: string 
   if (!ALLOWED_TYPES.includes(file.type)) {
     return {
       valid: false,
-      error: `File type "${file.type}" is not supported. Allowed: Images, SVGs, GIFs`,
+      error: `File type "${file.type}" is not supported. Allowed: PNG, JPEG, JPG, WebP`,
     };
   }
 

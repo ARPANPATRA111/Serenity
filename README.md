@@ -1,10 +1,10 @@
 <div align="center">
 
-# ✨ Serenity
+# Serenity
 
 ### Professional Certificate Generator
 
-**Design • Generate • Verify — All in One Platform**
+**Design • Generate • Verify: All in One Platform**
 
 [Live Demo](https://serenity-certificate.vercel.app) · [Report Bug](https://github.com/ARPANPATRA111/Serenity/issues) · [Request Feature](https://github.com/ARPANPATRA111/Serenity/issues)
 
@@ -24,9 +24,9 @@
 
 ## 🎯 What is Serenity?
 
-Serenity is a **production-ready, SaaS-grade certificate generator** that empowers organizations to create, distribute, and verify professional certificates at scale. Built with modern web technologies, it offers a seamless experience from design to delivery.
+Serenity is a certificate design, generation, delivery, and public-verification application. The repository is under active security, reliability, and usability hardening and should not be treated as production-ready without the documented staging gates.
 
-> 💡 **Privacy-First**: All certificate generation happens client-side. Your data never leaves your browser.
+> **Data handling:** Rendering happens in the browser, while saved templates, certificate records, media, and optional email delivery use configured backend services. Review the deployment privacy policy before collecting recipient data.
 
 
 ## ⚡ Key Features
@@ -253,7 +253,7 @@ See [Improvements.md](./Improvements.md) for planned improvements and the develo
 - 📤 PNG/JPG export options
 - 📊 Analytics dashboard
 - 🌐 Multi-language support
-- 🤖 AI-powered suggestions
+- Searchable, on-demand typography controls
 
 
 ## 📄 License
@@ -263,7 +263,7 @@ Distributed under the **MIT License**. See `LICENSE` for more information.
 
 <div align="center">
 
-### ⭐ Star this repo if you find it useful!
+### Support this repo if you find it useful
 
 Made with ❤️ by [Arpan Patra](https://github.com/ARPANPATRA111)
 

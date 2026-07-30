@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { isSafeCertificateMediaUrl } from '@/lib/security/mediaUrl';
+import { getEvent, toPublicEventContext } from '@/lib/firebase/events';
 
 function getDailySalt(): string {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const baseSalt = process.env.DAILY_IP_SALT || 'serenity-default-salt';
-  return `${baseSalt}-${today}`;
+  const baseSalt = process.env.DAILY_IP_SALT;
+  const localMode = process.env.NODE_ENV !== 'production' || process.env.USE_FIREBASE_EMULATORS === 'true';
+  if (!baseSalt && !localMode) {
+    throw new Error('DAILY_IP_SALT is required outside local or emulator mode');
+  }
+  return `${baseSalt || 'local-emulator-only'}-${today}`;
 }
 
 function hashIP(ip: string): string {
@@ -104,40 +110,43 @@ export async function GET(
     const clientIP = getClientIP(request);
     const ipHash = hashIP(clientIP);
     
-    // Check if this IP has already viewed today
+    // Count a unique daily viewer transactionally. Event context is fetched in
+    // parallel so an optional event link does not add a serial round trip.
     const visitorRef = certificateRef.collection('visitors').doc(ipHash);
-    const visitorDoc = await visitorRef.get();
-    
-    let isNewView = false;
-    
-    if (!visitorDoc.exists) {
-      // New visitor - create document and increment view count
-      isNewView = true;
-      
-      // Use transaction to ensure atomicity
-      await db.runTransaction(async (transaction) => {
-        // Create visitor record
+    const eventPromise = typeof certificateData.eventId === 'string'
+      ? getEvent(certificateData.eventId).then((event) => {
+          if (!event || event.userId !== certificateData.userId) return null;
+          return toPublicEventContext(event);
+        })
+      : Promise.resolve(null);
+
+    const viewPromise = db.runTransaction(async (transaction) => {
+      const visitorDoc = await transaction.get(visitorRef);
+      if (!visitorDoc.exists) {
         transaction.set(visitorRef, {
           firstViewAt: FieldValue.serverTimestamp(),
+          lastViewAt: FieldValue.serverTimestamp(),
           viewCount: 1,
         });
-        
-        // Increment certificate view count
         transaction.update(certificateRef, {
           viewCount: FieldValue.increment(1),
         });
-      });
-    } else {
-      // Returning visitor - just update their view count (optional)
-      await visitorRef.update({
+        return true;
+      }
+
+      transaction.update(visitorRef, {
         lastViewAt: FieldValue.serverTimestamp(),
         viewCount: FieldValue.increment(1),
       });
-    }
+      return false;
+    });
 
-    // Get updated view count
-    const updatedDoc = await certificateRef.get();
-    const viewCount = updatedDoc.data()?.viewCount || 0;
+    const [event, isNewView] = await Promise.all([eventPromise, viewPromise]);
+    const viewCount = (certificateData.viewCount || 0) + (isNewView ? 1 : 0);
+    const certificateImage =
+      isSafeCertificateMediaUrl(certificateData.certificateImage)
+        ? certificateData.certificateImage
+        : null;
 
     // Return certificate verification data (privacy-preserving)
     return NextResponse.json({
@@ -146,17 +155,17 @@ export async function GET(
       isNewView,
       certificate: {
         id: certificateId,
+        certificateId,
         recipientName: certificateData.recipientName,
-        recipientEmail: certificateData.recipientEmail,
         title: certificateData.title,
-        description: certificateData.description || null,
         issuedAt: certificateData.issuedAt,
         issuerName: certificateData.issuerName,
+        status: certificateData.isActive === false ? 'revoked' : 'active',
         viewCount,
-        certificateImage: certificateData.certificateImage || null,
-        templateId: certificateData.templateId || null,
+        certificateImage,
+        event,
       },
-    });
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
 
   } catch (error) {
     console.error('Verification error:', error);

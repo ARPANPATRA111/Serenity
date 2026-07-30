@@ -1,7 +1,8 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getStorage, FirebaseStorage } from 'firebase/storage';
+import { connectAuthEmulator } from 'firebase/auth';
+import { connectFirestoreEmulator, getFirestore, Firestore } from 'firebase/firestore';
+import { connectStorageEmulator, getStorage, FirebaseStorage } from 'firebase/storage';
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -10,6 +11,7 @@ export interface FirebaseConfig {
   storageBucket: string;
   messagingSenderId: string;
   appId: string;
+  useEmulators?: boolean;
 }
 
 // Initialize Firebase (singleton pattern)
@@ -18,6 +20,24 @@ let auth: Auth;
 let db: Firestore;
 let storage: FirebaseStorage;
 let _isInitialized = false;
+let _emulatorsConnected = false;
+
+function connectEmulators(config: FirebaseConfig) {
+  if (_emulatorsConnected || !config.useEmulators) return;
+
+  if (!config.projectId.startsWith('demo-')) {
+    throw new Error('Firebase emulator mode requires a demo-* project ID');
+  }
+
+  const hostname = typeof window !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_HOST || '127.0.0.1')
+    : '127.0.0.1';
+
+  connectAuthEmulator(auth, `http://${hostname}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(db, hostname, 8080);
+  connectStorageEmulator(storage, hostname, 9199);
+  _emulatorsConnected = true;
+}
 
 function initializeFirebase(config?: FirebaseConfig) {
   if (_isInitialized && getApps().length > 0) {
@@ -25,6 +45,7 @@ function initializeFirebase(config?: FirebaseConfig) {
     auth = getAuth(app);
     db = getFirestore(app);
     storage = getStorage(app);
+    if (config) connectEmulators(config);
     return { app, auth, db, storage };
   }
 
@@ -42,6 +63,7 @@ function initializeFirebase(config?: FirebaseConfig) {
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
+  if (config) connectEmulators(config);
   _isInitialized = true;
 
   return { app, auth, db, storage };
@@ -49,6 +71,23 @@ function initializeFirebase(config?: FirebaseConfig) {
 
 export function isFirebaseInitialized() {
   return _isInitialized;
+}
+
+/**
+ * Get the current user's Firebase ID token for authenticating API requests.
+ * Returns null if no user is signed in. Attach as `Authorization: Bearer <token>`.
+ */
+export async function getIdToken(): Promise<string | null> {
+  try {
+    if (!auth) {
+      initializeFirebase();
+    }
+    const current = auth?.currentUser;
+    if (!current) return null;
+    return await current.getIdToken();
+  } catch {
+    return null;
+  }
 }
 
 export { app, auth, db, storage, initializeFirebase };

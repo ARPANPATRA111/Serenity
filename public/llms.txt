@@ -1,0 +1,35 @@
+# Serenity Certificate Generator
+
+> Serenity is a web app for designing, personalizing, emailing, and verifying
+> certificates in bulk. It is not a static image maker: every generated
+> certificate can carry a permanent verification URL and QR code that resolve
+> to a public, privacy-safe verification page.
+
+## What it does
+- Design a certificate from a blank canvas or a template (Fabric.js editor).
+- Import recipient data from CSV or Excel and map columns to certificate fields.
+- Generate many personalized certificates from one template.
+- Export as PDF, PNG, or ZIP.
+- Optionally email certificates to recipients.
+- Attach a permanent verification URL and QR code to each certificate.
+- Let anyone verify authenticity on a public page (recipient email is not shown).
+- Save and reuse private templates; browse public templates; view generation history.
+
+## Who it is for
+Educators, event and workshop organizers, training teams, hackathons, and
+organizations that need to issue and verify recognition at scale.
+
+## Facts and limits
+- Free tier: a small number of persisted certificates; no card required.
+- Pro: starts at $20/month; final limits are agreed per program (billing is not
+  yet self-serve — Pro is arranged via a contact request).
+- Verification pages show only public-safe fields (recipient name, status,
+  optional event context). Recipient email and internal metadata are never
+  exposed by the public verification API.
+- Rendering happens in the browser; saved templates, certificate records, media,
+  and optional email delivery use configured backend services.
+
+## Notes for automated readers
+This file is an experimental, machine-readable product summary. It is not an
+established ranking or indexing standard and makes no such guarantees.
+Canonical site: see NEXT_PUBLIC_SITE_URL (production: https://serenity-certificate.vercel.app).

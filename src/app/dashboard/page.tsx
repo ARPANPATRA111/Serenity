@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { coordinatedJson, readSessionJson, writeSessionJson } from '@/lib/api/requestCoordinator';
 import { 
   Plus, 
   FileText, 
@@ -15,7 +17,6 @@ import {
   ArrowRight, 
   Upload,
   Clock,
-  Sparkles,
   TrendingUp,
   TrendingDown,
   Calendar,
@@ -30,8 +31,7 @@ import {
   Globe,
   Lock,
   Settings,
-  Star,
-  Award,
+  Bookmark,
   Mail,
   MailCheck,
   MailX,
@@ -40,6 +40,8 @@ import {
   Crown
 } from 'lucide-react';
 import { SkeletonDashboard, Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
+import { EVENTS_ENABLED } from '@/lib/featureFlags';
 
 // Certificate interface for Firebase data
 interface CertificateRecord {
@@ -48,7 +50,7 @@ interface CertificateRecord {
   recipientEmail?: string;
   title: string;
   issuerName: string;
-  issuedAt: number;
+  issuedAt: string;
   templateId?: string;
   templateName?: string;
   isActive: boolean;
@@ -72,6 +74,7 @@ interface DashboardTemplate {
   isPublic: boolean;
   creatorName?: string;
   stars: number;
+  publicationStatus?: 'private' | 'pending_review' | 'public' | 'rejected';
 }
 
 const fadeInUp = {
@@ -94,14 +97,14 @@ const scaleIn = {
   exit: { opacity: 0, scale: 0.9 }
 };
 
-// Gradient colors for templates
-const gradientColors = [
-  'from-amber-400 to-orange-500',
-  'from-blue-400 to-indigo-500',
-  'from-emerald-400 to-teal-500',
-  'from-violet-400 to-purple-500',
-  'from-rose-400 to-pink-500',
-  'from-cyan-400 to-blue-500',
+// Flat tints standing in for a template that has no thumbnail yet. Drawn from
+// the palette rather than the full Tailwind spectrum, so a grid of them reads
+// as one product instead of a colour chart.
+const placeholderTints = [
+  'bg-primary/15',
+  'bg-secondary/15',
+  'bg-accent/15',
+  'bg-warning/15',
 ];
 
 export default function DashboardPage() {
@@ -122,84 +125,84 @@ export default function DashboardPage() {
   const [publicTemplatesLoading, setPublicTemplatesLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
 
-  // Fetch certificates from Firebase API
+  // Fetch bounded private dashboard data in one authenticated request.
   useEffect(() => {
-    async function fetchCertificates() {
+    let cancelled = false;
+
+    async function fetchDashboardSummary() {
       if (!user?.id) {
         setCertificatesLoading(false);
-        return;
-      }
-      
-      try {
-        const response = await fetch('/api/certificates', {
-          headers: {
-            'x-user-id': user.id,
-          },
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('[Dashboard] Loaded certificates from API:', data.certificates?.length || 0);
-          setCertificates(data.certificates || []);
-        }
-      } catch (error) {
-        console.error('[Dashboard] Error fetching certificates:', error);
-      } finally {
-        setCertificatesLoading(false);
-      }
-    }
-
-    fetchCertificates();
-  }, [user?.id]);
-
-  // Fetch templates from API
-  useEffect(() => {
-    async function fetchTemplates() {
-      if (!user?.id) {
         setTemplatesLoading(false);
         return;
       }
       
-      try {
-        const response = await fetch(`/api/templates?userId=${user.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          console.log('[Dashboard] Loaded templates from API:', data.templates?.length || 0);
-          setTemplates(data.templates || []);
-        }
-      } catch (error) {
-        console.error('[Dashboard] Error fetching templates:', error);
-      } finally {
+      const cacheKey = `dashboard-summary:${user.id}`;
+      type DashboardSummary = {
+          recentCertificates: CertificateRecord[];
+          recentTemplates: DashboardTemplate[];
+      };
+      const cached = readSessionJson<DashboardSummary>(cacheKey, 5 * 60_000);
+      if (cached) {
+        setCertificates(cached.recentCertificates || []);
+        setTemplates(cached.recentTemplates || []);
+        setCertificatesLoading(false);
         setTemplatesLoading(false);
+      }
+
+      try {
+        const data = await coordinatedJson<DashboardSummary>(
+          cacheKey,
+          () => authenticatedFetch('/api/dashboard-summary?templateLimit=6&certificateLimit=12'),
+          15_000,
+        );
+        if (cancelled) return;
+        setCertificates(data.recentCertificates || []);
+        setTemplates(data.recentTemplates || []);
+        writeSessionJson(cacheKey, data);
+      } catch (error) {
+        console.error('[Dashboard] Error fetching summary:', error);
+      } finally {
+        if (!cancelled) {
+          setCertificatesLoading(false);
+          setTemplatesLoading(false);
+        }
       }
     }
 
-    fetchTemplates();
+    void fetchDashboardSummary();
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   // Fetch public templates
   useEffect(() => {
+    let cancelled = false;
     async function fetchPublicTemplates() {
+      const cacheKey = 'public-templates:featured:6';
+      const cached = readSessionJson<{ templates: DashboardTemplate[] }>(cacheKey, 10 * 60_000);
+      if (cached) {
+        setPublicTemplates(cached.templates || []);
+        setPublicTemplatesLoading(false);
+      }
       try {
-        const response = await fetch('/api/templates?public=true');
-        if (response.ok) {
-          const data = await response.json();
-          console.log('[Dashboard] Loaded public templates:', data.templates?.length || 0);
-          // Filter out user's own templates from public list
-          const filtered = (data.templates || []).filter(
-            (t: DashboardTemplate) => t.userId !== user?.id
-          );
-          setPublicTemplates(filtered);
+        const data = await coordinatedJson<{ templates: DashboardTemplate[] }>(
+          cacheKey,
+          () => fetch('/api/templates?public=true&limit=6'),
+          60_000,
+        );
+        if (!cancelled) {
+          setPublicTemplates(data.templates || []);
+          writeSessionJson(cacheKey, data);
         }
       } catch (error) {
         console.error('[Dashboard] Error fetching public templates:', error);
       } finally {
-        setPublicTemplatesLoading(false);
+        if (!cancelled) setPublicTemplatesLoading(false);
       }
     }
 
-    fetchPublicTemplates();
-  }, [user?.id]);
+    void fetchPublicTemplates();
+    return () => { cancelled = true; };
+  }, []);
 
   // Handle template deletion via API
   const handleDeleteTemplate = useCallback(async (templateId: string, e: React.MouseEvent) => {
@@ -208,7 +211,7 @@ export default function DashboardPage() {
     
     if (confirm('Are you sure you want to delete this template?')) {
       try {
-        const response = await fetch(`/api/templates/${templateId}`, {
+        const response = await authenticatedFetch(`/api/templates/${templateId}`, {
           method: 'DELETE',
         });
         
@@ -227,25 +230,39 @@ export default function DashboardPage() {
   }, []);
 
   // Handle toggling template public/private
-  const handleTogglePublic = useCallback(async (templateId: string, currentlyPublic: boolean, e: React.MouseEvent) => {
+  const handleTogglePublic = useCallback(async (
+    template: Pick<DashboardTemplate, 'id' | 'isPublic' | 'publicationStatus'>,
+    e: React.MouseEvent,
+  ) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
+    const previous = { isPublic: template.isPublic, publicationStatus: template.publicationStatus };
+    const requestedPublic = !(template.isPublic || template.publicationStatus === 'pending_review');
+    setTemplates((current) => current.map((item) => item.id === template.id
+      ? { ...item, isPublic: false, publicationStatus: requestedPublic ? 'pending_review' : 'private' }
+      : item));
+
     try {
-      const response = await fetch(`/api/templates/${templateId}`, {
+      const response = await authenticatedFetch(`/api/templates/${template.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPublic: !currentlyPublic }),
+        body: JSON.stringify({ isPublic: requestedPublic }),
       });
-      
+
       if (response.ok) {
-        setTemplates(prev => prev.map(t => 
-          t.id === templateId ? { ...t, isPublic: !currentlyPublic } : t
-        ));
-        console.log('[Dashboard] Toggled template visibility:', templateId, !currentlyPublic);
+        const data = await response.json();
+        setTemplates((current) => current.map((item) => item.id === template.id
+          ? { ...item, ...data.template }
+          : item));
+      } else {
+        throw new Error('Publication request failed');
       }
     } catch (error) {
       console.error('[Dashboard] Error toggling visibility:', error);
+      setTemplates((current) => current.map((item) => item.id === template.id
+        ? { ...item, ...previous }
+        : item));
     }
     setActiveDropdown(null);
   }, []);
@@ -259,13 +276,26 @@ export default function DashboardPage() {
     );
   }, [templates, searchQuery]);
 
+  const ownTemplateIds = useMemo(
+    () => new Set(templates.map(template => template.id)),
+    [templates]
+  );
+
+  const visiblePublicTemplates = useMemo(
+    () =>
+      templatesLoading
+        ? []
+        : publicTemplates.filter(template => !ownTemplateIds.has(template.id)),
+    [publicTemplates, ownTemplateIds, templatesLoading]
+  );
+
   const filteredPublicTemplates = useMemo(() => {
-    if (!searchQuery.trim()) return publicTemplates;
+    if (!searchQuery.trim()) return visiblePublicTemplates;
     const query = searchQuery.toLowerCase();
-    return publicTemplates.filter(tmpl => 
+    return visiblePublicTemplates.filter(tmpl =>
       tmpl.name.toLowerCase().includes(query)
     );
-  }, [publicTemplates, searchQuery]);
+  }, [visiblePublicTemplates, searchQuery]);
 
   // Get current templates based on tab
   const displayTemplates = templateTab === 'my' ? filteredUserTemplates : filteredPublicTemplates;
@@ -318,9 +348,7 @@ export default function DashboardPage() {
       value: totalTemplates, 
       change: totalTemplates > 0 ? `${totalTemplates} saved` : 'No templates yet',
       icon: FileText, 
-      color: 'from-violet-500 to-purple-600',
-      bgColor: 'bg-violet-500/10',
-      textColor: 'text-violet-600 dark:text-violet-400',
+      tile: 'tile-secondary',
       isPositive: true
     },
     { 
@@ -331,9 +359,7 @@ export default function DashboardPage() {
         ? `+${thisMonthCerts} this month${certGrowth !== 0 ? ` (${certGrowth > 0 ? '+' : ''}${certGrowth}%)` : ''}`
         : 'Start generating!',
       icon: Users, 
-      color: 'from-blue-500 to-cyan-500',
-      bgColor: 'bg-blue-500/10',
-      textColor: 'text-blue-600 dark:text-blue-400',
+      tile: 'tile-primary',
       isPositive: certGrowth >= 0
     },
     { 
@@ -344,9 +370,7 @@ export default function DashboardPage() {
         ? `${emailSuccessRate}% success rate (${emailsFailed} failed)`
         : emailsSent > 0 ? '100% success rate' : 'No emails sent yet',
       icon: Mail, 
-      color: 'from-orange-500 to-amber-500',
-      bgColor: 'bg-orange-500/10',
-      textColor: 'text-orange-600 dark:text-orange-400',
+      tile: 'tile-warning',
       isPositive: emailSuccessRate >= 90
     },
     { 
@@ -355,9 +379,7 @@ export default function DashboardPage() {
       value: totalViews, 
       change: totalViews > 0 ? `${totalViews} total views` : 'No views yet',
       icon: Eye, 
-      color: 'from-emerald-500 to-teal-500',
-      bgColor: 'bg-emerald-500/10',
-      textColor: 'text-emerald-600 dark:text-emerald-400',
+      tile: 'tile-accent',
       isPositive: true
     },
   ];
@@ -368,11 +390,12 @@ export default function DashboardPage() {
     name: tmpl.name,
     lastUsed: formatTimeAgo(new Date(tmpl.updatedAt)),
     count: tmpl.certificateCount,
-    thumbnail: tmpl.thumbnail || gradientColors[i % gradientColors.length],
+    thumbnail: tmpl.thumbnail || placeholderTints[i % placeholderTints.length],
     isPublic: tmpl.isPublic,
     creatorName: tmpl.creatorName,
     stars: tmpl.stars || 0,
     userId: tmpl.userId,
+    publicationStatus: tmpl.publicationStatus,
   }));
 
   const recentActivity = sortedCertificates.slice(0, 5).map((cert, i) => ({
@@ -416,13 +439,12 @@ export default function DashboardPage() {
       }
       
       // Create new template via API
-      const response = await fetch('/api/templates', {
+      const response = await authenticatedFetch('/api/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: `${templateName} (Imported)`,
           canvasJSON,
-          userId: user.id,
           isPublic: false,
           creatorName: user.name,
           creatorEmail: user.email,
@@ -455,20 +477,15 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell dashboard-shell min-h-screen bg-background">
       {/* Navigation */}
       <motion.nav 
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="sticky top-0 z-50 border-b border-border/50 glass"
+        className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5"
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-              <Award className="h-5 w-5 text-white" />
-            </div>
-            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
-          </Link>
+        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl shadow-slate-950/5 backdrop-blur-2xl sm:px-6 lg:px-7">
+          <Link href="/" className="group"><SerenityBrand /></Link>
           
           {/* Search Bar */}
           <div className="hidden md:flex flex-1 max-w-md mx-8">
@@ -485,6 +502,12 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {EVENTS_ENABLED && (
+            <Link href="/events" className="hidden items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/40 hover:bg-muted md:inline-flex">
+              <Calendar className="h-4 w-4" />
+              Events
+            </Link>
+            )}
             <ThemeToggle />
             <Link href="/editor" className="btn-primary">
               <Plus className="h-4 w-4" />
@@ -517,7 +540,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2">
                         <p className="font-medium truncate">{user?.name}</p>
                         {user?.isPremium && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-warning dark:bg-warning/30 text-warning text-xs font-medium">
                             <Crown className="h-3 w-3" />
                             PRO
                           </span>
@@ -530,7 +553,7 @@ export default function DashboardPage() {
                         <Link
                           href="/premium"
                           onClick={() => setShowUserMenu(false)}
-                          className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-colors mb-1"
+                          className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm bg-warning text-white hover:bg-warning/90 transition-colors mb-1"
                         >
                           <Crown className="h-4 w-4" />
                           Upgrade to Premium
@@ -563,31 +586,31 @@ export default function DashboardPage() {
         </div>
       </motion.nav>
 
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Welcome Section */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="dashboard-welcome relative mb-8 overflow-hidden rounded-[2rem] border border-white/10 px-5 py-7 text-white shadow-2xl shadow-primary/20 sm:px-8 sm:py-9"
         >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <h1 className="font-display text-3xl sm:text-4xl font-bold">
-                  Welcome back, {user?.name?.split(' ')[0] || 'there'}! 👋
+                <h1 className="font-display text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
+                  Welcome back, {user?.name?.split(' ')[0] || 'there'}.
                 </h1>
                 {user?.isPremium && (
                   <motion.span 
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-semibold shadow-lg shadow-amber-500/25"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning text-white text-sm font-semibold shadow-sm"
                   >
                     <Crown className="h-4 w-4" />
                     Premium
                   </motion.span>
                 )}
               </div>
-              <p className="mt-2 text-muted-foreground">
+              <p className="mt-2 max-w-2xl text-slate-300">
                 {totalCertificates === 0 
                   ? "Get started by creating your first certificate template."
                   : thisMonthCerts > 0 
@@ -599,12 +622,12 @@ export default function DashboardPage() {
             {/* Quick stats for today */}
             {!isDataLoading && totalCertificates > 0 && (
               <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-success/10 text-success">
+                <div className="flex items-center gap-2 rounded-xl border border-success/15 bg-success/10 px-3 py-2 text-success backdrop-blur">
                   <MailCheck className="h-4 w-4" />
                   <span className="font-medium">{emailsSent} sent</span>
                 </div>
                 {emailsFailed > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive">
+                  <div className="flex items-center gap-2 rounded-xl border border-error/15 bg-error/10 px-3 py-2 text-error backdrop-blur">
                     <MailX className="h-4 w-4" />
                     <span className="font-medium">{emailsFailed} failed</span>
                   </div>
@@ -641,11 +664,8 @@ export default function DashboardPage() {
               key={stat.id}
               variants={fadeInUp}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
-              className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-300"
+              className="dashboard-stat-card relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-md sm:p-6"
             >
-              {/* Background gradient */}
-              <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.color} opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2`} />
-              
               <div className="relative flex items-start justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">
@@ -665,8 +685,8 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 </div>
-                <div className={`flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl ${stat.bgColor}`}>
-                  <stat.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${stat.textColor}`} />
+                <div className={`${stat.tile} h-10 w-10 sm:h-12 sm:w-12`}>
+                  <stat.icon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
               </div>
             </motion.div>
@@ -687,7 +707,7 @@ export default function DashboardPage() {
               <motion.div
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 cursor-pointer hover:border-primary/50 hover:shadow-md transition-all duration-200"
+                className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
               >
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-white shadow-lg">
                   <Plus className="h-5 w-5" />
@@ -703,9 +723,9 @@ export default function DashboardPage() {
               <motion.div
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 cursor-pointer hover:border-primary/50 hover:shadow-md transition-all duration-200"
+                className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
               >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-foreground">
+                <div className="tile-primary h-11 w-11 shrink-0">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div>
@@ -719,9 +739,9 @@ export default function DashboardPage() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleImportClick}
-              className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 cursor-pointer hover:border-primary/50 hover:shadow-md transition-all duration-200"
+              className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-foreground">
+              <div className="tile-warning h-11 w-11 shrink-0">
                 <Upload className="h-5 w-5" />
               </div>
               <div>
@@ -742,9 +762,9 @@ export default function DashboardPage() {
               <motion.div
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 cursor-pointer hover:border-primary/50 hover:shadow-md transition-all duration-200"
+                className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
               >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-foreground">
+                <div className="tile-secondary h-11 w-11 shrink-0">
                   <Clock className="h-5 w-5" />
                 </div>
                 <div>
@@ -789,7 +809,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <Globe className="inline h-3.5 w-3.5 mr-1" />
-                    Public ({publicTemplates.length})
+                    Public ({visiblePublicTemplates.length})
                   </button>
                 </div>
               </div>
@@ -803,7 +823,9 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(templateTab === 'my' ? templatesLoading : publicTemplatesLoading) ? (
+              {(templateTab === 'my'
+                ? templatesLoading
+                : publicTemplatesLoading || templatesLoading) ? (
                 // Skeleton loading state
                 <>
                   {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -842,7 +864,7 @@ export default function DashboardPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     whileHover={{ y: -4 }}
-                    className="group relative rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg hover:border-primary/50 transition-all duration-300"
+                    className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm backdrop-blur-xl transition-all duration-300 hover:border-primary/40 hover:shadow-xl"
                   >
                     {/* Thumbnail */}
                     <div className="h-28 relative">
@@ -863,13 +885,13 @@ export default function DashboardPage() {
                           priority={index < 3}
                         />
                       ) : (
-                        <div className={`w-full h-full bg-gradient-to-br ${template.thumbnail || gradientColors[index % gradientColors.length]}`} />
+                        <div className={`w-full h-full ${template.thumbnail || placeholderTints[index % placeholderTints.length]}`} />
                       )}
                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
                       
                       {/* Public badge (only for my templates that are public) */}
                       {templateTab === 'my' && template.isPublic && (
-                        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/90 text-white text-xs font-medium">
+                        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/90 text-white text-xs font-medium">
                           <Globe className="h-3 w-3" />
                           Public
                         </div>
@@ -877,30 +899,32 @@ export default function DashboardPage() {
                       
                       {/* Stars badge for public templates */}
                       {templateTab === 'public' && template.stars > 0 && (
-                        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/90 text-white text-xs font-medium">
-                          <Star className="h-3 w-3 fill-current" />
+                        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/90 text-white text-xs font-medium">
+                          <Bookmark className="h-3 w-3 fill-current" />
                           {template.stars}
                         </div>
                       )}
                       
                       {/* Quick action buttons - only for user's own templates */}
                       {templateTab === 'my' && (
-                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
                           <button
-                            onClick={(e) => handleTogglePublic(template.id, template.isPublic, e)}
+                            onClick={(e) => handleTogglePublic(template, e)}
                             className={`p-1 rounded-md backdrop-blur-sm transition-colors ${
-                              template.isPublic 
-                                ? 'bg-yellow-500/90 text-white hover:bg-yellow-600/90' 
+                              template.isPublic || template.publicationStatus === 'pending_review'
+                                ? 'bg-warning/90 text-white hover:bg-warning/90'
                                 : 'bg-white/20 text-white hover:bg-white/30'
                             }`}
-                            title={template.isPublic ? 'Make Private' : 'Make Public'}
+                            title={template.publicationStatus === 'pending_review' ? 'Cancel review request' : template.isPublic ? 'Make private' : 'Submit for review'}
                           >
-                            <Star className={`h-3.5 w-3.5 ${template.isPublic ? 'fill-current' : ''}`} />
+                            {template.publicationStatus === 'pending_review'
+                              ? <Clock className="h-3.5 w-3.5" />
+                              : <Globe className="h-3.5 w-3.5" />}
                           </button>
                           
                           <button
                             onClick={(e) => handleDeleteTemplate(template.id, e)}
-                            className="p-1 rounded-md bg-red-500/80 backdrop-blur-sm text-white hover:bg-red-600/90 transition-colors"
+                            className="p-1 rounded-md bg-error/80 backdrop-blur-sm text-white hover:bg-error/90 transition-colors"
                             title="Delete Template"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -963,7 +987,7 @@ export default function DashboardPage() {
               <h2 className="font-display text-xl font-semibold">Recent Activity</h2>
             </div>
 
-            <div className="rounded-xl border border-border bg-card">
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg shadow-slate-950/5 backdrop-blur-xl">
               <div className="divide-y divide-border">
                 {certificatesLoading ? (
                   // Skeleton loading state for activity

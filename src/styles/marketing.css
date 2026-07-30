@@ -1,0 +1,1135 @@
+/**
+ * Serenity marketing + authentication design system.
+ *
+ * Scoped to the public surfaces (landing, login, signup) via `.sr-scope`.
+ * The authenticated application keeps its own tokens in globals.css; nothing
+ * here leaks into the dashboard, editor, history, or verification pages.
+ *
+ * Visual direction: a warm bone canvas rather than clinical white, deep navy
+ * ink, one vivid blue carrying every primary action, and a small accent set
+ * (teal for verification, violet for personalisation, amber for recognition)
+ * used as flat colour fields rather than gradients. Display type is set in
+ * Bricolage Grotesque at heavy weights and tight tracking; body copy stays in
+ * Inter.
+ *
+ * Both themes are first-class: every token below has a dark counterpart, and
+ * the deep bands invert rather than staying dark in both modes.
+ */
+
+.sr-scope {
+  /* --- light theme ------------------------------------------------------ */
+  --sr-canvas: 248 245 240;
+  --sr-canvas-raised: 255 255 255;
+  --sr-canvas-sunken: 241 237 229;
+  --sr-canvas-tint: 234 239 255;
+
+  --sr-ink: 11 24 41;
+  --sr-ink-soft: 71 84 105;
+  --sr-ink-faint: 92 103 128;
+
+  --sr-line: 224 219 209;
+  --sr-line-strong: 205 199 187;
+
+  --sr-brand: 26 92 255;
+  --sr-brand-strong: 17 71 214;
+  /* Brand blue as *text* on the canvas measures 4.66:1 — passing but tight.
+     Links and small copy use this darker step instead. */
+  --sr-brand-text: 21 78 219;
+  --sr-brand-ink: 255 255 255;
+  --sr-brand-wash: 232 238 255;
+
+  --sr-teal: 0 118 110;
+  --sr-teal-vivid: 0 201 188;
+  --sr-teal-wash: 214 245 242;
+  --sr-violet: 92 62 235;
+  --sr-violet-vivid: 107 79 255;
+  --sr-violet-wash: 236 232 255;
+  --sr-amber: 168 106 8;
+  --sr-amber-vivid: 245 158 11;
+  --sr-amber-wash: 253 240 214;
+  --sr-coral: 214 56 24;
+  --sr-coral-vivid: 255 85 51;
+
+  /* Inverted band: deep navy in light mode. */
+  --sr-deep: 11 24 41;
+  --sr-deep-raised: 22 37 60;
+  --sr-deep-ink: 244 247 252;
+  --sr-deep-soft: 165 180 204;
+  --sr-deep-line: 42 60 88;
+
+  --sr-r-xs: 0.5rem;
+  --sr-r-sm: 0.75rem;
+  --sr-r-md: 1rem;
+  --sr-r-lg: 1.25rem;
+  --sr-r-xl: 1.75rem;
+  --sr-r-2xl: 2.25rem;
+
+  --sr-shadow-1: 0 1px 2px rgb(11 24 41 / 0.06), 0 2px 6px rgb(11 24 41 / 0.04);
+  --sr-shadow-2: 0 1px 2px rgb(11 24 41 / 0.05), 0 10px 24px rgb(11 24 41 / 0.07);
+  --sr-shadow-3: 0 2px 4px rgb(11 24 41 / 0.04), 0 14px 32px rgb(11 24 41 / 0.09),
+    0 36px 72px rgb(11 24 41 / 0.08);
+
+  --sr-max: 78rem;
+  --sr-gutter: 1.25rem;
+  --sr-section: clamp(4rem, 7.5vw, 7rem);
+
+  --sr-fast: 150ms;
+  --sr-base: 260ms;
+  --sr-slow: 620ms;
+
+  background: rgb(var(--sr-canvas));
+  color: rgb(var(--sr-ink));
+}
+
+.dark .sr-scope {
+  --sr-canvas: 9 13 24;
+  --sr-canvas-raised: 17 23 38;
+  --sr-canvas-sunken: 13 18 32;
+  --sr-canvas-tint: 18 27 51;
+
+  --sr-ink: 240 244 251;
+  --sr-ink-soft: 172 184 206;
+  --sr-ink-faint: 138 152 178;
+
+  --sr-line: 33 43 66;
+  --sr-line-strong: 50 63 92;
+
+  --sr-brand: 106 152 255;
+  --sr-brand-strong: 140 176 255;
+  --sr-brand-text: 138 175 255;
+  --sr-brand-ink: 8 14 30;
+  --sr-brand-wash: 24 36 68;
+
+  --sr-teal: 45 212 200;
+  --sr-teal-vivid: 0 201 188;
+  --sr-teal-wash: 12 46 45;
+  --sr-violet: 163 146 255;
+  --sr-violet-vivid: 128 104 255;
+  --sr-violet-wash: 32 27 66;
+  --sr-amber: 240 179 74;
+  --sr-amber-vivid: 245 158 11;
+  --sr-amber-wash: 51 37 12;
+  --sr-coral: 255 133 107;
+  --sr-coral-vivid: 255 85 51;
+
+  /* The inverted band lifts *away* from the page in dark mode instead of
+     sinking further into it. */
+  --sr-deep: 19 27 45;
+  --sr-deep-raised: 27 37 58;
+  --sr-deep-ink: 240 244 251;
+  --sr-deep-soft: 172 184 206;
+  --sr-deep-line: 46 60 88;
+
+  --sr-shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --sr-shadow-2: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 24px rgb(0 0 0 / 0.4);
+  --sr-shadow-3: 0 2px 4px rgb(0 0 0 / 0.35), 0 16px 34px rgb(0 0 0 / 0.42),
+    0 38px 72px rgb(0 0 0 / 0.45);
+}
+
+@media (min-width: 640px) {
+  .sr-scope {
+    --sr-gutter: 2rem;
+  }
+}
+
+/*
+ * Phone density.
+ *
+ * Every section stacks on a phone, so the page is long by construction. Rather
+ * than dropping content — which would cost the message and the crawlable copy
+ * — the vertical rhythm tightens and the display sizes step down, which takes
+ * a large amount of scroll out without removing a single word.
+ */
+@media (max-width: 639px) {
+  .sr-scope {
+    --sr-section: 3.25rem;
+  }
+
+  .sr-h1 {
+    font-size: clamp(2.375rem, 10.5vw, 3rem);
+    letter-spacing: -0.032em;
+  }
+
+  .sr-h2 {
+    font-size: clamp(1.75rem, 7.6vw, 2.125rem);
+  }
+
+  .sr-lead {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .sr-card,
+  .sr-panel {
+    border-radius: var(--sr-r-md);
+  }
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.sr-shell {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+.sr-container {
+  width: 100%;
+  max-width: var(--sr-max);
+  margin-inline: auto;
+  padding-inline: var(--sr-gutter);
+}
+
+.sr-section {
+  position: relative;
+  padding-block: var(--sr-section);
+}
+
+.sr-section-sunken {
+  background: rgb(var(--sr-canvas-sunken));
+}
+
+.sr-section-tint {
+  background: rgb(var(--sr-canvas-tint));
+}
+
+/* Inverted band. Deep navy on light, a raised slate on dark. */
+.sr-section-deep {
+  background: rgb(var(--sr-deep));
+  color: rgb(var(--sr-deep-ink));
+}
+
+.sr-section-brand {
+  background: rgb(var(--sr-brand));
+  color: #fff;
+}
+
+.dark .sr-section-brand {
+  background: rgb(var(--sr-brand-strong));
+  color: rgb(var(--sr-brand-ink));
+}
+
+.sr-skip {
+  transition: transform var(--sr-fast) ease;
+}
+
+/* ------------------------------------------------------------ typography */
+
+.sr-display {
+  font-family: var(--font-marketing), var(--font-display), system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.sr-h1 {
+  font-family: var(--font-marketing), var(--font-display), system-ui, sans-serif;
+  font-size: clamp(2.75rem, 6.4vw, 5.25rem);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+/*
+ * Auth pages want the same face at a calmer size. This has to be a variant
+ * rather than a Tailwind `text-[clamp(...)]` utility: those tie with `.sr-h1`
+ * on specificity and lose on source order, so the 5.25rem hero size survived
+ * and "Create your free account" filled the viewport.
+ */
+.sr-h1-compact {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.sr-h2 {
+  font-family: var(--font-marketing), var(--font-display), system-ui, sans-serif;
+  font-size: clamp(2rem, 3.9vw, 3rem);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.sr-h3 {
+  font-family: var(--font-marketing), var(--font-display), system-ui, sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.sr-lead {
+  font-size: clamp(1.0625rem, 1.35vw, 1.1875rem);
+  line-height: 1.6;
+  color: rgb(var(--sr-ink-soft));
+}
+
+.sr-body {
+  font-size: 0.9688rem;
+  line-height: 1.65;
+  color: rgb(var(--sr-ink-soft));
+}
+
+.sr-hint {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgb(var(--sr-ink-faint));
+}
+
+.sr-hint-reserved {
+  display: block;
+  min-height: 1.1875rem;
+}
+
+.sr-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--sr-brand-text));
+}
+
+.sr-accent {
+  color: rgb(var(--sr-brand));
+}
+
+/* Inside inverted/brand bands the muted steps have to follow the surface. */
+.sr-section-deep .sr-lead,
+.sr-section-deep .sr-body {
+  color: rgb(var(--sr-deep-soft));
+}
+
+.sr-section-deep .sr-hint {
+  color: rgb(var(--sr-deep-soft));
+}
+
+.sr-section-deep .sr-eyebrow {
+  color: rgb(var(--sr-teal-vivid));
+}
+
+.sr-section-brand .sr-lead,
+.sr-section-brand .sr-body,
+.sr-section-brand .sr-eyebrow {
+  color: inherit;
+  opacity: 0.92;
+}
+
+/* --------------------------------------------------------------- surfaces */
+
+.sr-card {
+  position: relative;
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: var(--sr-r-lg);
+  background: rgb(var(--sr-canvas-raised));
+  box-shadow: var(--sr-shadow-1);
+}
+
+.sr-card-lift {
+  transition: transform var(--sr-base) ease, box-shadow var(--sr-base) ease,
+    border-color var(--sr-base) ease;
+}
+
+.sr-card-lift:hover {
+  transform: translateY(-3px);
+  border-color: rgb(var(--sr-brand) / 0.45);
+  box-shadow: var(--sr-shadow-2);
+}
+
+.sr-panel {
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: var(--sr-r-xl);
+  background: rgb(var(--sr-canvas-raised));
+  box-shadow: var(--sr-shadow-3);
+}
+
+.sr-section-deep .sr-card,
+.sr-section-deep .sr-panel {
+  background: rgb(var(--sr-deep-raised));
+  border-color: rgb(var(--sr-deep-line));
+  color: rgb(var(--sr-deep-ink));
+}
+
+/* Pill used for the hero eyebrow and inline badges. */
+.sr-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--sr-brand) / 0.25);
+  background: rgb(var(--sr-brand-wash));
+  padding: 0.4375rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: rgb(var(--sr-brand-text));
+}
+
+.sr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: 999px;
+  padding: 0.375rem 0.8125rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgb(var(--sr-ink-soft));
+  background: rgb(var(--sr-canvas-raised));
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.sr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding-inline: 1.5rem;
+  border-radius: var(--sr-r-md);
+  border: 1px solid transparent;
+  font-size: 0.9688rem;
+  font-weight: 650;
+  text-align: center;
+  transition: background-color var(--sr-fast) ease, border-color var(--sr-fast) ease,
+    color var(--sr-fast) ease, box-shadow var(--sr-fast) ease, transform var(--sr-fast) ease;
+}
+
+.sr-btn:focus-visible {
+  outline: 2px solid rgb(var(--sr-brand));
+  outline-offset: 2px;
+}
+
+.sr-section-deep .sr-btn:focus-visible,
+.sr-section-brand .sr-btn:focus-visible {
+  outline-color: #fff;
+}
+
+.sr-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sr-btn-primary {
+  background: rgb(var(--sr-brand));
+  color: rgb(var(--sr-brand-ink));
+  box-shadow: var(--sr-shadow-1);
+}
+
+.sr-btn-primary:hover:not(:disabled) {
+  background: rgb(var(--sr-brand-strong));
+  box-shadow: var(--sr-shadow-2);
+}
+
+.sr-btn-secondary {
+  background: rgb(var(--sr-canvas-raised));
+  border-color: rgb(var(--sr-line-strong));
+  color: rgb(var(--sr-ink));
+}
+
+.sr-btn-secondary:hover:not(:disabled) {
+  border-color: rgb(var(--sr-brand) / 0.6);
+  background: rgb(var(--sr-brand-wash));
+  color: rgb(var(--sr-brand-text));
+}
+
+.sr-btn-quiet {
+  background: transparent;
+  color: rgb(var(--sr-ink-soft));
+  min-height: 2.5rem;
+  padding-inline: 0.75rem;
+  font-weight: 600;
+}
+
+.sr-btn-quiet:hover:not(:disabled) {
+  background: rgb(var(--sr-canvas-sunken));
+  color: rgb(var(--sr-ink));
+}
+
+/*
+ * Square icon-only button.
+ *
+ * This has to be a variant rather than Tailwind's `w-10 px-0`: those utilities
+ * tie with `.sr-btn` on specificity and lose on source order, so the base
+ * inline padding survived and collapsed the icon's content box to zero width —
+ * the menu button rendered as an empty outline on every phone width.
+ */
+.sr-btn-icon {
+  width: 2.75rem;
+  padding-inline: 0;
+}
+
+.sr-btn-icon > svg {
+  flex: 0 0 auto;
+}
+
+/* Buttons sitting on the inverted and brand bands. */
+.sr-section-deep .sr-btn-secondary {
+  background: transparent;
+  border-color: rgb(var(--sr-deep-line));
+  color: rgb(var(--sr-deep-ink));
+}
+
+.sr-section-deep .sr-btn-secondary:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.08);
+  border-color: rgb(255 255 255 / 0.35);
+  color: rgb(var(--sr-deep-ink));
+}
+
+.sr-section-brand .sr-btn-primary {
+  background: #fff;
+  color: rgb(var(--sr-brand-strong));
+}
+
+.sr-section-brand .sr-btn-primary:hover:not(:disabled) {
+  background: rgb(var(--sr-brand-wash));
+}
+
+.sr-section-brand .sr-btn-secondary {
+  background: transparent;
+  border-color: rgb(255 255 255 / 0.5);
+  color: #fff;
+}
+
+.sr-section-brand .sr-btn-secondary:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.12);
+  border-color: #fff;
+  color: #fff;
+}
+
+.dark .sr-section-brand .sr-btn-primary {
+  background: rgb(var(--sr-brand-ink));
+  color: rgb(var(--sr-brand-strong));
+}
+
+.dark .sr-section-brand .sr-btn-secondary {
+  border-color: rgb(var(--sr-brand-ink) / 0.5);
+  color: rgb(var(--sr-brand-ink));
+}
+
+.sr-link {
+  font-weight: 650;
+  color: rgb(var(--sr-brand-text));
+  border-radius: 0.25rem;
+}
+
+.sr-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sr-link:focus-visible {
+  outline: 2px solid rgb(var(--sr-brand));
+  outline-offset: 3px;
+}
+
+/*
+ * `--sr-brand-text` is tuned for the light canvas, so on the inverted band it
+ * measured 2.67:1. The deep surfaces get their own link and muted-text steps.
+ */
+.sr-section-deep .sr-link,
+.sr-footer .sr-link {
+  color: rgb(146 182 255);
+}
+
+.sr-section-deep .sr-link:focus-visible,
+.sr-footer .sr-link:focus-visible {
+  outline-color: #fff;
+}
+
+.sr-section-deep .sr-brand-sub,
+.sr-footer .sr-brand-sub {
+  color: rgb(var(--sr-deep-soft));
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.sr-field-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: rgb(var(--sr-ink));
+}
+
+.sr-input {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  border: 1px solid rgb(var(--sr-line-strong));
+  border-radius: var(--sr-r-sm);
+  background: rgb(var(--sr-canvas-raised));
+  padding: 0.6875rem 0.875rem;
+  font-size: 1rem;
+  color: rgb(var(--sr-ink));
+  transition: border-color var(--sr-fast) ease, box-shadow var(--sr-fast) ease;
+}
+
+.sr-input::placeholder {
+  color: rgb(var(--sr-ink-faint));
+}
+
+.sr-input:focus {
+  outline: none;
+  border-color: rgb(var(--sr-brand));
+  box-shadow: 0 0 0 3px rgb(var(--sr-brand) / 0.2);
+}
+
+.sr-input[aria-invalid='true'] {
+  border-color: rgb(190 46 62);
+}
+
+/* Browser autofill keeps the field readable in both themes. */
+.sr-input:-webkit-autofill,
+.sr-input:-webkit-autofill:hover,
+.sr-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--sr-ink));
+  -webkit-box-shadow: 0 0 0 40rem rgb(var(--sr-canvas-raised)) inset;
+  caret-color: rgb(var(--sr-ink));
+}
+
+.sr-notice {
+  display: flex;
+  gap: 0.625rem;
+  border: 1px solid;
+  border-radius: var(--sr-r-sm);
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.sr-notice-error {
+  border-color: rgb(190 46 62 / 0.35);
+  background: rgb(190 46 62 / 0.08);
+  color: rgb(150 25 40);
+}
+
+.dark .sr-notice-error {
+  color: rgb(252 176 184);
+}
+
+.sr-notice-success {
+  border-color: rgb(15 138 100 / 0.35);
+  background: rgb(15 138 100 / 0.08);
+  color: rgb(10 98 71);
+}
+
+.dark .sr-notice-success {
+  color: rgb(134 231 195);
+}
+
+.sr-divider-text {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: rgb(var(--sr-ink-faint));
+}
+
+.sr-divider-text::before,
+.sr-divider-text::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgb(var(--sr-line));
+}
+
+/*
+ * The single-column auth pages are short, so on a tall viewport they sit in a
+ * band of dead space under the header. `safe center` pulls them into the
+ * optical centre but degrades to top alignment the moment the card is taller
+ * than the viewport, so the heading can never scroll out of reach.
+ */
+.sr-auth-center {
+  align-items: safe center;
+}
+
+/* ----------------------------------------------------------- theme toggle */
+
+/*
+ * The application's toggle is an amber-to-rose gradient pill. That reads as a
+ * different product beside the marketing palette, so inside `.sr-scope` the
+ * track becomes a neutral surface and the brand carries the active state.
+ * The authenticated app keeps its own treatment untouched.
+ */
+.sr-scope .theme-toggle-button {
+  background: rgb(var(--sr-canvas-raised));
+  border-color: rgb(var(--sr-line-strong));
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.sr-scope .theme-toggle-button:hover {
+  border-color: rgb(var(--sr-brand) / 0.55);
+  box-shadow: var(--sr-shadow-1);
+}
+
+.sr-scope .theme-toggle-track,
+.dark .sr-scope .theme-toggle-track {
+  background: rgb(var(--sr-line-strong));
+  box-shadow: inset 0 0 0 1px rgb(var(--sr-ink) / 0.08);
+}
+
+/* The knob carries its own outline so it stays a distinct shape against the
+   track in both themes, rather than relying on a drop shadow alone. */
+.sr-scope .theme-toggle-thumb {
+  background: rgb(var(--sr-canvas-raised));
+  color: rgb(var(--sr-amber));
+  box-shadow:
+    0 0 0 1px rgb(var(--sr-ink) / 0.18),
+    0 1px 2px rgb(var(--sr-ink) / 0.35);
+}
+
+.sr-scope .theme-toggle-thumb.is-dark {
+  color: rgb(var(--sr-brand));
+}
+
+/* ------------------------------------------------------- background motif */
+
+.sr-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Certificate-seal geometry: concentric rings behind the hero, never on text. */
+.sr-hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -22rem;
+  inset-inline-end: -18rem;
+  width: 48rem;
+  height: 48rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 50%, rgb(var(--sr-brand) / 0.09), transparent 64%),
+    radial-gradient(circle at 62% 38%, rgb(var(--sr-teal-vivid) / 0.07), transparent 58%);
+  pointer-events: none;
+}
+
+.sr-hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -12rem;
+  inset-inline-end: -9rem;
+  width: 30rem;
+  height: 30rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--sr-brand) / 0.12);
+  box-shadow:
+    0 0 0 3.5rem rgb(var(--sr-brand) / 0.025),
+    0 0 0 7rem rgb(var(--sr-teal-vivid) / 0.02);
+  pointer-events: none;
+}
+
+@media (max-width: 1023px) {
+  .sr-hero::before {
+    inset-inline-end: -26rem;
+    opacity: 0.6;
+  }
+
+  .sr-hero::after {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- product */
+
+.sr-shot {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--sr-line));
+  border-radius: var(--sr-r-lg);
+  background: rgb(var(--sr-canvas-sunken));
+  box-shadow: var(--sr-shadow-3);
+}
+
+.sr-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.sr-shot-caption {
+  border-block-start: 1px solid rgb(var(--sr-line));
+  background: rgb(var(--sr-canvas-raised));
+  padding: 0.625rem 0.875rem;
+  font-size: 0.8125rem;
+  color: rgb(var(--sr-ink-faint));
+}
+
+/*
+ * The captures are of the app's light theme. Dropped straight onto the dark
+ * canvas they glare, so dark mode mediates the edge with a lighter frame and
+ * takes a few percent off the brightness. The screenshot itself is unaltered
+ * in content — this is framing, not retouching.
+ */
+.dark .sr-scope .sr-shot {
+  border-color: rgb(var(--sr-line-strong));
+}
+
+.dark .sr-scope .sr-shot img {
+  filter: brightness(0.94);
+}
+
+.sr-section-deep .sr-shot {
+  border-color: rgb(var(--sr-deep-line));
+  background: rgb(var(--sr-deep-raised));
+}
+
+.sr-section-deep .sr-shot-caption {
+  background: rgb(var(--sr-deep-raised));
+  border-block-start-color: rgb(var(--sr-deep-line));
+  color: rgb(var(--sr-deep-soft));
+}
+
+/* ------------------------------------------------------------- capability */
+
+/* Scrolling capability strip under the hero. Duplicated content makes the
+   loop seamless; the copy is real feature names, never metrics. */
+.sr-marquee {
+  display: flex;
+  overflow: hidden;
+  user-select: none;
+  gap: 0;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+.sr-marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2.5rem;
+  padding-inline-end: 2.5rem;
+  animation: sr-marquee 46s linear infinite;
+}
+
+@keyframes sr-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.sr-marquee-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--sr-deep-soft));
+}
+
+/* ------------------------------------------------------------- step rail */
+
+.sr-rail {
+  position: relative;
+}
+
+/* A single hairline joins the six steps on wide screens. It sits behind the
+   numbered markers and stops short of both ends. */
+@media (min-width: 1024px) {
+  .sr-rail::before {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    inset-inline: 9%;
+    inset-block-start: 1.625rem;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      rgb(var(--sr-brand) / 0.15),
+      rgb(var(--sr-brand) / 0.5) 25%,
+      rgb(var(--sr-violet-vivid) / 0.5) 55%,
+      rgb(var(--sr-teal-vivid) / 0.55)
+    );
+    transform-origin: left center;
+    animation: sr-rail-draw 1.4s ease-out both;
+  }
+}
+
+@keyframes sr-rail-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.sr-rail-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--sr-line));
+  background: rgb(var(--sr-canvas-raised));
+  box-shadow: var(--sr-shadow-1);
+}
+
+/* A thin, themed scrollbar for the phone-width template row. */
+.sr-rail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--sr-deep-line)) transparent;
+}
+
+.sr-rail-scroll::-webkit-scrollbar {
+  height: 5px;
+}
+
+.sr-rail-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(var(--sr-deep-line));
+}
+
+/* ------------------------------------------------------------- templates */
+
+.sr-tpl {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--sr-r-lg);
+  border: 1px solid rgb(var(--sr-deep-line));
+  background: rgb(var(--sr-deep-raised));
+  transition: transform var(--sr-base) ease, box-shadow var(--sr-base) ease;
+}
+
+.sr-tpl:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--sr-shadow-3);
+}
+
+/* Certificates are landscape A4; the frame holds that ratio so a missing or
+   slow thumbnail never collapses the grid. */
+.sr-tpl-canvas {
+  position: relative;
+  aspect-ratio: 842 / 595;
+  overflow: hidden;
+  background: rgb(var(--sr-canvas-raised));
+}
+
+.sr-tpl-canvas img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sr-tpl-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9375rem 1.125rem;
+}
+
+/* Filter chips over the template grid. */
+.sr-filter {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--sr-deep-line));
+  background: transparent;
+  padding-inline: 1rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: rgb(var(--sr-deep-soft));
+  transition: background-color var(--sr-fast) ease, color var(--sr-fast) ease,
+    border-color var(--sr-fast) ease;
+}
+
+.sr-filter:hover {
+  color: rgb(var(--sr-deep-ink));
+  border-color: rgb(255 255 255 / 0.3);
+}
+
+.sr-filter[aria-pressed='true'] {
+  background: rgb(var(--sr-brand));
+  border-color: rgb(var(--sr-brand));
+  color: #fff;
+}
+
+.dark .sr-filter[aria-pressed='true'] {
+  color: rgb(var(--sr-brand-ink));
+}
+
+.sr-filter:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------- accordion */
+
+/*
+ * FAQ uses native <details>, so it works with zero JavaScript and is
+ * announced correctly without any ARIA of our own.
+ */
+.sr-acc {
+  border-block-end: 1px solid rgb(var(--sr-line));
+}
+
+.sr-acc summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  cursor: pointer;
+  padding-block: 1.375rem;
+  list-style: none;
+  font-family: var(--font-marketing), var(--font-display), system-ui, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: rgb(var(--sr-ink));
+}
+
+.sr-acc summary::-webkit-details-marker {
+  display: none;
+}
+
+.sr-acc summary:focus-visible {
+  outline: 2px solid rgb(var(--sr-brand));
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+
+.sr-acc-sign {
+  position: relative;
+  flex: 0 0 auto;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: rgb(var(--sr-brand-text));
+}
+
+.sr-acc-sign::before,
+.sr-acc-sign::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  width: 0.875rem;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  translate: -50% -50%;
+  transition: transform var(--sr-base) ease, opacity var(--sr-base) ease;
+}
+
+.sr-acc-sign::after {
+  transform: rotate(90deg);
+}
+
+.sr-acc[open] .sr-acc-sign::after {
+  transform: rotate(0deg);
+  opacity: 0;
+}
+
+.sr-acc-answer {
+  padding-block-end: 1.5rem;
+  max-width: 60ch;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.sr-footer {
+  background: rgb(var(--sr-deep));
+  color: rgb(var(--sr-deep-ink));
+}
+
+.sr-footer a {
+  color: rgb(var(--sr-deep-soft));
+  transition: color var(--sr-fast) ease;
+}
+
+.sr-footer a:hover {
+  color: rgb(var(--sr-deep-ink));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sr-footer a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+
+.sr-footer-head {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--sr-deep-ink));
+}
+
+/* ---------------------------------------------------------------- motion */
+
+.sr-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity var(--sr-slow) cubic-bezier(0.22, 0.75, 0.25, 1),
+    transform var(--sr-slow) cubic-bezier(0.22, 0.75, 0.25, 1);
+}
+
+.sr-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Hero product composition: a gentle idle float on the pinned side panels. */
+.sr-float {
+  animation: sr-float 7s ease-in-out infinite;
+}
+
+.sr-float-slow {
+  animation: sr-float 9s ease-in-out infinite reverse;
+}
+
+@keyframes sr-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sr-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .sr-rail::before,
+  .sr-marquee-track,
+  .sr-float,
+  .sr-float-slow {
+    animation: none;
+  }
+
+  .sr-card-lift:hover,
+  .sr-tpl:hover {
+    transform: none;
+  }
+
+  .sr-acc-sign::before,
+  .sr-acc-sign::after {
+    transition: none;
+  }
+}

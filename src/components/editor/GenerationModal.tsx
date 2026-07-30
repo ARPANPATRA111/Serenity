@@ -10,8 +10,9 @@ import { useGenerationStore } from '@/store/generationStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateBatch, downloadZip } from '@/lib/generator';
-import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Crown, Lock } from 'lucide-react';
-import Link from 'next/link';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { getIdToken } from '@/lib/firebase/client';
+import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Lock } from 'lucide-react';
 
 interface GenerationModalProps {
   isOpen: boolean;
@@ -108,7 +109,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       // Check premium status
       if (user?.id) {
         setPremiumCheck(prev => ({ ...prev, loading: true }));
-        fetch(`/api/users/premium?userId=${user.id}`)
+        authenticatedFetch('/api/users/premium')
           .then(res => res.json())
           .then(data => {
             if (data.success) {
@@ -151,6 +152,12 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       return;
     }
 
+    if (rows.length > 100 && !window.confirm(
+      `This batch contains ${rows.length} high-resolution certificates and may use significant memory. Continue?`,
+    )) {
+      return;
+    }
+
     // Clear any previous save error
     setSaveError(null);
 
@@ -164,6 +171,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     }
 
     const templateJSON = JSON.stringify(fabricInstance.toJSON());
+    const idToken = await getIdToken();
+    if (!idToken) {
+      setSaveError('Authentication expired. Please sign in again before generating certificates.');
+      return;
+    }
     
     setStep('generating');
     startGeneration(rows.length);
@@ -177,9 +189,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       templateId: templateId || undefined,
       templateName: templateName || 'Untitled Template',
       userId: user?.id,
+      authToken: idToken || undefined,
       issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
       certificateTitle: certificateMetadata.title || 'Certificate of Completion',
       certificateDescription: certificateMetadata.description || '',
+      eventId: certificateMetadata.eventId,
       onProgress: (current, total, status) => {
         updateProgress(current, status);
       },
@@ -207,35 +221,26 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
 
     complete();
 
-    // Increment certificate generation counter for the user
-    if (user?.id && result.certificateIds.length > 0) {
-      try {
-        await fetch(`/api/users/premium`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            action: 'incrementCount',
-            count: result.certificateIds.length,
-          }),
-        });
-      } catch (e) {
-        console.warn('Failed to update generation count:', e);
-      }
-    }
+    const persistedCertificateIds = new Set(result.persistedCertificateIds);
+    const generatedByRowIndex = new Map(
+      result.generatedCertificates
+        .filter((certificate) => persistedCertificateIds.has(certificate.certificateId))
+        .map((certificate) => [certificate.rowIndex, certificate])
+    );
 
     if (result.zipBlob) {
       setResultBlob(result.zipBlob);
       downloadZip(result.zipBlob, `certificates_${Date.now()}.zip`);
     }
 
-    if (sendEmails && emailField && result.certificateIds.length > 0) {
+    if (sendEmails && emailField && generatedByRowIndex.size > 0) {
       setStep('emailing');
       const emailResultsList: EmailResult[] = [];
       const rowsWithEmail = rows.filter(row => {
         const email = row[emailField];
         return email && typeof email === 'string' && email.includes('@');
       });
+      let emailProcessed = 0;
       
       setEmailProgress({ current: 0, total: rowsWithEmail.length });
 
@@ -243,7 +248,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
         const row = rows[i];
         const email = row[emailField];
         const recipientName = String(row[nameField] || `Recipient ${i + 1}`);
-        const certificateId = result.certificateIds[i];
+        const generatedCertificate = generatedByRowIndex.get(i);
+        const certificateId = generatedCertificate?.certificateId;
         
         if (!email || typeof email !== 'string' || !email.includes('@')) {
           emailResultsList.push({
@@ -262,6 +268,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             success: false,
             error: 'Certificate generation failed',
           });
+          emailProcessed += 1;
+          setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
           continue;
         }
 
@@ -281,14 +289,16 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           
           const response = await fetch('/api/email/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
             body: JSON.stringify({
               to: email,
               recipientName,
               certificateId,
               certificateTitle: certificateMetadata.title || 'Certificate of Completion',
               issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
-              userId: user?.id,
               certificatePdfBase64,
             }),
           });
@@ -310,7 +320,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           });
         }
 
-        setEmailProgress(prev => ({ ...prev, current: i + 1 }));
+        emailProcessed += 1;
+        setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
         setEmailResults([...emailResultsList]);
       }
       
@@ -453,10 +464,10 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 </div>
                 
                 {emailField && !emailValidation.valid && (
-                  <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-                    <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-3 rounded-lg bg-warning/10 border border-warning/20 p-3">
+                    <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
                     <div className="text-xs">
-                      <p className="font-medium text-amber-600 dark:text-amber-400">
+                      <p className="font-medium text-warning">
                         {emailValidation.missing.length} recipient(s) have missing or invalid emails
                       </p>
                       <p className="text-muted-foreground mt-1">
@@ -468,7 +479,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 )}
 
                 {emailField && emailValidation.valid && (
-                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                  <div className="flex items-center gap-2 text-sm text-success">
                     <CheckCircle className="h-4 w-4" />
                     <span>All {rows.length} recipients have valid email addresses</span>
                   </div>
@@ -482,15 +493,15 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             <h4 className="mb-2 font-medium">Output</h4>
             <ul className="space-y-1 text-sm text-muted-foreground">
               <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-success" />
                 High-quality PDF (300 DPI)
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-success" />
                 Unique QR code verification
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-success" />
                 ZIP archive download (auto-downloads)
               </li>
               {sendEmails && emailField && (
@@ -504,10 +515,10 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
 
           {/* Certificate Info Warning */}
           {!isCertificateInfoComplete && (
-            <div className="flex items-start gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-4">
-              <Info className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 rounded-lg bg-warning/10 border border-warning/20 p-4">
+              <Info className="h-5 w-5 text-warning shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-medium text-amber-600 dark:text-amber-400">Certificate Info Required</p>
+                <p className="font-medium text-warning">Certificate Info Required</p>
                 <p className="text-muted-foreground mt-1">
                   Please fill in the Certificate Information (Title, Issued By, Description) 
                   before generating certificates. Click the <strong>Info</strong> button in the toolbar.
@@ -516,38 +527,32 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             </div>
           )}
 
+          {rows.length > 50 && (
+            <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/10 p-4">
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <p className="text-sm text-muted-foreground">
+                Large high-resolution batches work best on a desktop. Keep this tab open and avoid other memory-heavy tasks during generation.
+              </p>
+            </div>
+          )}
+
           {/* Free Tier Limit Warning */}
           {!premiumCheck.loading && !premiumCheck.canGenerate && (
-            <div className="rounded-lg border-2 border-amber-500/50 bg-gradient-to-br from-amber-500/10 to-orange-500/10 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20">
-                  <Crown className="h-5 w-5 text-amber-500" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-foreground">Free Limit Reached</h4>
-                  <p className="text-sm text-muted-foreground">You&apos;ve used all 5 free certificate generations</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                Upgrade to <strong className="text-amber-600 dark:text-amber-400">Premium</strong> for unlimited certificate generation and email delivery (up to 300/day).
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
+              <p className="font-semibold">Free limit reached</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Paid upgrades are not currently available. You can continue editing and exporting the template itself.
               </p>
-              <Link
-                href="/premium"
-                className="flex items-center justify-center gap-2 w-full rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:opacity-90 transition-opacity"
-              >
-                <Crown className="h-4 w-4" />
-                Upgrade to Premium — $25 Lifetime
-              </Link>
             </div>
           )}
 
           {/* Free Tier Remaining Info */}
           {!premiumCheck.loading && premiumCheck.canGenerate && !premiumCheck.isPremium && (
-            <div className="flex items-center gap-2 rounded-lg bg-blue-500/10 border border-blue-500/20 p-3">
-              <Info className="h-4 w-4 text-blue-500 shrink-0" />
+            <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 p-3">
+              <Info className="h-4 w-4 text-primary shrink-0" />
               <p className="text-xs text-muted-foreground">
                 Free plan: <strong>{premiumCheck.remaining}</strong> generation{premiumCheck.remaining !== 1 ? 's' : ''} remaining.{' '}
-                <Link href="/premium" className="text-primary hover:underline font-medium">Upgrade for unlimited</Link>
+                Billing is not currently available.
               </p>
             </div>
           )}
@@ -576,7 +581,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               {premiumCheck.loading ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking...</>
               ) : !premiumCheck.canGenerate ? (
-                <><Lock className="mr-2 h-4 w-4" /> Upgrade Required</>
+                <><Lock className="mr-2 h-4 w-4" /> Limit Reached</>
               ) : (
                 'Start Generation'
               )}
@@ -634,8 +639,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           <div className="text-center">
             {errors.length === 0 ? (
               <>
-                <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-green-500/20">
-                  <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
+                <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-success/20">
+                  <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-success" />
                 </div>
                 <h3 className="text-lg sm:text-xl font-semibold">All Done!</h3>
                 <p className="mt-1 sm:mt-2 text-sm text-muted-foreground">
@@ -644,14 +649,14 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               </>
             ) : (
               <>
-                <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-yellow-500/20">
-                  <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500" />
+                <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-warning/20">
+                  <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-warning" />
                 </div>
                 <h3 className="text-lg sm:text-xl font-semibold">Completed with Errors</h3>
                 <p className="mt-1 sm:mt-2 text-sm text-muted-foreground">
                   Generated {generatedIds.length} of {total} certificates
                 </p>
-                <p className="text-xs sm:text-sm text-red-500">
+                <p className="text-xs sm:text-sm text-error">
                   {errors.length} errors occurred
                 </p>
               </>
@@ -667,11 +672,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               </h4>
               <div className="flex gap-3 sm:gap-4 text-xs sm:text-sm">
                 <div className="flex items-center gap-1">
-                  <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-500" />
+                  <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-success" />
                   <span>{emailResults.filter(r => r.success).length} sent</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
+                  <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-error" />
                   <span>{emailResults.filter(r => !r.success).length} failed</span>
                 </div>
               </div>
@@ -679,14 +684,14 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               {/* Show successful emails */}
               {emailResults.filter(r => r.success).length > 0 && (
                 <details className="group">
-                  <summary className="text-xs font-medium text-green-600 dark:text-green-400 cursor-pointer hover:underline flex items-center gap-1">
+                  <summary className="text-xs font-medium text-success cursor-pointer hover:underline flex items-center gap-1">
                     <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
                     View {emailResults.filter(r => r.success).length} successful emails
                   </summary>
                   <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
                     {emailResults.filter(r => r.success).map((result, i) => (
-                      <div key={i} className="text-xs p-2 bg-green-50 dark:bg-green-900/20 rounded flex items-center gap-2">
-                        <CheckCircle className="h-3 w-3 text-green-500 shrink-0" />
+                      <div key={i} className="text-xs p-2 bg-success dark:bg-success/20 rounded flex items-center gap-2">
+                        <CheckCircle className="h-3 w-3 text-success shrink-0" />
                         <span className="font-medium">{result.recipientName}</span>
                         <span className="text-muted-foreground">({result.email})</span>
                       </div>
@@ -698,16 +703,16 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               {/* Show failed emails */}
               {emailResults.filter(r => !r.success).length > 0 && (
                 <details className="group" open>
-                  <summary className="text-xs font-medium text-red-600 dark:text-red-400 cursor-pointer hover:underline flex items-center gap-1">
+                  <summary className="text-xs font-medium text-error cursor-pointer hover:underline flex items-center gap-1">
                     <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
                     View {emailResults.filter(r => !r.success).length} failed emails
                   </summary>
                   <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
                     {emailResults.filter(r => !r.success).map((result, i) => (
-                      <div key={i} className="text-xs p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                      <div key={i} className="text-xs p-2 bg-error dark:bg-error/20 rounded">
                         <span className="font-medium">{result.recipientName}</span>
                         <span className="text-muted-foreground ml-1">({result.email})</span>
-                        <span className="text-red-500 ml-2">- {result.error}</span>
+                        <span className="text-error ml-2">- {result.error}</span>
                       </div>
                     ))}
                   </div>
@@ -729,8 +734,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           )}
 
           {/* Info about auto-download */}
-          <div className="flex items-start gap-2 sm:gap-3 rounded-lg bg-blue-500/10 border border-blue-500/20 p-2.5 sm:p-3">
-            <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2 sm:gap-3 rounded-lg bg-primary/10 border border-primary/20 p-2.5 sm:p-3">
+            <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
             <div className="text-xs text-muted-foreground">
               The ZIP file with all certificates was automatically downloaded. 
               If someone&apos;s email failed, you can manually share their certificate from the downloaded file.
