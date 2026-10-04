@@ -18,11 +18,11 @@ function createCanvasJSON(title: string, accent: string) {
     objects: [
       { type: 'rect', left: 20, top: 20, width: 802, height: 555, fill: 'transparent', stroke: accent, strokeWidth: 4 },
       { type: 'rect', left: 31, top: 31, width: 780, height: 533, fill: 'transparent', stroke: accent, strokeWidth: 1, opacity: 0.45 },
-      { type: 'textbox', left: 421, top: 112, originX: 'center', originY: 'center', width: 650, text: title.toUpperCase(), fontFamily: 'Montserrat', fontSize: 24, fontWeight: 700, textAlign: 'center', fill: accent },
-      { type: 'textbox', left: 421, top: 205, originX: 'center', originY: 'center', width: 540, text: 'PRESENTED TO', fontFamily: 'Inter', fontSize: 12, charSpacing: 240, textAlign: 'center', fill: '#64748b' },
-      { type: 'textbox', left: 421, top: 280, originX: 'center', originY: 'center', width: 650, text: '{{Name}}', dynamicKey: 'Name', isPlaceholder: true, fontFamily: 'Playfair Display', fontSize: 50, fontWeight: 600, textAlign: 'center', fill: '#111827', editable: false },
-      { type: 'textbox', left: 421, top: 370, originX: 'center', originY: 'center', width: 620, text: 'Presented by {{Issuer}} on {{Date}}', fontFamily: 'Inter', fontSize: 16, textAlign: 'center', fill: '#475569' },
-      { type: 'textbox', left: 421, top: 540, originX: 'center', originY: 'center', width: 350, text: '{{VERIFICATION_URL}}', fontFamily: 'Courier New', fontSize: 9, textAlign: 'center', fill: '#64748b', editable: false, visible: true, isVerificationUrl: true, isLocked: true, lockScalingX: true, lockScalingY: true, hasControls: false },
+      { type: 'textbox', left: 421, top: 112, originX: 'center', originY: 'center', width: 650, text: title.toUpperCase(), fontFamily: 'Montserrat', fontSize: 24, fontWeight: 700, textAlign: 'center', fill: accent, styles: [] },
+      { type: 'textbox', left: 421, top: 205, originX: 'center', originY: 'center', width: 540, text: 'PRESENTED TO', fontFamily: 'Inter', fontSize: 12, charSpacing: 240, textAlign: 'center', fill: '#64748b', styles: [] },
+      { type: 'variableTextbox', left: 421, top: 280, originX: 'center', originY: 'center', width: 650, text: '{{Name}}', dynamicKey: 'Name', isPlaceholder: true, fontFamily: 'Playfair Display', fontSize: 50, fontWeight: 600, textAlign: 'center', fill: '#111827', editable: false, styles: [] },
+      { type: 'textbox', left: 421, top: 370, originX: 'center', originY: 'center', width: 620, text: 'Presented by {{Issuer}} on {{Date}}', fontFamily: 'Inter', fontSize: 16, textAlign: 'center', fill: '#475569', styles: [] },
+      { type: 'textbox', left: 421, top: 540, originX: 'center', originY: 'center', width: 350, text: '{{VERIFICATION_URL}}', fontFamily: 'Courier New', fontSize: 9, textAlign: 'center', fill: '#64748b', editable: false, visible: true, isVerificationUrl: true, isLocked: true, lockScalingX: true, lockScalingY: true, hasControls: false, styles: [] },
     ],
   });
 }

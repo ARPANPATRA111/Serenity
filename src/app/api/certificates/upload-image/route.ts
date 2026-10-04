@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
+import { putPublicObject, requestOrigin } from '@/lib/storage/objectStore';
+import { isValidCertificateId } from '@/lib/verification/certificateId';
 
 export const runtime = 'nodejs';
 
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+function hasImageSignature(buffer: Buffer, kind: 'png' | 'jpeg'): boolean {
+  if (kind === 'png') {
+    return buffer.length > 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+  return buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+}
+
 /**
- * Upload certificate thumbnail image to Vercel Blob storage
- * This avoids Firestore's 1MB document field limit
+ * Upload certificate thumbnail image to public object storage.
+ * This avoids Firestore's 1MB document field limit.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -18,9 +28,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { certificateId, imageBase64, userId } = body;
 
-    if (!certificateId || !imageBase64) {
+    if (!certificateId || !imageBase64 || typeof imageBase64 !== 'string') {
       return NextResponse.json(
         { success: false, error: 'Missing certificateId or imageBase64' },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidCertificateId(certificateId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid certificate ID' },
         { status: 400 }
       );
     }
@@ -38,36 +55,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract base64 data (remove data:image/xxx;base64, prefix if present)
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    
-    // Determine content type from base64 header
     const contentType = isJpeg ? 'image/jpeg' : 'image/png';
     const extension = isJpeg ? 'jpg' : 'png';
-    
-    // Convert base64 to buffer
     const imageBuffer = Buffer.from(base64Data, 'base64');
-    
-    // Check size - limit to 2MB for thumbnails
-    if (imageBuffer.length > 2 * 1024 * 1024) {
+
+    if (imageBuffer.length > MAX_IMAGE_BYTES) {
       return NextResponse.json(
         { success: false, error: 'Image too large (max 2MB)' },
         { status: 400 }
       );
     }
 
-    // Generate blob path
-    const blobPath = `certificates/${authUser.uid}/${certificateId}.${extension}`;
+    if (!hasImageSignature(imageBuffer, isJpeg ? 'jpeg' : 'png')) {
+      return NextResponse.json(
+        { success: false, error: 'Image data does not match its declared type' },
+        { status: 400 }
+      );
+    }
 
-    // Upload to Vercel Blob
-    const blob = await put(blobPath, imageBuffer, {
-      contentType,
-      access: 'public',
-    });
+    // The path is deterministic per certificate, so a retried upload for the
+    // same certificate replaces the identical image instead of failing.
+    const stored = await putPublicObject(
+      `certificates/${authUser.uid}/${certificateId}.${extension}`,
+      imageBuffer,
+      { contentType, origin: requestOrigin(request), allowOverwrite: true },
+    );
 
     return NextResponse.json({
       success: true,
-      url: blob.url,
+      url: stored.url,
       certificateId,
     });
   } catch (error) {

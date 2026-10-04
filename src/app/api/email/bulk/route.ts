@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
+import { isPremiumActive } from '@/lib/plans/premium';
 
 const FREE_BULK_LIMIT = parseInt(process.env.FREE_BULK_EMAIL_LIMIT || '200', 10);
 const BULK_EMAIL_ENABLED = process.env.ENABLE_BULK_EMAIL_API === 'true';
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userDoc = await db.collection('users').doc(authUser.uid).get();
-    const trustedUserTier = userDoc.data()?.isPremium === true ? 'pro' : 'free';
+    const trustedUserTier = isPremiumActive(userDoc.data()) ? 'pro' : 'free';
 
     if (trustedUserTier === 'free' && emails.length > FREE_BULK_LIMIT) {
       

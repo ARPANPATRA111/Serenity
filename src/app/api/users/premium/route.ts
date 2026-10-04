@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 import { FREE_CERTIFICATE_LIMIT, getCertificateAllowance } from '@/lib/plans/certificateLimits';
+import { summarizePremium } from '@/lib/plans/premium';
 
 function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
   if (clientUserId && typeof clientUserId === 'string' && clientUserId !== uid) {
@@ -28,7 +29,8 @@ export async function GET(request: NextRequest) {
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.exists ? userDoc.data() : null;
 
-    const isPremium = userData?.isPremium === true;
+    const premium = summarizePremium(userData);
+    const isPremium = premium.active;
     let actualCertCount = typeof userData?.certificatesGenerated === 'number'
       ? userData.certificatesGenerated
       : 0;
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       isPremium,
+      premiumUntil: premium.until,
       certificatesGenerated: actualCertCount,
       freeLimit: FREE_CERTIFICATE_LIMIT,
       canGenerate: allowance.canGenerate,

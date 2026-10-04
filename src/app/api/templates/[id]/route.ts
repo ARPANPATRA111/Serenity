@@ -51,7 +51,7 @@ async function rejectIfDuplicateName(name: string | undefined, userId: string, c
   if (!duplicateName) return null;
 
   return NextResponse.json(
-    { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
+    { success: false, error: `A template named "${name}" already exists. Please choose a different name.`, code: 'DUPLICATE_NAME' },
     { status: 400 }
   );
 }

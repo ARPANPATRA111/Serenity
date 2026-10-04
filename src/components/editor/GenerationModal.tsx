@@ -9,10 +9,25 @@ import { useDataSourceStore } from '@/store/dataSourceStore';
 import { useGenerationStore } from '@/store/generationStore';
 import { useEditorStore } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
-import { generateBatch, downloadZip } from '@/lib/generator';
+import { generateBatch, downloadZip, retryCertificatePersistence, type BatchGenerationResult } from '@/lib/generator';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { getIdToken } from '@/lib/firebase/client';
-import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Lock } from 'lucide-react';
+import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Lock, RefreshCw } from 'lucide-react';
+
+/** Keeps each email request under the 4.5 MB body limit of Vercel functions. */
+const MAX_ATTACHMENT_BASE64_CHARS = 4_200_000;
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      resolve(value.slice(value.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Could not read the certificate PDF'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 interface GenerationModalProps {
   isOpen: boolean;
@@ -42,7 +57,6 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     isGenerating,
     errors,
     generatedIds,
-    isCancelled,
     startGeneration,
     updateProgress,
     addError,
@@ -60,9 +74,27 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
   const [emailResults, setEmailResults] = useState<EmailResult[]>([]);
   const [emailProgress, setEmailProgress] = useState({ current: 0, total: 0 });
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<BatchGenerationResult | null>(null);
+  const [zipDownloaded, setZipDownloaded] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const [premiumCheck, setPremiumCheck] = useState<{ loading: boolean; canGenerate: boolean; remaining: number; isPremium: boolean }>({
     loading: true, canGenerate: true, remaining: 5, isPremium: false,
   });
+
+  // Placeholders on the design with no matching spreadsheet column would print
+  // as literal "{{Column}}" text, so they are flagged before generating.
+  const unmatchedPlaceholders = useMemo(() => {
+    if (!isOpen) return [];
+    const objects = fabricInstance?.getCanvas()?.getObjects() ?? [];
+    const keys = new Set<string>();
+    for (const object of objects as Array<{ dynamicKey?: unknown }>) {
+      if (typeof object.dynamicKey === 'string' && object.dynamicKey && !headers.includes(object.dynamicKey)) {
+        keys.add(object.dynamicKey);
+      }
+    }
+    return Array.from(keys);
+  }, [isOpen, fabricInstance, headers]);
 
   // Find email-like columns in headers
   const emailColumns = useMemo(() => {
@@ -105,6 +137,9 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       setEmailProgress({ current: 0, total: 0 });
       setSendEmails(false);
       setSaveError(null);
+      setLastResult(null);
+      setZipDownloaded(false);
+      setRetryError(null);
       
       // Check premium status
       if (user?.id) {
@@ -128,22 +163,169 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           });
       }
       
-      if (headers.length > 0 && !nameField) {
+      // Re-pick columns when the spreadsheet changed and the remembered
+      // column no longer exists; otherwise every certificate would be named
+      // "Certificate_1", "Certificate_2", ...
+      if (headers.length > 0 && (!nameField || !headers.includes(nameField))) {
         const nameColumn = headers.find((h) =>
           h.toLowerCase().includes('name')
         );
         setNameField(nameColumn || headers[0]);
       }
-      
-      if (emailColumns.length > 0 && !emailField) {
+
+      if (emailField && !headers.includes(emailField)) {
+        setEmailField(emailColumns[0] || '');
+      } else if (emailColumns.length > 0 && !emailField) {
         setEmailField(emailColumns[0]);
       }
     }
   }, [isOpen, headers, reset, emailColumns, nameField, emailField, user?.id]);
 
+  const outcome = useMemo(() => {
+    const unsavedCount = lastResult?.unsavedRecords.length ?? 0;
+    const renderFailures = lastResult
+      ? lastResult.errors.filter((error) => error.index >= 0).length
+      : errors.filter((error) => error.index >= 0).length;
+    const cancelled = lastResult?.cancelled ?? false;
+    return {
+      unsavedCount,
+      renderFailures,
+      cancelled,
+      limitReached: lastResult?.limitReached ?? false,
+      generatedCount: lastResult?.generatedCertificates.length ?? generatedIds.length,
+      savedCount: lastResult?.persistedCertificateIds.length ?? generatedIds.length,
+      allGood: lastResult
+        ? unsavedCount === 0 && renderFailures === 0 && !cancelled
+        : errors.length === 0,
+    };
+  }, [lastResult, errors, generatedIds.length]);
+
   // Only title and issuedBy are required - description is optional
   const isCertificateInfoComplete = certificateMetadata.title.trim() && 
     certificateMetadata.issuedBy.trim();
+
+  /**
+   * Sends certificate emails for saved certificates only: an unsaved
+   * certificate's verification link would not work for its recipient.
+   */
+  const sendEmailsFor = useCallback(async (result: BatchGenerationResult, idToken: string) => {
+    const persistedCertificateIds = new Set(result.persistedCertificateIds);
+    const generatedByRowIndex = new Map(
+      result.generatedCertificates
+        .filter((certificate) => persistedCertificateIds.has(certificate.certificateId))
+        .map((certificate) => [certificate.rowIndex, certificate])
+    );
+    if (!emailField || generatedByRowIndex.size === 0) return;
+
+    setStep('emailing');
+    const emailResultsList: EmailResult[] = [];
+    const rowsWithEmail = rows.filter(row => {
+      const email = row[emailField];
+      return email && typeof email === 'string' && email.includes('@');
+    });
+    let emailProcessed = 0;
+    setEmailProgress({ current: 0, total: rowsWithEmail.length });
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const email = row[emailField];
+      const recipientName = String(row[nameField] || `Recipient ${i + 1}`);
+      const generatedCertificate = generatedByRowIndex.get(i);
+      const certificateId = generatedCertificate?.certificateId;
+
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        emailResultsList.push({
+          recipientName,
+          email: email ? String(email) : 'No email',
+          success: false,
+          error: 'Invalid or missing email address',
+        });
+        continue;
+      }
+
+      if (!certificateId) {
+        emailResultsList.push({
+          recipientName,
+          email: String(email),
+          success: false,
+          error: result.generatedCertificates.some((certificate) => certificate.rowIndex === i)
+            ? 'Certificate was not saved, so it was not emailed'
+            : 'Certificate generation failed',
+        });
+        emailProcessed += 1;
+        setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
+        continue;
+      }
+
+      try {
+        const pdfBlob = result.certificatePdfBlobs.get(certificateId);
+        let certificatePdfBase64: string | undefined;
+
+        if (pdfBlob) {
+          const encoded = await blobToBase64(pdfBlob);
+          // Requests above the hosting platform's 4.5 MB body limit are
+          // rejected before reaching the API, so an oversized PDF is sent as
+          // a link to its verification page instead of an attachment.
+          certificatePdfBase64 = encoded.length <= MAX_ATTACHMENT_BASE64_CHARS ? encoded : undefined;
+        }
+
+        const response = await fetch('/api/email/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            to: email,
+            recipientName,
+            certificateId,
+            certificateTitle: certificateMetadata.title || 'Certificate of Completion',
+            issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
+            certificatePdfBase64,
+          }),
+        });
+
+        const data = await response.json().catch(() => ({ success: false, error: `Email request failed (${response.status})` }));
+
+        emailResultsList.push({
+          recipientName,
+          email: String(email),
+          success: data.success,
+          error: data.success ? undefined : data.error,
+        });
+      } catch (error) {
+        emailResultsList.push({
+          recipientName,
+          email: String(email),
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to send email',
+        });
+      }
+
+      emailProcessed += 1;
+      setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
+      setEmailResults([...emailResultsList]);
+    }
+
+    setEmailResults(emailResultsList);
+  }, [emailField, rows, nameField, certificateMetadata, user?.name]);
+
+  /** Downloads, emails, and shows the summary once every record is saved. */
+  const finishGeneration = useCallback(async (result: BatchGenerationResult, idToken: string) => {
+    if (result.zipBlob) {
+      setResultBlob(result.zipBlob);
+      if (result.unsavedRecords.length === 0) {
+        downloadZip(result.zipBlob, `certificates_${Date.now()}.zip`);
+        setZipDownloaded(true);
+      }
+    }
+
+    if (result.unsavedRecords.length === 0 && sendEmails && emailField) {
+      await sendEmailsFor(result, idToken);
+    }
+
+    setStep('complete');
+  }, [sendEmails, emailField, sendEmailsFor]);
 
   const handleGenerate = useCallback(async () => {
     if (!fabricInstance || !dataSource) return;
@@ -158,7 +340,6 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       return;
     }
 
-    // Clear any previous save error
     setSaveError(null);
 
     // Save the template first - generation requires a saved template
@@ -166,7 +347,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       const saveResult = await onSave();
       if (!saveResult.success) {
         setSaveError(saveResult.error || 'Failed to save template. Please fix the issue and try again.');
-        return; // Block generation if save fails
+        return;
       }
     }
 
@@ -176,20 +357,24 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       setSaveError('Authentication expired. Please sign in again before generating certificates.');
       return;
     }
-    
+
     setStep('generating');
+    setZipDownloaded(false);
+    setRetryError(null);
     startGeneration(rows.length);
 
     const result = await generateBatch({
       templateJSON,
       dataRows: rows,
       nameField,
+      emailField: emailField || undefined,
       generateQRCodes: true,
       outputFormat: 'pdf',
+      retainPdfBlobs: sendEmails && !!emailField,
       templateId: templateId || undefined,
       templateName: templateName || 'Untitled Template',
       userId: user?.id,
-      authToken: idToken || undefined,
+      authToken: idToken,
       issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
       certificateTitle: certificateMetadata.title || 'Certificate of Completion',
       certificateDescription: certificateMetadata.description || '',
@@ -203,132 +388,31 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       onCertificateGenerated: (id) => {
         addGeneratedId(id);
       },
-      isCancelled: () => isCancelled,
+      // Read the store at call time: a value captured when this callback was
+      // created would never see a later Cancel click.
+      isCancelled: () => useGenerationStore.getState().isCancelled,
     });
 
-    // Check if limit was reached
-    if (result.limitReached) {
+    setLastResult(result);
+
+    // Nothing was rendered because the batch exceeds the plan allowance. Say
+    // exactly how many remain: with some allowance left, a smaller
+    // spreadsheet still works.
+    if (result.limitReached && result.generatedCertificates.length === 0) {
       complete();
-      // Update premium check state to reflect the limit
+      const remaining = result.remaining ?? 0;
       setPremiumCheck(prev => ({
         ...prev,
-        canGenerate: false,
-        remaining: result.remaining ?? 0,
+        canGenerate: remaining > 0,
+        remaining,
       }));
-      setStep('configure'); // Go back to configure to show the limit error
+      setSaveError(result.errors[0]?.message || 'The free plan allowance has been reached.');
+      setStep('configure');
       return;
     }
 
     complete();
-
-    const persistedCertificateIds = new Set(result.persistedCertificateIds);
-    const generatedByRowIndex = new Map(
-      result.generatedCertificates
-        .filter((certificate) => persistedCertificateIds.has(certificate.certificateId))
-        .map((certificate) => [certificate.rowIndex, certificate])
-    );
-
-    if (result.zipBlob) {
-      setResultBlob(result.zipBlob);
-      downloadZip(result.zipBlob, `certificates_${Date.now()}.zip`);
-    }
-
-    if (sendEmails && emailField && generatedByRowIndex.size > 0) {
-      setStep('emailing');
-      const emailResultsList: EmailResult[] = [];
-      const rowsWithEmail = rows.filter(row => {
-        const email = row[emailField];
-        return email && typeof email === 'string' && email.includes('@');
-      });
-      let emailProcessed = 0;
-      
-      setEmailProgress({ current: 0, total: rowsWithEmail.length });
-
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const email = row[emailField];
-        const recipientName = String(row[nameField] || `Recipient ${i + 1}`);
-        const generatedCertificate = generatedByRowIndex.get(i);
-        const certificateId = generatedCertificate?.certificateId;
-        
-        if (!email || typeof email !== 'string' || !email.includes('@')) {
-          emailResultsList.push({
-            recipientName,
-            email: email ? String(email) : 'No email',
-            success: false,
-            error: 'Invalid or missing email address',
-          });
-          continue;
-        }
-        
-        if (!certificateId) {
-          emailResultsList.push({
-            recipientName,
-            email: String(email),
-            success: false,
-            error: 'Certificate generation failed',
-          });
-          emailProcessed += 1;
-          setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
-          continue;
-        }
-
-        try {
-          const pdfBlob = result.certificatePdfBlobs.get(certificateId);
-          let certificatePdfBase64: string | undefined;
-          
-          if (pdfBlob) {
-            const arrayBuffer = await pdfBlob.arrayBuffer();
-            const bytes = new Uint8Array(arrayBuffer);
-            let binary = '';
-            for (let j = 0; j < bytes.byteLength; j++) {
-              binary += String.fromCharCode(bytes[j]);
-            }
-            certificatePdfBase64 = btoa(binary);
-          }
-          
-          const response = await fetch('/api/email/send', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-            },
-            body: JSON.stringify({
-              to: email,
-              recipientName,
-              certificateId,
-              certificateTitle: certificateMetadata.title || 'Certificate of Completion',
-              issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
-              certificatePdfBase64,
-            }),
-          });
-
-          const data = await response.json();
-          
-          emailResultsList.push({
-            recipientName,
-            email: String(email),
-            success: data.success,
-            error: data.success ? undefined : data.error,
-          });
-        } catch (error) {
-          emailResultsList.push({
-            recipientName,
-            email: String(email),
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to send email',
-          });
-        }
-
-        emailProcessed += 1;
-        setEmailProgress(prev => ({ ...prev, current: Math.min(emailProcessed, prev.total) }));
-        setEmailResults([...emailResultsList]);
-      }
-      
-      setEmailResults(emailResultsList);
-    }
-
-    setStep('complete');
+    await finishGeneration(result, idToken);
   }, [
     fabricInstance,
     dataSource,
@@ -340,7 +424,6 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     templateName,
     user?.id,
     user?.name,
-    isCancelled,
     startGeneration,
     updateProgress,
     addError,
@@ -349,7 +432,37 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     onSave,
     certificateMetadata,
     isCertificateInfoComplete,
+    finishGeneration,
   ]);
+
+  const handleRetrySave = useCallback(async () => {
+    if (!lastResult) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const idToken = await getIdToken();
+      if (!idToken) {
+        setRetryError('Your session expired. Sign in again in another tab, then retry.');
+        return;
+      }
+      const next = await retryCertificatePersistence(lastResult, idToken);
+      setLastResult(next);
+      if (next.unsavedRecords.length > 0) {
+        setRetryError(next.persistenceErrors[0]?.message || 'Some certificates still could not be saved.');
+        return;
+      }
+      // Everything is saved now: continue exactly as a clean run would.
+      await finishGeneration(next, idToken);
+    } finally {
+      setRetrying(false);
+    }
+  }, [lastResult, finishGeneration]);
+
+  const handleDownloadAnyway = useCallback(() => {
+    if (!resultBlob) return;
+    downloadZip(resultBlob, `certificates_${Date.now()}.zip`);
+    setZipDownloaded(true);
+  }, [resultBlob]);
 
   const handleDownload = useCallback(() => {
     if (resultBlob) {
@@ -430,6 +543,10 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 <span className="font-medium">Send Certificates via Email</span>
               </div>
               <button
+                type="button"
+                role="switch"
+                aria-checked={sendEmails}
+                aria-label="Send certificates via email"
                 onClick={() => setSendEmails(!sendEmails)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   sendEmails ? 'bg-primary' : 'bg-muted'
@@ -487,6 +604,21 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               </>
             )}
           </div>
+
+          {unmatchedPlaceholders.length > 0 && (
+            <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3" role="alert">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <div className="text-xs">
+                <p className="font-medium text-warning">
+                  {unmatchedPlaceholders.length === 1 ? 'A placeholder has' : 'Some placeholders have'} no matching column
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {unmatchedPlaceholders.map((key) => `{{${key}}}`).join(', ')} will print as written. Column names must match exactly,
+                  including capital letters.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Output Info */}
           <div className="rounded-lg border border-border p-4">
@@ -635,16 +767,17 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
 
       {step === 'complete' && (
         <div className="space-y-4 sm:space-y-6 py-2 sm:py-4">
-          {/* Success/Partial Success */}
+          {/* Outcome summary, derived from the generation result so a
+              successful "retry saving" clears earlier save errors. */}
           <div className="text-center">
-            {errors.length === 0 ? (
+            {outcome.allGood ? (
               <>
                 <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-success/20">
                   <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-success" />
                 </div>
                 <h3 className="text-lg sm:text-xl font-semibold">All Done!</h3>
                 <p className="mt-1 sm:mt-2 text-sm text-muted-foreground">
-                  Successfully generated {generatedIds.length} certificates
+                  Generated and saved {outcome.savedCount} certificate{outcome.savedCount === 1 ? '' : 's'}
                 </p>
               </>
             ) : (
@@ -652,16 +785,55 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-warning/20">
                   <AlertCircle className="h-6 w-6 sm:h-8 sm:w-8 text-warning" />
                 </div>
-                <h3 className="text-lg sm:text-xl font-semibold">Completed with Errors</h3>
+                <h3 className="text-lg sm:text-xl font-semibold">
+                  {outcome.cancelled ? 'Generation Cancelled' : 'Completed with Issues'}
+                </h3>
                 <p className="mt-1 sm:mt-2 text-sm text-muted-foreground">
-                  Generated {generatedIds.length} of {total} certificates
+                  Generated {outcome.generatedCount} of {total} certificates
                 </p>
-                <p className="text-xs sm:text-sm text-error">
-                  {errors.length} errors occurred
-                </p>
+                {outcome.renderFailures > 0 && (
+                  <p className="text-xs sm:text-sm text-error">
+                    {outcome.renderFailures} certificate{outcome.renderFailures === 1 ? '' : 's'} could not be rendered
+                  </p>
+                )}
               </>
             )}
           </div>
+
+          {outcome.unsavedCount > 0 && (
+            <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/10 p-3 sm:p-4" role="alert">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <div className="text-sm">
+                  <p className="font-medium text-warning">
+                    {outcome.unsavedCount} certificate{outcome.unsavedCount === 1 ? ' is' : 's are'} not saved yet
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Their QR codes and verification links will report &ldquo;not found&rdquo; until they are saved,
+                    so the ZIP was not downloaded automatically and no emails were sent.
+                  </p>
+                  {retryError && <p className="mt-2 text-xs text-error">{retryError}</p>}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button onClick={handleRetrySave} disabled={retrying || outcome.limitReached} className="flex-1">
+                  {retrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Retry saving
+                </Button>
+                {resultBlob && !zipDownloaded && (
+                  <Button variant="outline" onClick={handleDownloadAnyway} className="flex-1">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download anyway
+                  </Button>
+                )}
+              </div>
+              {outcome.limitReached && (
+                <p className="text-xs text-muted-foreground">
+                  Your plan allowance was reached while saving. Contact us about Pro to save the remaining certificates.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Email Results Summary */}
           {emailResults.length > 0 && (
@@ -722,7 +894,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           )}
 
           {/* Download */}
-          {resultBlob && (
+          {resultBlob && zipDownloaded && (
             <Button
               onClick={handleDownload}
               className="w-full"
@@ -734,6 +906,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           )}
 
           {/* Info about auto-download */}
+          {zipDownloaded && (
           <div className="flex items-start gap-2 sm:gap-3 rounded-lg bg-primary/10 border border-primary/20 p-2.5 sm:p-3">
             <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
             <div className="text-xs text-muted-foreground">
@@ -741,6 +914,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               If someone&apos;s email failed, you can manually share their certificate from the downloaded file.
             </div>
           </div>
+          )}
 
           {/* Close */}
           <Button variant="outline" onClick={handleClose} className="w-full">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put, del } from '@vercel/blob';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import { deletePublicObject, putPublicObject, requestOrigin } from '@/lib/storage/objectStore';
 import { nanoid } from 'nanoid';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 
@@ -116,9 +116,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const blob = await put(blobPath, buffer, {
+    const blob = await putPublicObject(blobPath, buffer, {
       contentType: file.type,
-      access: 'public',
+      origin: requestOrigin(request),
     });
 
     const asset: MediaAsset = {
@@ -226,7 +226,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     try {
-      await del(asset.url);
+      await deletePublicObject(asset.url);
     } catch {
       console.warn('[Media API] Blob file not found or already deleted, continuing with Firestore delete');
     }

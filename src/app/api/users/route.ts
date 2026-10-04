@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
+import { isPremiumActive } from '@/lib/plans/premium';
 
 function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
   if (clientUserId && typeof clientUserId === 'string' && clientUserId !== uid) {
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
         name: userData?.name,
         email: userData?.email || authUser.email,
         avatar: userData?.avatar,
-        isPremium: userData?.isPremium || false,
+        isPremium: isPremiumActive(userData),
         certificatesGenerated: userData?.certificatesGenerated || 0,
       },
     });

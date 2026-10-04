@@ -13,6 +13,8 @@ import { useFabricContext } from './FabricContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
+import { exportCanvasImage } from '@/lib/fabric/exportQuality';
+import { A4_LANDSCAPE } from '@/lib/fabric/useFabric';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, AlertCircle, X, PanelLeftOpen, PanelRightOpen, Palette, Database } from 'lucide-react';
 
@@ -181,26 +183,43 @@ export function EditorLayout() {
         return { success: false, error: errorMsg };
       }
       const canvasJSON = JSON.stringify(json);
-      const thumbnailRef = fabricInstance.getCanvas()?.toDataURL({ format: 'png', multiplier: 0.5 });
+      // The certificate area only, without the editor's print-boundary guide
+      // or the current zoom; JPEG keeps the template document small.
+      const editorCanvas = fabricInstance.getCanvas();
+      const thumbnailRef = editorCanvas
+        ? exportCanvasImage(editorCanvas, { format: 'jpeg', quality: 0.85, multiplier: 0.5, width: A4_LANDSCAPE.width, height: A4_LANDSCAPE.height })
+        : undefined;
       
       const method = templateId ? 'PUT' : 'POST';
       const url = templateId ? `/api/templates/${templateId}` : '/api/templates';
-      
-      const res = await authenticatedFetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: templateName,
-          canvasJSON,
-          thumbnail: thumbnailRef,
-          userId: user.id,
-          certificateMetadata,
-          category: certificateMetadata.category,
-        }),
-      });
-      
-      const data = await res.json();
-      
+
+      const send = async (name: string) => {
+        const response = await authenticatedFetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            canvasJSON,
+            thumbnail: thumbnailRef,
+            userId: user.id,
+            certificateMetadata,
+            category: certificateMetadata.category,
+          }),
+        });
+        return response.json();
+      };
+
+      let savedName = templateName;
+      let data = await send(savedName);
+      // A new template (including a copy of a gallery template opened again)
+      // takes the next free name instead of failing; renaming an existing
+      // template to a taken name still reports the conflict.
+      for (let attempt = 2; !templateId && data.code === 'DUPLICATE_NAME' && attempt <= 20; attempt += 1) {
+        savedName = `${templateName} (${attempt})`;
+        data = await send(savedName);
+      }
+      if (savedName !== templateName && data.success) setTemplateName(savedName);
+
       if (data.success) {
         setSaveStatus('saved');
         setIsDirty(false);
@@ -208,7 +227,7 @@ export function EditorLayout() {
         // Check both data.id and data.template?.id for new templates
         const newTemplateId = data.id || data.template?.id;
         if (newTemplateId && !templateId) {
-          setTemplateInfo(newTemplateId, templateName);
+          setTemplateInfo(newTemplateId, savedName);
           // Update URL without reload
           window.history.pushState({}, '', `/editor?template=${newTemplateId}`);
         }
@@ -227,7 +246,7 @@ export function EditorLayout() {
       setSaveErrorMessage(errorMsg);
       return { success: false, error: errorMsg };
     }
-  }, [fabricInstance, user, templateId, templateName, certificateMetadata, setTemplateInfo, setIsDirty]);
+  }, [fabricInstance, user, templateId, templateName, certificateMetadata, setTemplateInfo, setTemplateName, setIsDirty]);
 
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">

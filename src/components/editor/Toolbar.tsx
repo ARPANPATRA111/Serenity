@@ -60,7 +60,8 @@ import { ColorPicker } from '@/components/ui/ColorPicker';
 import { SerenityMark } from '@/components/brand/SerenityBrand';
 import { ToolPanel, ToolPanelItem, ToolPanelDivider, ToolPanelSection } from './ToolPanel';
 import { useAuth } from '@/contexts/AuthContext';
-import { createQRCodeImage, findQRCodeImage } from '@/lib/fabric';
+import { createQRCodeImage, findQRCodeImage, A4_LANDSCAPE } from '@/lib/fabric';
+import { exportCanvasImage, QR_LOGICAL_SIZE } from '@/lib/fabric/exportQuality';
 
 interface ToolbarProps {
   onSave?: () => Promise<{ success: boolean; error?: string } | void>;
@@ -318,8 +319,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     // Create a placeholder QR code with a sample verification ID
     const placeholderVerificationId = 'sample-verification-id';
     try {
+      // Created at the logical size the generator prints, so the editor shows
+      // the QR at exactly the size it will appear on certificates.
       const qrImage = await createQRCodeImage(placeholderVerificationId, {
-        size: 100,
+        size: QR_LOGICAL_SIZE,
       });
       
       // Position it in the bottom-right area of the canvas
@@ -759,10 +762,11 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
     const canvas = fabricInstance?.getCanvas();
     if (!canvas) return;
 
-    const dataUrl = canvas.toDataURL({
+    const dataUrl = exportCanvasImage(canvas, {
       format: 'png',
-      quality: 1,
       multiplier: 2,
+      width: A4_LANDSCAPE.width,
+      height: A4_LANDSCAPE.height,
     });
 
     const a = document.createElement('a');

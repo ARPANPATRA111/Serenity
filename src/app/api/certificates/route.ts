@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { createLogger, getErrorDetails } from '@/lib/logger';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
-import { FieldPath, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { toIsoDate } from '@/lib/dates';
-import { isSafeCertificateMediaUrl } from '@/lib/security/mediaUrl';
 import { getEvent } from '@/lib/firebase/events';
 import { FREE_CERTIFICATE_LIMIT } from '@/lib/plans/certificateLimits';
+import { isPremiumActive } from '@/lib/plans/premium';
+import {
+  MAX_CERTIFICATES_PER_REQUEST,
+  sanitizeCertificateInput,
+  type CertificateInput,
+} from '@/lib/certificates/record';
 
 const logger = createLogger('Certificates.API');
 
@@ -168,6 +173,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
+
+interface BatchSummary {
+  id: string;
+  newCertificates: number;
+  newWithEmail: number;
+  sample: CertificateInput;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authUser = await verifyAuth(request);
@@ -175,43 +188,48 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse();
     }
 
-    const body = await request.json();
-    const { certificates } = body;
+    const body = await request.json().catch(() => null);
+    const submitted: unknown = body?.certificates;
 
-    if (!certificates || !Array.isArray(certificates) || certificates.length === 0) {
+    if (!Array.isArray(submitted) || submitted.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Certificates array is required' },
         { status: 400 }
       );
     }
 
+    if (submitted.length > MAX_CERTIFICATES_PER_REQUEST) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `At most ${MAX_CERTIFICATES_PER_REQUEST} certificates can be saved per request`,
+          code: 'BATCH_TOO_LARGE',
+        },
+        { status: 413 },
+      );
+    }
+
+    const certificates: CertificateInput[] = [];
     const seenCertificateIds = new Set<string>();
-    for (const cert of certificates) {
-      if (!cert?.id || typeof cert.id !== 'string') {
-        return NextResponse.json(
-          { success: false, error: 'Each certificate must include an id' },
-          { status: 400 }
-        );
+    for (const raw of submitted) {
+      const claimedOwner = (raw as { userId?: unknown } | null)?.userId;
+      if (claimedOwner && claimedOwner !== authUser.uid) {
+        return forbiddenResponse('Authenticated user does not match certificate user ID');
       }
 
-      if (seenCertificateIds.has(cert.id)) {
+      const sanitized = sanitizeCertificateInput(raw);
+      if (!sanitized.ok) {
+        return NextResponse.json({ success: false, error: sanitized.error }, { status: 400 });
+      }
+
+      if (seenCertificateIds.has(sanitized.value.id)) {
         return NextResponse.json(
           { success: false, error: 'Duplicate certificate id in request' },
           { status: 400 }
         );
       }
-      seenCertificateIds.add(cert.id);
-
-      if (cert.userId && cert.userId !== authUser.uid) {
-        return forbiddenResponse('Authenticated user does not match certificate user ID');
-      }
-
-      if (cert.certificateImage && !isSafeCertificateMediaUrl(cert.certificateImage)) {
-        return NextResponse.json(
-          { success: false, error: 'Certificate image URL is not from an approved media host' },
-          { status: 400 },
-        );
-      }
+      seenCertificateIds.add(sanitized.value.id);
+      certificates.push(sanitized.value);
     }
 
     const linkedEventIds = Array.from(new Set(
@@ -227,8 +245,14 @@ export async function POST(request: NextRequest) {
     const db = getAdminFirestore();
     const userId = authUser.uid;
 
-    const certRefs = certificates.map(cert => db.collection('certificates').doc(cert.id));
+    const certRefs = certificates.map((certificate) => db.collection('certificates').doc(certificate.id));
     const userRef = db.collection('users').doc(userId);
+    const batchIds = Array.from(new Set(
+      certificates
+        .map((certificate) => certificate.generationBatchId)
+        .filter((batchId): batchId is string => typeof batchId === 'string'),
+    ));
+    const batchRefs = batchIds.map((batchId) => db.collection('generationBatches').doc(batchId));
 
     // Reconcile legacy counters before entering the transaction. The user document
     // write below serializes concurrent generation requests from this point onward.
@@ -240,11 +264,15 @@ export async function POST(request: NextRequest) {
 
     const results: string[] = [];
     try {
-      await db.runTransaction(async transaction => {
-        const userDoc = await transaction.get(userRef);
-        const existingCertDocs = await Promise.all(certRefs.map(ref => transaction.get(ref)));
+      await db.runTransaction(async (transaction) => {
+        results.length = 0;
+        // One round trip for the owner, every certificate, and every batch summary.
+        const snapshots = await transaction.getAll(userRef, ...certRefs, ...batchRefs);
+        const userDoc = snapshots[0];
+        const existingCertDocs = snapshots.slice(1, 1 + certRefs.length);
+        const existingBatchDocs = snapshots.slice(1 + certRefs.length);
         const userData = userDoc.data();
-        const isPremium = userData?.isPremium === true;
+        const isPremium = isPremiumActive(userData);
 
         for (const existingDoc of existingCertDocs) {
           if (existingDoc.exists && existingDoc.data()?.userId !== userId) {
@@ -252,7 +280,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const newCertificateCount = existingCertDocs.filter(doc => !doc.exists).length;
+        const newCertificateCount = existingCertDocs.filter((doc) => !doc.exists).length;
         const storedCount = typeof userData?.certificatesGenerated === 'number'
           ? userData.certificatesGenerated
           : 0;
@@ -264,22 +292,71 @@ export async function POST(request: NextRequest) {
         }
 
         const timestamp = Timestamp.now();
-        certificates.forEach((cert, index) => {
-          const existingCreatedAt = existingCertDocs[index].data()?.createdAt;
+        // Production records store `createdAt` as an ISO string, and history
+        // orders by it. Mixing Timestamps in would sort every older record
+        // above the new ones, so new records keep the established type.
+        const createdAtIso = timestamp.toDate().toISOString();
+        const summaries = new Map<string, BatchSummary>();
+
+        certificates.forEach((certificate, index) => {
+          const existing = existingCertDocs[index].data();
           transaction.set(certRefs[index], {
-            ...cert,
+            ...certificate,
             userId,
+            // Server-owned fields: preserved on retries, never client-supplied.
+            isActive: existing?.isActive ?? true,
+            viewCount: typeof existing?.viewCount === 'number' ? existing.viewCount : 0,
+            ...(existing?.emailStatus ? { emailStatus: existing.emailStatus } : {}),
+            ...(existing?.emailSentAt ? { emailSentAt: existing.emailSentAt } : {}),
             generationStatus: 'saved',
             savedAt: timestamp,
-            createdAt: existingCreatedAt || timestamp,
+            createdAt: existing?.createdAt || createdAtIso,
             updatedAt: timestamp,
           });
-          results.push(cert.id);
+          results.push(certificate.id);
+
+          if (certificate.generationBatchId) {
+            const summary = summaries.get(certificate.generationBatchId) || {
+              id: certificate.generationBatchId,
+              newCertificates: 0,
+              newWithEmail: 0,
+              sample: certificate,
+            };
+            if (!existingCertDocs[index].exists) {
+              summary.newCertificates += 1;
+              if (certificate.recipientEmail) summary.newWithEmail += 1;
+            }
+            if (!summary.sample.certificateImage && certificate.certificateImage) summary.sample = certificate;
+            summaries.set(certificate.generationBatchId, summary);
+          }
+        });
+
+        // One small summary document per generation batch lets the operator
+        // console list batches without scanning certificates.
+        batchIds.forEach((batchId, index) => {
+          const summary = summaries.get(batchId);
+          const existingBatch = existingBatchDocs[index];
+          if (!summary) return;
+          if (existingBatch.exists && existingBatch.data()?.userId !== userId) return;
+          transaction.set(batchRefs[index], {
+            id: batchId,
+            userId,
+            templateId: summary.sample.templateId,
+            templateName: summary.sample.templateName,
+            title: summary.sample.title,
+            issuerName: summary.sample.issuerName,
+            ...(summary.sample.certificateImage ? { sampleImage: summary.sample.certificateImage } : {}),
+            certificateCount: FieldValue.increment(summary.newCertificates),
+            recipientsWithEmail: FieldValue.increment(summary.newWithEmail),
+            createdAt: existingBatch.data()?.createdAt || createdAtIso,
+            updatedAt: createdAtIso,
+          }, { merge: true });
         });
 
         transaction.set(userRef, {
           certificatesGenerated: newTotal,
           lastGeneratedAt: timestamp,
+          ...(userData?.firstGeneratedAt ? {} : { firstGeneratedAt: timestamp }),
         }, { merge: true });
       });
     } catch (error) {
@@ -295,10 +372,11 @@ export async function POST(request: NextRequest) {
           remaining,
         }, { status: 403 });
       }
-      console.error('[API/certificates] Batch write failed:', error);
+      logger.error('Batch write failed', { userId, error: getErrorDetails(error) });
       return NextResponse.json({
         success: false,
         error: 'Failed to save certificates',
+        retryable: true,
       }, { status: 500 });
     }
 
@@ -309,9 +387,9 @@ export async function POST(request: NextRequest) {
       failed: 0,
     });
   } catch (error) {
-    console.error('[API/certificates] POST Error:', error);
+    logger.error('POST failed', { error: getErrorDetails(error) });
     return NextResponse.json(
-      { success: false, error: 'Failed to create certificates' },
+      { success: false, error: 'Failed to create certificates', retryable: true },
       { status: 500 }
     );
   }

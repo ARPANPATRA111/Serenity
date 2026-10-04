@@ -4,7 +4,9 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { fabric } from 'fabric';
 import { useEditorStore } from '@/store/editorStore';
 import { registerVariableTextbox, createVariableTextbox, isVariableTextbox } from './VariableTextbox';
-import { registerQRCodeImageType } from './QRCodeImage';
+import { normalizeQRCodeImages, registerQRCodeImageType } from './QRCodeImage';
+import { exportCanvasImage } from './exportQuality';
+import { normalizeTemplateJSON } from './templateNormalization';
 import { debounce } from '@/lib/utils';
 import { installAlignmentGuides } from './alignmentGuides';
 
@@ -12,6 +14,9 @@ import { installAlignmentGuides } from './alignmentGuides';
 const CANVAS_AUTOSAVE_KEY = 'serenity_canvas_autosave';
 const HISTORY_LIMIT = 50;
 const AUTOSAVE_DEBOUNCE_MS = 300;
+// Fabric 5 never serialises `editable`, but the template invariants (checked
+// before every save, in the editor and by the templates API) require the
+// verification URL to be stored as non-editable. Without it every save failed.
 const HISTORY_JSON_PROPS = [
   'dynamicKey',
   'isPlaceholder',
@@ -19,6 +24,7 @@ const HISTORY_JSON_PROPS = [
   'isVerificationUrl',
   'isClickableLink',
   'isLocked',
+  'editable',
 ] as const;
 const EXPORT_JSON_PROPS = [...HISTORY_JSON_PROPS, 'isBoundary'] as const;
 
@@ -52,6 +58,17 @@ export const A4_LANDSCAPE = {
 
 // High DPI multiplier for print quality (72 DPI -> 300 DPI)
 export const HIGH_DPI_MULTIPLIER = 4.166;
+
+/**
+ * A circle only offers corner handles, so resizing keeps it round; the
+ * separate Ellipse tool covers ovals. Control visibility is not serialised,
+ * so it is re-applied whenever a template loads.
+ */
+function keepCirclesCircular(object: fabric.Object) {
+  if (object.type === 'circle') {
+    object.setControlsVisibility({ mt: false, mb: false, ml: false, mr: false });
+  }
+}
 
 export function useFabric(
   canvasRef: React.RefObject<HTMLCanvasElement>,
@@ -849,6 +866,7 @@ export function useFabric(
           width: 100,
           height: 100,
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -863,6 +881,7 @@ export function useFabric(
           rx: 15,
           ry: 15,
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -874,6 +893,7 @@ export function useFabric(
           originY: 'center',
           radius: 50,
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -886,6 +906,7 @@ export function useFabric(
           width: 100,
           height: 100,
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -932,6 +953,7 @@ export function useFabric(
           originX: 'center',
           originY: 'center',
           fill: '#f59e0b',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -943,6 +965,7 @@ export function useFabric(
           originX: 'center',
           originY: 'center',
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -954,6 +977,7 @@ export function useFabric(
           originX: 'center',
           originY: 'center',
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -974,6 +998,7 @@ export function useFabric(
           originX: 'center',
           originY: 'center',
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -990,6 +1015,7 @@ export function useFabric(
           originX: 'center',
           originY: 'center',
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -1002,6 +1028,7 @@ export function useFabric(
           rx: 70,
           ry: 45,
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -1015,6 +1042,7 @@ export function useFabric(
           fill: '#ef4444',
           scaleX: 1,
           scaleY: 1,
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -1034,6 +1062,7 @@ export function useFabric(
           originX: 'center',
           originY: 'center',
           fill: '#3b82f6',
+          strokeUniform: true,
           ...options,
         });
         break;
@@ -1042,6 +1071,7 @@ export function useFabric(
         return null;
     }
 
+    keepCirclesCircular(shape);
     fabricRef.current.add(shape);
     fabricRef.current.setActiveObject(shape);
     fabricRef.current.requestRenderAll();
@@ -1293,17 +1323,9 @@ export function useFabric(
         return;
       }
 
-      const data = typeof json === 'string' ? JSON.parse(json) : json;
-      
-      // Fix textBaseline issue in loaded templates (Fabric.js uses 'alphabetical' but browsers expect 'alphabetic')
-      if (data.objects) {
-        data.objects = data.objects.map((obj: any) => {
-          if (obj.textBaseline === 'alphabetical') {
-            obj.textBaseline = 'alphabetic';
-          }
-          return obj;
-        });
-      }
+      // Repairs hand-written templates (missing text styles, untyped
+      // placeholders, the textBaseline typo) so they can be saved and generated.
+      const data = normalizeTemplateJSON(json as string | { objects?: unknown[] }) as any;
       
       isHistoryActionRef.current = true;
       fabricRef.current.loadFromJSON(data, () => {
@@ -1326,11 +1348,14 @@ export function useFabric(
                 cornerColor: '#dc2626',
                 editable: false, // Prevent text editing
               });
+              // Templates saved before the flag existed are locked on load.
+              obj.isLocked = true;
             }
             // Prevent editing of dynamic variable textboxes
             if (obj.dynamicKey) {
               obj.set({ editable: false });
             }
+            keepCirclesCircular(obj);
             // Fix textBaseline for any remaining objects
             if (obj.textBaseline === 'alphabetical') {
               obj.set({ textBaseline: 'alphabetic' });
@@ -1427,39 +1452,34 @@ export function useFabric(
           
           fabricRef.current.requestRenderAll();
         }
+
+        const finishLoad = () => {
+          if (fabricRef.current) {
+            const baseline = serializeCanvas(fabricRef.current);
+            historyRef.current = [baseline];
+            historyIndexRef.current = 0;
+            setHistoryState(false, false, 0, 1);
+            autoSaveToLocalStorage(baseline);
+          }
+          isHistoryActionRef.current = false;
+          resolve();
+        };
+
+        // Show older QR codes at their printed size before the history
+        // baseline is taken, so undo never brings back the old size.
         if (fabricRef.current) {
-          const baseline = serializeCanvas(fabricRef.current);
-          historyRef.current = [baseline];
-          historyIndexRef.current = 0;
-          setHistoryState(false, false, 0, 1);
-          autoSaveToLocalStorage(baseline);
+          void normalizeQRCodeImages(fabricRef.current).catch(() => 0).finally(finishLoad);
+        } else {
+          finishLoad();
         }
-        isHistoryActionRef.current = false;
-        resolve();
       });
     });
   }, [width, height, backgroundColor, setHistoryState, autoSaveToLocalStorage]);
 
   const toHighDPIDataURL = useCallback((multiplier: number = HIGH_DPI_MULTIPLIER): string => {
     if (!fabricRef.current) return '';
-    
-    // Temporarily hide boundary for export
-    const objects = fabricRef.current.getObjects();
-    const boundaryObjects = objects.filter((obj: any) => obj.isBoundary);
-    boundaryObjects.forEach((obj: fabric.Object) => obj.set('visible', false));
-    
-    const dataUrl = fabricRef.current.toDataURL({
-      format: 'png',
-      quality: 1,
-      multiplier,
-    });
-    
-    // Restore boundary visibility
-    boundaryObjects.forEach((obj: fabric.Object) => obj.set('visible', true));
-    fabricRef.current.requestRenderAll();
-    
-    return dataUrl;
-  }, []);
+    return exportCanvasImage(fabricRef.current, { format: 'png', multiplier, width, height });
+  }, [width, height]);
 
   const clear = useCallback(() => {
     if (!fabricRef.current) return;

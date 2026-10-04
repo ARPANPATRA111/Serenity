@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
     const duplicateName = await findTemplateByNormalizedName(authUser.uid, name);
     if (duplicateName) {
       return NextResponse.json(
-        { success: false, error: `A template named "${name}" already exists. Please choose a different name.` },
+        { success: false, error: `A template named "${name}" already exists. Please choose a different name.`, code: 'DUPLICATE_NAME' },
         { status: 400 }
       );
     }

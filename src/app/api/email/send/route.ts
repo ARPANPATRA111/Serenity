@@ -7,6 +7,8 @@ import { createLogger, getErrorDetails } from '@/lib/logger';
 import { buildVerificationUrl } from '@/lib/verification/url';
 import { isSafeCertificateMediaUrl } from '@/lib/security/mediaUrl';
 import nodemailer from 'nodemailer';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const logger = createLogger('Email.Send');
 const MAX_ATTACHMENT_BASE64_LENGTH = 8_000_000;
@@ -62,18 +64,30 @@ async function sendEmailWithBrevo(payload: BrevoEmailPayload): Promise<{ message
   return { messageId: result.messageId || `brevo_${Date.now()}` };
 }
 
-async function sendEmail(payload: BrevoEmailPayload): Promise<{ messageId: string }> {
-  if (process.env.EMAIL_TRANSPORT !== 'mailpit') return sendEmailWithBrevo(payload);
+const LOCAL_TRANSPORTS = new Set(['mailpit', 'json']);
 
-  if (process.env.USE_FIREBASE_EMULATORS !== 'true') {
-    throw new Error('Mailpit transport is restricted to the isolated emulator environment');
+async function sendEmail(payload: BrevoEmailPayload): Promise<{ messageId: string }> {
+  const transportName = process.env.EMAIL_TRANSPORT || '';
+  const emulatorMode = process.env.USE_FIREBASE_EMULATORS === 'true';
+
+  // `.env.local` carries the production Brevo key and Next.js loads it even
+  // in emulator mode, so emulator mode must never fall through to Brevo.
+  if (emulatorMode && !LOCAL_TRANSPORTS.has(transportName)) {
+    throw new Error('Emulator mode only supports the local mailpit or json email transports');
+  }
+  if (!LOCAL_TRANSPORTS.has(transportName)) return sendEmailWithBrevo(payload);
+
+  if (!emulatorMode) {
+    throw new Error('Local email transports are restricted to the isolated emulator environment');
   }
 
-  const transport = nodemailer.createTransport({
-    host: process.env.MAILPIT_HOST || '127.0.0.1',
-    port: Number(process.env.MAILPIT_PORT || 1025),
-    secure: false,
-  });
+  const transport = transportName === 'json'
+    ? nodemailer.createTransport({ jsonTransport: true })
+    : nodemailer.createTransport({
+        host: process.env.MAILPIT_HOST || '127.0.0.1',
+        port: Number(process.env.MAILPIT_PORT || 1025),
+        secure: false,
+      });
   const result = await transport.sendMail({
     from: { name: payload.sender.name, address: payload.sender.email },
     to: payload.to.map((recipient) => ({ name: recipient.name || '', address: recipient.email })),
@@ -84,6 +98,24 @@ async function sendEmail(payload: BrevoEmailPayload): Promise<{ messageId: strin
       content: Buffer.from(attachment.content, 'base64'),
     })),
   });
+
+  if (transportName === 'json') {
+    // Emulator-only outbox so automated tests can inspect what would be sent.
+    const outbox = path.join(process.cwd(), '.local-object-store', 'outbox');
+    await mkdir(outbox, { recursive: true });
+    const fileName = `${Date.now()}-${String(result.messageId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`;
+    await writeFile(path.join(outbox, fileName), JSON.stringify({
+      messageId: result.messageId,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.htmlContent,
+      attachments: (payload.attachment || []).map((attachment) => ({
+        filename: attachment.name,
+        bytes: Buffer.byteLength(attachment.content, 'base64'),
+      })),
+    }, null, 2));
+  }
+
   return { messageId: result.messageId };
 }
 
@@ -96,6 +128,7 @@ interface SendEmailRequest {
   certificateTitle: string;
   issuerName: string;
   verifyUrl: string;
+  hasAttachment?: boolean;
 }
 
 async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
@@ -186,7 +219,9 @@ function generateEmailHTML(data: SendEmailRequest): string {
               <p style="margin: 0 0 30px; color: #64748b; font-size: 16px; line-height: 1.6;">
                 Your certificate includes a unique verification link. Anyone can use it to confirm the authenticity of your achievement.
                 <br><br>
-                <strong style="color: #1e293b;">📎 Your certificate PDF is attached to this email</strong> for easy download and sharing.
+                ${data.hasAttachment === false
+                  ? '<strong style="color: #1e293b;">Open your certificate with the button below.</strong> You can view, share, and download it from its verification page.'
+                  : '<strong style="color: #1e293b;">📎 Your certificate is attached to this email</strong> for easy download and sharing.'}
               </p>
               
               <!-- CTA Button -->
@@ -427,6 +462,12 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Build the body last so it only promises an attachment that is present.
+      brevoPayload.htmlContent = generateEmailHTML({
+        ...emailData,
+        hasAttachment: !!brevoPayload.attachment?.length,
+      });
+
       const info = await sendEmail(brevoPayload);
 
       await db.collection('emailLogs').add({
@@ -446,6 +487,8 @@ export async function POST(request: NextRequest) {
             emailSentAt: FieldValue.serverTimestamp(),
             recipientEmail: to,
             emailError: null,
+            emailMessageId: info.messageId,
+            emailHadAttachment: !!(brevoPayload.attachment && brevoPayload.attachment.length > 0),
           });
         } catch (updateError) {
           logger.warn('Failed to update certificate email status', { requestId, certificateId }, updateError as Error);

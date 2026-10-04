@@ -1,6 +1,6 @@
 export {
   generateBatch,
-  generateSingleCertificate,
+  retryCertificatePersistence,
   downloadZip,
   type BatchGenerationOptions,
   type BatchGenerationResult,
