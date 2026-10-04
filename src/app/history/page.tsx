@@ -28,6 +28,7 @@ import { authenticatedFetch } from '@/lib/api/authFetch';
 import { getIdToken } from '@/lib/firebase/client';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { plural } from '@/lib/utils';
+import type { CertificateStats } from '@/lib/certificates/stats';
 
 interface CertificateRecord {
   id: string;
@@ -65,6 +66,8 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  // Exact account totals from the first page; null if unavailable.
+  const [accountStats, setAccountStats] = useState<CertificateStats | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
@@ -101,6 +104,7 @@ export default function HistoryPage() {
       if (response.ok) {
         const data = await response.json();
         setCertificates(data.items || data.certificates || []);
+        setAccountStats(data.stats || null);
         setNextCursor(data.nextCursor || null);
         setHasMore(data.hasMore === true);
         setLoadError(null);
@@ -274,6 +278,14 @@ export default function HistoryPage() {
 
       if (data.success) {
         setResendModal(prev => ({ ...prev, sending: false, success: true }));
+        // Keep the account totals in step with the resent certificate.
+        setAccountStats(stats => stats && cert.emailStatus !== 'sent'
+          ? {
+            ...stats,
+            emailsSent: stats.emailsSent + 1,
+            emailsFailed: Math.max(0, stats.emailsFailed - (cert.emailStatus === 'failed' ? 1 : 0)),
+          }
+          : stats);
         // Update local state
         setCertificates(prev => prev.map(c => 
           c.id === cert.id 
@@ -315,13 +327,18 @@ export default function HistoryPage() {
     }
   };
 
-  const totalStats = useMemo(() => ({
-    total: certificates.length,
-    sent: certificates.filter(c => c.emailStatus === 'sent').length,
-    failed: certificates.filter(c => c.emailStatus === 'failed').length,
-    notSent: certificates.filter(c => c.emailStatus === 'not_sent').length,
-    totalViews: certificates.reduce((sum, c) => sum + c.viewCount, 0),
-  }), [certificates]);
+  const totalStats = useMemo(() => {
+    const loaded = {
+      total: certificates.length,
+      sent: certificates.filter(c => c.emailStatus === 'sent').length,
+      failed: certificates.filter(c => c.emailStatus === 'failed').length,
+      totalViews: certificates.reduce((sum, c) => sum + c.viewCount, 0),
+    };
+    // Exact totals for the whole account when the server provided them.
+    return accountStats
+      ? { total: accountStats.totalCertificates, sent: accountStats.emailsSent, failed: accountStats.emailsFailed, totalViews: accountStats.totalViews }
+      : loaded;
+  }, [certificates, accountStats]);
 
   return (
     <div className="app-shell min-h-screen bg-background">

@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 import { toIsoDate } from '@/lib/dates';
 import { unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
+import { getCertificateStats } from '@/lib/certificates/stats';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('DashboardSummary');
+
+// Only the fields the dashboard shows: a template's design (canvasJSON) can be
+// hundreds of kilobytes and was downloaded for every card.
+const TEMPLATE_FIELDS = ['name', 'thumbnail', 'createdAt', 'updatedAt', 'certificateCount', 'isPublic', 'publicationStatus', 'creatorName', 'stars'];
+const CERTIFICATE_FIELDS = ['generationBatchId', 'batchId', 'recipientName', 'title', 'issuerName', 'issuedAt', 'templateId', 'templateName', 'isActive', 'viewCount', 'createdAt', 'emailStatus'];
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,17 +25,24 @@ export async function GET(request: NextRequest) {
     const certificateLimit = Math.min(Math.max(Number(searchParams.get('certificateLimit')) || 12, 1), 25);
     const db = getAdminFirestore();
 
-    const [templatesSnapshot, certificatesSnapshot] = await Promise.all([
+    const [templatesSnapshot, certificatesSnapshot, stats] = await Promise.all([
       db.collection('templates')
         .where('userId', '==', authUser.uid)
         .orderBy('updatedAt', 'desc')
+        .select(...TEMPLATE_FIELDS)
         .limit(templateLimit)
         .get(),
       db.collection('certificates')
         .where('userId', '==', authUser.uid)
         .orderBy('createdAt', 'desc')
+        .select(...CERTIFICATE_FIELDS)
         .limit(certificateLimit)
         .get(),
+      // Exact account totals; the page falls back to the recent list if unavailable.
+      getCertificateStats(db, authUser.uid).catch((error) => {
+        logger.warn('Account totals unavailable', { code: String((error as { code?: unknown })?.code ?? 'unknown') });
+        return null;
+      }),
     ]);
 
     const templates = templatesSnapshot.docs.map((document) => {
@@ -69,6 +85,7 @@ export async function GET(request: NextRequest) {
       success: true,
       recentTemplates: templates,
       recentCertificates: certificates,
+      stats,
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error: any) {
     const isMissingIndex = error?.code === 9 || error?.code === 'failed-precondition';

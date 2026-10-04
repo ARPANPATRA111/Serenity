@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   createTemplate,
   getUserTemplates,
-  getPublicTemplates,
   searchTemplates,
   findTemplateByNormalizedName,
   updateTemplate,
@@ -11,17 +10,16 @@ import {
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
 import { getEvent } from '@/lib/firebase/events';
+import { searchCuratedTemplates } from '@/lib/templates/curatedPublicTemplates';
 import {
-  mergeWithCuratedTemplates,
-  searchCuratedTemplates,
-} from '@/lib/templates/curatedPublicTemplates';
+  affectsPublicGallery,
+  getCachedPublicTemplates,
+  invalidatePublicTemplates,
+  sanitizePublicTemplate,
+} from '@/lib/templates/publicTemplateCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// In-memory cache for public templates (refreshes every 60 seconds)
-let publicTemplatesCache: { templates: Template[]; timestamp: number } | null = null;
-const CACHE_TTL = 60 * 1000; // 60 seconds
 
 function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
   if (clientUserId && typeof clientUserId === 'string' && clientUserId !== uid) {
@@ -29,14 +27,6 @@ function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
   }
 
   return null;
-}
-
-function sanitizePublicTemplate(template: Template, includeCanvasJSON = false): Template {
-  const { creatorEmail, userId, canvasJSON, ...safeTemplate } = template;
-  return {
-    ...safeTemplate,
-    canvasJSON: includeCanvasJSON ? canvasJSON : '',
-  } as Template;
 }
 
 function filterOwnedTemplates(templates: Template[], query: string): Template[] {
@@ -79,18 +69,8 @@ export async function GET(request: NextRequest) {
             ...searchCuratedTemplates(searchQuery).filter(template => !existingIds.has(template.id)),
           ].slice(0, limit);
         } else {
-          const now = Date.now();
-          if (publicTemplatesCache && (now - publicTemplatesCache.timestamp) < CACHE_TTL) {
-            templates = publicTemplatesCache.templates.slice(0, limit);
-          } else {
-            templates = await getPublicTemplates(limit);
-            templates = mergeWithCuratedTemplates(
-              templates.map(template => sanitizePublicTemplate(template)),
-              limit,
-            ).map(template => sanitizePublicTemplate(template));
-            publicTemplatesCache = { templates, timestamp: now };
-          }
-          headers['Cache-Control'] = 'public, s-maxage=60, stale-while-revalidate=120';
+          templates = await getCachedPublicTemplates(limit);
+          headers['Cache-Control'] = 'public, s-maxage=300, stale-while-revalidate=3600';
         }
       } else {
         const authUser = await verifyAuth(request);
@@ -216,6 +196,8 @@ export async function POST(request: NextRequest) {
         publicationRequestedAt: template.publicationRequestedAt,
       });
     }
+
+    if (affectsPublicGallery(template)) invalidatePublicTemplates();
 
     return NextResponse.json({
       success: true,

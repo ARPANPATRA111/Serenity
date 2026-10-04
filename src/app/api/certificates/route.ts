@@ -7,6 +7,7 @@ import { toIsoDate } from '@/lib/dates';
 import { getEvent } from '@/lib/firebase/events';
 import { FREE_CERTIFICATE_LIMIT } from '@/lib/plans/certificateLimits';
 import { isPremiumActive } from '@/lib/plans/premium';
+import { getCertificateStats } from '@/lib/certificates/stats';
 import {
   MAX_CERTIFICATES_PER_REQUEST,
   sanitizeCertificateInput,
@@ -109,6 +110,15 @@ export async function GET(request: NextRequest) {
       query = query.startAfter(cursor.createdAt, cursor.id);
     }
 
+    // Account totals ride along with the first page only; History falls back
+    // to counting the loaded records if they are unavailable.
+    const statsPromise = cursor
+      ? Promise.resolve(undefined)
+      : getCertificateStats(db, userId).catch((error) => {
+        logger.warn('Account totals unavailable', { userId, errorCode: String(error?.code ?? 'unknown') });
+        return null;
+      });
+
     let snapshot: FirebaseFirestore.QuerySnapshot;
     try {
       snapshot = await query.limit(pageSize + 1).get();
@@ -156,12 +166,14 @@ export async function GET(request: NextRequest) {
       : null;
 
     logger.debug('Fetched certificates', { userId, count: certificates.length });
+    const stats = await statsPromise;
     return NextResponse.json({
       success: true,
       items: certificates,
       certificates,
       nextCursor,
       hasMore,
+      ...(stats !== undefined ? { stats } : {}),
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     const errorDetails = getErrorDetails(error);

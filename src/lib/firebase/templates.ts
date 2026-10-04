@@ -66,6 +66,17 @@ export interface UpdateTemplateInput {
 
 const COLLECTION = 'templates';
 
+/**
+ * Every listed template field except the design itself. Listings never return
+ * canvasJSON, and selecting fields keeps Firestore from sending it (a design
+ * can be hundreds of kilobytes) only to be discarded here.
+ */
+const LIST_FIELDS = [
+  'id', 'name', 'thumbnail', 'createdAt', 'updatedAt', 'certificateCount', 'userId', 'isPublic',
+  'creatorName', 'creatorEmail', 'stars', 'tags', 'category', 'certificateMetadata', 'normalizedName',
+  'schemaVersion', 'publicationStatus', 'publicationRequestedAt', 'publishedAt', 'reviewedAt', 'source',
+];
+
 export function normalizeTemplateName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
 }
@@ -176,14 +187,14 @@ export async function getUserTemplates(userId: string): Promise<Template[]> {
     const snapshot = await db
       .collection(COLLECTION)
       .where('userId', '==', userId)
+      .select(...LIST_FIELDS)
       .get();
     
-    // Sort in memory, exclude canvasJSON for performance
+    // Sort in memory; listings carry no canvasJSON
     return snapshot.docs
       .map(doc => {
         const data = doc.data() as Template;
-        const { canvasJSON, ...rest } = data;
-        return { ...rest, canvasJSON: '' } as Template;
+        return { ...data, id: data.id || doc.id, canvasJSON: '' } as Template;
       })
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   } catch (error) {
@@ -209,32 +220,34 @@ export async function findTemplateByNormalizedName(
 }
 
 export async function getPublicTemplates(limit: number = 50): Promise<Template[]> {
-  const db = getAdminFirestore();
-  
   try {
-    const snapshot = await db
-      .collection(COLLECTION)
-      .where('isPublic', '==', true)
-      .limit(limit)
-      .get();
-    
-    // Sort in memory by stars first, then by updatedAt
-    // Exclude canvasJSON to reduce payload size for listing
-    return snapshot.docs
-      .map(doc => {
-        const data = doc.data() as Template;
-        // Return template without canvasJSON for listing (it's large)
-        const { canvasJSON, ...rest } = data;
-        return { ...rest, canvasJSON: '' } as Template;
-      })
-      .sort((a, b) => {
-        if (b.stars !== a.stars) return b.stars - a.stars;
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      });
+    return await queryPublicTemplates(limit);
   } catch (error) {
     console.error('[Firebase Templates] Error getting public templates:', error);
     return [];
   }
+}
+
+/** Public templates, most-starred first; throws on failure (callers decide how to degrade). */
+export async function queryPublicTemplates(limit: number = 50): Promise<Template[]> {
+  const db = getAdminFirestore();
+  const snapshot = await db
+    .collection(COLLECTION)
+    .where('isPublic', '==', true)
+    .select(...LIST_FIELDS)
+    .limit(limit)
+    .get();
+
+  // Sort in memory by stars first, then by updatedAt; listings carry no canvasJSON
+  return snapshot.docs
+    .map(doc => {
+      const data = doc.data() as Template;
+      return { ...data, id: data.id || doc.id, canvasJSON: '' } as Template;
+    })
+    .sort((a, b) => {
+      if (b.stars !== a.stars) return b.stars - a.stars;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 }
 
 export async function searchTemplates(query: string, publicOnly: boolean = true): Promise<Template[]> {

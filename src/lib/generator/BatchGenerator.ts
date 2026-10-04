@@ -11,7 +11,7 @@ import {
   HIGH_DPI_MULTIPLIER,
   generateQRCodeDataURL,
 } from '@/lib/fabric';
-import { disableObjectCaching, qrPixelSize, QR_LOGICAL_SIZE, type EditorChromeCanvas } from '@/lib/fabric/exportQuality';
+import { canvasToDataURL, disableObjectCaching, qrPixelSize, QR_LOGICAL_SIZE, type EditorChromeCanvas } from '@/lib/fabric/exportQuality';
 import { normalizeTemplateJSON, substituteInlineTokens } from '@/lib/fabric/templateNormalization';
 import { yieldToMain } from '@/lib/utils';
 import { buildVerificationUrl } from '@/lib/verification/url';
@@ -76,6 +76,28 @@ export interface BatchGenerationResult {
 const YIELD_INTERVAL = 10;
 const UPLOAD_CONCURRENCY = 4;
 const THUMBNAIL_MULTIPLIER = 2;
+/**
+ * Preview encodings, tried in order until one fits the budget. Typical
+ * certificates are 50-120 KB at the first step; only photo-heavy designs step
+ * down. The budget keeps every preview well inside a Firestore document.
+ */
+const PREVIEW_ENCODINGS = [
+  { quality: 0.85, multiplier: THUMBNAIL_MULTIPLIER },
+  { quality: 0.7, multiplier: THUMBNAIL_MULTIPLIER },
+  { quality: 0.7, multiplier: 1.5 },
+  { quality: 0.6, multiplier: 1.25 },
+] as const;
+/** Base64 length of a ~700 KB image. */
+const PREVIEW_BUDGET_CHARACTERS = Math.ceil((700 * 1024 * 4) / 3);
+
+function capturePreview(canvas: fabric.StaticCanvas): string {
+  let dataURL = '';
+  for (const encoding of PREVIEW_ENCODINGS) {
+    dataURL = canvasToDataURL(canvas, { format: 'jpeg', ...encoding });
+    if (dataURL.length <= PREVIEW_BUDGET_CHARACTERS) break;
+  }
+  return dataURL;
+}
 
 function authHeaders(authToken?: string): Record<string, string> {
   return authToken ? { Authorization: `Bearer ${authToken}` } : {};
@@ -286,7 +308,7 @@ export async function generateBatch(
         updateVerificationUrlPlaceholder(staticCanvas, certificateId);
         const clickableLinks = collectClickableLinks(staticCanvas, certificateId);
 
-        const dataURL = staticCanvas.toDataURL({
+        const dataURL = canvasToDataURL(staticCanvas, {
           format: 'jpeg',
           quality: 0.92,
           multiplier: HIGH_DPI_MULTIPLIER,
@@ -304,7 +326,7 @@ export async function generateBatch(
         }
 
         if (outputFormat === 'png' || outputFormat === 'both') {
-          const pngDataURL = staticCanvas.toDataURL({
+          const pngDataURL = canvasToDataURL(staticCanvas, {
             format: 'png',
             quality: 1,
             multiplier: HIGH_DPI_MULTIPLIER,
@@ -316,11 +338,7 @@ export async function generateBatch(
         // Preview image for the verification page and history, captured while
         // the canvas holds this certificate. JPEG keeps photographic
         // backgrounds under the 2 MB upload limit that PNG could exceed.
-        const thumbnailDataURL = staticCanvas.toDataURL({
-          format: 'jpeg',
-          quality: 0.9,
-          multiplier: THUMBNAIL_MULTIPLIER,
-        });
+        const thumbnailDataURL = capturePreview(staticCanvas);
         uploads.push(() => uploadThumbnail(certificateId, thumbnailDataURL));
 
         const record: Partial<FirebaseCertificateRecord> = {

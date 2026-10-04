@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import JSZip from 'jszip';
@@ -200,9 +200,9 @@ test.describe('certificate generation', () => {
       expect(typeof record.createdAt).toBe('string');
       expect(record.isActive).toBe(true);
       expect(record.emailStatus).toBe('sent');
-      expect(record.certificateImage).toMatch(new RegExp(`^${baseURL}/api/dev-object/certificates/${USER.uid}/${id}\\.jpg$`));
-      // The preview went to the emulator-only object store, never to production Blob.
-      expect(existsSync(path.join(process.cwd(), '.local-object-store', 'objects', 'certificates', USER.uid, `${id}.jpg`))).toBe(true);
+      // The preview is stored in Firestore (never in Vercel Blob) and served by its own immutable route.
+      expect(record.certificateImage).toMatch(new RegExp(`^${baseURL}/api/certificates/preview/${id}\\?v=[0-9a-f]{12}$`));
+      expect((await db.collection('certificatePreviews').doc(id).get()).get('userId')).toBe(USER.uid);
     }
 
     const batchId = (await db.collection('certificates').doc(issued[0].id).get()).get('generationBatchId');
@@ -223,7 +223,7 @@ test.describe('certificate generation', () => {
     for (const { id, name } of issued) {
       await page.goto(`/verify/${id}`);
       await expect(page.getByTestId('recipient-name')).toHaveText(name);
-      await expect(page.locator('figure img')).toHaveAttribute('src', new RegExp(`/api/dev-object/certificates/${USER.uid}/${id}\\.jpg$`));
+      await expect(page.locator('figure img')).toHaveAttribute('src', new RegExp(`/api/certificates/preview/${id}\\?v=[0-9a-f]{12}$`));
     }
   });
 
