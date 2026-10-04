@@ -9,6 +9,7 @@ import { usePaged } from './usePaged';
 import { formatDateTime, formatDay, formatExact } from './format';
 import { DeliveryBadge } from './CertificatesTab';
 import { Drawer, Empty, LoadMore, Notice, Spinner } from './ui';
+import { plural } from '@/lib/utils';
 
 interface BatchesResponse {
   batches: ConsoleBatch[];
@@ -96,7 +97,7 @@ function RecipientsDrawer({ batch, onClose }: { batch: ConsoleBatch; onClose: ()
                     {certificate.email.error && <span className="block truncate text-xs text-error">{certificate.email.error}</span>}
                   </span>
                   <DeliveryBadge status={certificate.email.status} />
-                  <span className="text-xs tabular-nums text-muted-foreground">{formatExact(certificate.views)} views</span>
+                  <span className="text-xs tabular-nums text-muted-foreground">{formatExact(certificate.views)} {plural(certificate.views, 'view')}</span>
                   <a href={`/verify/${certificate.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-primary/10">
                     Verify <ExternalLink className="h-3 w-3" aria-hidden="true" />
                   </a>

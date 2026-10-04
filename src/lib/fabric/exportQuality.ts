@@ -38,6 +38,23 @@ export function disableObjectCaching(objects: fabric.Object[]): void {
 }
 
 /** Runs an export on a live canvas with caching off, then restores each object. */
+/** Set on a canvas while it renders for export or preview: no placeholder chrome. */
+export interface EditorChromeCanvas {
+  hideEditorChrome?: boolean;
+}
+
+/** Runs `render` with the editor's placeholder chrome hidden. */
+export function withEditorChromeHidden<T>(canvas: fabric.StaticCanvas, render: () => T): T {
+  const target = canvas as fabric.StaticCanvas & EditorChromeCanvas;
+  const previous = target.hideEditorChrome;
+  target.hideEditorChrome = true;
+  try {
+    return render();
+  } finally {
+    target.hideEditorChrome = previous;
+  }
+}
+
 export function withObjectCachingDisabled<T>(canvas: fabric.StaticCanvas, run: () => T): T {
   const previous: Array<[Cacheable, boolean | undefined]> = [];
   visit(canvas.getObjects(), (object) => {
@@ -81,7 +98,7 @@ export function exportCanvasImage(canvas: fabric.StaticCanvas, options: ExportOp
   helpers.forEach((object) => { object.visible = false; });
   canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
   try {
-    return withObjectCachingDisabled(canvas, () => canvas.toDataURL({
+    return withEditorChromeHidden(canvas, () => withObjectCachingDisabled(canvas, () => canvas.toDataURL({
       format: options.format,
       quality: options.quality ?? 1,
       multiplier: options.multiplier,
@@ -89,7 +106,7 @@ export function exportCanvasImage(canvas: fabric.StaticCanvas, options: ExportOp
       top: 0,
       width: options.width,
       height: options.height,
-    }));
+    })));
   } finally {
     helpers.forEach((object, index) => { object.visible = visibility[index]; });
     if (previousViewport) canvas.setViewportTransform(previousViewport);

@@ -27,6 +27,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { getIdToken } from '@/lib/firebase/client';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
+import { plural } from '@/lib/utils';
 
 interface CertificateRecord {
   id: string;
@@ -408,6 +409,7 @@ export default function HistoryPage() {
             <input
               type="text"
               placeholder="Search by name, email, or title..."
+              aria-label="Search certificates by name, email, or title"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="input pl-10 pr-4 h-10 w-full"
@@ -416,6 +418,7 @@ export default function HistoryPage() {
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <select
+              aria-label="Filter by email status"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)}
               className="input h-10 w-40"
@@ -466,11 +469,11 @@ export default function HistoryPage() {
                         </span>
                         <span className="flex items-center gap-1 whitespace-nowrap">
                           <Users className="h-3.5 w-3.5 shrink-0" />
-                          {batch.certificates.length} certificates
+                          {batch.certificates.length} {plural(batch.certificates.length, 'certificate')}
                         </span>
                         <span className="flex items-center gap-1 whitespace-nowrap">
                           <Eye className="h-3.5 w-3.5 shrink-0" />
-                          {batch.totalViews} views
+                          {batch.totalViews} {plural(batch.totalViews, 'view')}
                         </span>
                       </div>
                     </div>

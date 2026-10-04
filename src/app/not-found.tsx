@@ -5,7 +5,7 @@ export default function NotFound() {
     <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
       <div className="mb-4 text-8xl font-bold text-primary/20">404</div>
       
-      <h2 className="font-display text-2xl font-bold">Page Not Found</h2>
+      <h1 className="font-display text-2xl font-bold">Page Not Found</h1>
       <p className="mt-2 max-w-md text-muted-foreground">
         The page you're looking for doesn't exist or has been moved.
       </p>

@@ -69,7 +69,7 @@ const workflow: WorkflowStep[] = [
   {
     icon: Layers,
     title: 'Generate',
-    body: 'Produce one personalised certificate per row as PDF, PNG, or a ZIP archive.',
+    body: 'Produce one personalised, print-ready PDF per row, downloaded together as a ZIP archive.',
   },
   {
     icon: Mail,
@@ -125,7 +125,7 @@ const faqs: FaqItem[] = [
   {
     question: 'What output formats are supported?',
     answer:
-      'Generated certificates can be exported as PDF, as PNG, or as both, packaged into a single ZIP archive for the whole batch.',
+      'Every generated certificate is a print-ready PDF (300 DPI), and the whole batch downloads as a single ZIP archive. A design can also be exported on its own as a high-resolution PNG from the editor.',
   },
   {
     question: 'Can Serenity email certificates to recipients?',
@@ -209,7 +209,7 @@ export default async function HomePage() {
               <dl className="mt-10 grid max-w-lg grid-cols-3 gap-6 border-t border-[rgb(var(--sr-line))] pt-7">
                 {[
                   { value: 'CSV · XLSX', label: 'Recipient import' },
-                  { value: 'PDF · PNG', label: 'Batch export' },
+                  { value: 'PDF · ZIP', label: 'Batch export' },
                   { value: 'QR + URL', label: 'On every certificate' },
                 ].map((stat) => (
                   <div key={stat.label}>
@@ -278,7 +278,7 @@ export default async function HomePage() {
                 'Every column becomes a variable you can drop onto the canvas',
                 'Step through records to check real values before generating',
                 'Import limits guard row count, column count, and cell length',
-                'One personalised certificate per row, exported as PDF, PNG, or ZIP',
+                'One personalised PDF per row, downloaded together as a ZIP',
               ]}
               reverse
               media={

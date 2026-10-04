@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Variable,
 } from 'lucide-react';
+import { plural } from '@/lib/utils';
 
 interface RightSidebarProps {
   onToggle?: () => void;
@@ -176,7 +177,7 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-success" />
                 <div className="text-sm">
-                  <p className="font-medium">{rows.length} records</p>
+                  <p className="font-medium">{rows.length} {plural(rows.length, 'record')}</p>
                   <p className="text-xs text-muted-foreground">Loaded successfully</p>
                 </div>
               </div>

@@ -42,6 +42,7 @@ import {
 import { SkeletonDashboard, Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { EVENTS_ENABLED } from '@/lib/featureFlags';
+import { plural } from '@/lib/utils';
 
 // Certificate interface for Firebase data
 interface CertificateRecord {
@@ -377,7 +378,7 @@ export default function DashboardPage() {
       id: 'views', 
       label: 'Verification Views', 
       value: totalViews, 
-      change: totalViews > 0 ? `${totalViews} total views` : 'No views yet',
+      change: totalViews > 0 ? `${totalViews} total ${plural(totalViews, 'view')}` : 'No views yet',
       icon: Eye, 
       tile: 'tile-accent',
       isPositive: true
@@ -494,6 +495,7 @@ export default function DashboardPage() {
               <input
                 type="text"
                 placeholder="Search templates..."
+                aria-label="Search templates"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="input pl-10 pr-4 h-10 w-full"
@@ -614,7 +616,7 @@ export default function DashboardPage() {
                 {totalCertificates === 0 
                   ? "Get started by creating your first certificate template."
                   : thisMonthCerts > 0 
-                    ? `You've generated ${thisMonthCerts} certificate${thisMonthCerts > 1 ? 's' : ''} this month. Keep it up!`
+                    ? `You've generated ${thisMonthCerts} ${plural(thisMonthCerts, 'certificate')} this month. Keep it up!`
                     : "Here's what's happening with your certificates today."
                 }
               </p>
@@ -622,12 +624,12 @@ export default function DashboardPage() {
             {/* Quick stats for today */}
             {!isDataLoading && totalCertificates > 0 && (
               <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2 rounded-xl border border-success/15 bg-success/10 px-3 py-2 text-success backdrop-blur">
+                <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-emerald-200 backdrop-blur">
                   <MailCheck className="h-4 w-4" />
                   <span className="font-medium">{emailsSent} sent</span>
                 </div>
                 {emailsFailed > 0 && (
-                  <div className="flex items-center gap-2 rounded-xl border border-error/15 bg-error/10 px-3 py-2 text-error backdrop-blur">
+                  <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-rose-200 backdrop-blur">
                     <MailX className="h-4 w-4" />
                     <span className="font-medium">{emailsFailed} failed</span>
                   </div>

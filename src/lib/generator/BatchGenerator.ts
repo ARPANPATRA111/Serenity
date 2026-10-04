@@ -11,11 +11,12 @@ import {
   HIGH_DPI_MULTIPLIER,
   generateQRCodeDataURL,
 } from '@/lib/fabric';
-import { disableObjectCaching, qrPixelSize, QR_LOGICAL_SIZE } from '@/lib/fabric/exportQuality';
+import { disableObjectCaching, qrPixelSize, QR_LOGICAL_SIZE, type EditorChromeCanvas } from '@/lib/fabric/exportQuality';
 import { normalizeTemplateJSON, substituteInlineTokens } from '@/lib/fabric/templateNormalization';
 import { yieldToMain } from '@/lib/utils';
 import { buildVerificationUrl } from '@/lib/verification/url';
 import { loadFontsForTemplate } from '@/lib/fonts/googleFonts';
+import { certificateFileStem } from '@/lib/certificates/fileName';
 import { persistCertificateRecords, type PersistFailure } from './persistence';
 import type { DataRow, CertificateRecord as FirebaseCertificateRecord } from '@/types/fabric.d';
 
@@ -216,6 +217,8 @@ export async function generateBatch(
     enableRetinaScaling: false,
     renderOnAddRemove: false,
   });
+  // Certificates never show the editor's placeholder frames or badges.
+  (staticCanvas as typeof staticCanvas & EditorChromeCanvas).hideEditorChrome = true;
 
   const zip = new JSZip();
   const pdfFolder = zip.folder('certificates');
@@ -290,7 +293,7 @@ export async function generateBatch(
         });
 
         const recipientName = String(row[nameField] || `Certificate_${i + 1}`);
-        const sanitizedName = sanitizeFilename(recipientName);
+        const sanitizedName = certificateFileStem(recipientName);
 
         if (outputFormat === 'pdf' || outputFormat === 'both' || retainPdfBlobs) {
           const pdfBlob = renderPdf(dataURL, clickableLinks);
@@ -668,13 +671,6 @@ async function updateQRCode(
 async function dataURLToBlob(dataURL: string): Promise<Blob> {
   const response = await fetch(dataURL);
   return response.blob();
-}
-
-function sanitizeFilename(name: string): string {
-  return name
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .replace(/\s+/g, '_')
-    .substring(0, 50);
 }
 
 export function downloadZip(blob: Blob, filename: string = 'certificates.zip'): void {

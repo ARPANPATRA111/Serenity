@@ -15,7 +15,7 @@ const freeFeatures = [
   `${FREE_CERTIFICATE_LIMIT} persisted certificates in total`,
   'Visual editor and reusable templates',
   'CSV and Excel column mapping',
-  'PDF, PNG, and ZIP export',
+  'PDF and ZIP export',
   'Verification URL and QR code on every certificate',
 ];
 

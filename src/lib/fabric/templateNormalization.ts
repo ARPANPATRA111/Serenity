@@ -12,6 +12,12 @@
  *   `dynamicKey` (or typed "VariableTextbox") is not recognised as a
  *   variable, so generation printed the literal "{{Column}}".
  *
+ * - Earlier editor releases drew placeholder chrome as a glyph stroke (a
+ *   dashed blue outline around every letter) and the old Exit Preview put
+ *   the same stroke on any text containing `{{`. Saved templates can carry
+ *   it, and on ordinary text it printed. Only those exact editor strokes are
+ *   removed; strokes a designer chose are kept.
+ *
  * Normalisation is idempotent and never changes well-formed objects.
  */
 
@@ -20,6 +26,23 @@ type SerializedObject = Record<string, unknown> & { type?: unknown; objects?: un
 const TEXT_TYPES = new Set(['text', 'i-text', 'itext', 'textbox', 'variabletextbox']);
 const VARIABLE_CAPABLE_TYPES = new Set(['textbox', 'variabletextbox']);
 
+/** Stroke + dash pairs that only the editor itself ever put on text. */
+const EDITOR_CHROME_STROKES: Array<{ stroke: string; dash: number[] }> = [
+  { stroke: '#001eff', dash: [5, 5] }, // placeholder outline, earlier releases
+  { stroke: '#3b82f6', dash: [4, 2] }, // restored by the old Exit Preview
+];
+
+export function isEditorChromeStroke(object: object): boolean {
+  const { stroke: rawStroke, strokeDashArray: dash } = object as { stroke?: unknown; strokeDashArray?: unknown };
+  const stroke = typeof rawStroke === 'string' ? rawStroke.toLowerCase() : '';
+  return EDITOR_CHROME_STROKES.some((chrome) => chrome.stroke === stroke
+    && Array.isArray(dash) && dash.length === chrome.dash.length
+    && dash.every((value, index) => value === chrome.dash[index]));
+}
+
+/** The stroke values text has when no stroke was ever chosen for it. */
+export const NO_TEXT_STROKE = { stroke: null, strokeWidth: 0, strokeDashArray: null } as const;
+
 function normalizeObject(input: unknown): unknown {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
   const object: SerializedObject = { ...(input as SerializedObject) };
@@ -27,6 +50,7 @@ function normalizeObject(input: unknown): unknown {
 
   if (TEXT_TYPES.has(type)) {
     if (!object.styles || typeof object.styles !== 'object') object.styles = [];
+    if (isEditorChromeStroke(object)) Object.assign(object, NO_TEXT_STROKE);
     if (VARIABLE_CAPABLE_TYPES.has(type) && typeof object.dynamicKey === 'string' && object.dynamicKey.trim()) {
       object.type = 'variableTextbox';
     }

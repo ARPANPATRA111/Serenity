@@ -166,6 +166,11 @@ export function getFileExtension(filename: string): string {
   return filename.slice(((filename.lastIndexOf('.') - 1) >>> 0) + 2).toLowerCase();
 }
 
+/** "certificate" or "certificates" for a count; pass the plural when it is irregular. */
+export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return count === 1 ? singular : pluralForm;
+}
+
 export function formatNumber(num: number): string {
   return num.toLocaleString('en-US');
 }

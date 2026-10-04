@@ -38,6 +38,9 @@ export function EditorLayout() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
+  // Saving or generating before the template is on the canvas would use a
+  // half-loaded design; the ref also guards the Ctrl+S shortcut.
+  const templateLoadingRef = useRef(false);
   const hasLoadedTemplate = useRef(false);
   
   // Mobile drawer states
@@ -115,6 +118,7 @@ export function EditorLayout() {
     
     if (paramTemplateId && paramTemplateId !== lastLoadedTemplateId.current && fabricInstance && user?.id) {
       setLoadingTemplate(true);
+      templateLoadingRef.current = true;
       lastLoadedTemplateId.current = paramTemplateId;
       
       authenticatedFetch(`/api/templates/${paramTemplateId}`)
@@ -142,7 +146,8 @@ export function EditorLayout() {
             
             if (data.template.canvasJSON) {
               try {
-                fabricInstance.loadFromJSON(data.template.canvasJSON).then(() => {
+                // Returned so the loading state lasts until the canvas is ready.
+                return fabricInstance.loadFromJSON(data.template.canvasJSON).then(() => {
                    // Clean up selection after load
                    fabricInstance.getCanvas()?.discardActiveObject();
                    fabricInstance.getCanvas()?.requestRenderAll();
@@ -161,6 +166,7 @@ export function EditorLayout() {
           console.error('Failed to load template', err);
         })
         .finally(() => {
+          templateLoadingRef.current = false;
           setLoadingTemplate(false);
         });
     }
@@ -169,7 +175,7 @@ export function EditorLayout() {
 
   // Handle Save - returns { success, error } for consumers like GenerationModal
   const handleSave = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (!fabricInstance || !user) return { success: false, error: 'Not ready' };
+    if (!fabricInstance || !user || templateLoadingRef.current) return { success: false, error: 'Not ready' };
     
     setSaveStatus('saving');
     
@@ -255,6 +261,7 @@ export function EditorLayout() {
         <Toolbar 
           onSave={handleSave} 
           saveStatus={saveStatus}
+          isTemplateLoading={loadingTemplate}
           onGenerate={() => setGenerationModalOpen(true)}
           onOpenCertificateInfo={() => setCertificateInfoModalOpen(true)}
         />

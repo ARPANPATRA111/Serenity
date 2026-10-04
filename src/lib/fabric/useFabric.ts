@@ -9,11 +9,14 @@ import { exportCanvasImage } from './exportQuality';
 import { normalizeTemplateJSON } from './templateNormalization';
 import { debounce } from '@/lib/utils';
 import { installAlignmentGuides } from './alignmentGuides';
+import { waitForTemplateFonts } from '@/lib/fonts/googleFonts';
 
 // Auto-save key for localStorage
 const CANVAS_AUTOSAVE_KEY = 'serenity_canvas_autosave';
 const HISTORY_LIMIT = 50;
 const AUTOSAVE_DEBOUNCE_MS = 300;
+// Longest the editor waits for a template's web fonts before drawing it.
+const TEMPLATE_FONT_WAIT_MS = 4000;
 // Fabric 5 never serialises `editable`, but the template invariants (checked
 // before every save, in the editor and by the templates API) require the
 // verification URL to be stored as non-editable. Without it every save failed.
@@ -32,6 +35,18 @@ type AutoSaveWindow = Window & typeof globalThis & {
   requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
   cancelIdleCallback?: (handle: number) => void;
 };
+
+/** Re-measures text after web fonts arrive, so wrapping and widths are final. */
+function refreshTextLayout(canvas: fabric.Canvas): void {
+  fabric.util.clearFabricFontCache();
+  for (const object of canvas.getObjects() as Array<fabric.Object & { initDimensions?: () => void }>) {
+    if (typeof object.initDimensions !== 'function') continue;
+    object.initDimensions();
+    object.setCoords();
+    object.dirty = true;
+  }
+  canvas.requestRenderAll();
+}
 
 function serializeCanvas(
   canvas: fabric.Canvas,
@@ -1316,16 +1331,25 @@ export function useFabric(
     return json;
   }, []);
 
-  const loadFromJSON = useCallback((json: string | object): Promise<void> => {
+  const loadFromJSON = useCallback(async (json: string | object): Promise<void> => {
+    if (!fabricRef.current) return;
+
+    // Repairs hand-written templates (missing text styles, untyped
+    // placeholders, the textBaseline typo) so they can be saved and generated.
+    const data = normalizeTemplateJSON(json as string | { objects?: unknown[] }) as any;
+
+    // Draw the template in the fonts it prints with. If the font service is
+    // slow the canvas loads with fallbacks and re-measures once fonts arrive.
+    await waitForTemplateFonts(data, TEMPLATE_FONT_WAIT_MS, () => {
+      if (fabricRef.current) refreshTextLayout(fabricRef.current);
+    });
+    fabric.util.clearFabricFontCache();
+
     return new Promise((resolve) => {
       if (!fabricRef.current) {
         resolve();
         return;
       }
-
-      // Repairs hand-written templates (missing text styles, untyped
-      // placeholders, the textBaseline typo) so they can be saved and generated.
-      const data = normalizeTemplateJSON(json as string | { objects?: unknown[] }) as any;
       
       isHistoryActionRef.current = true;
       fabricRef.current.loadFromJSON(data, () => {

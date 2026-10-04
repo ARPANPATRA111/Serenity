@@ -1,5 +1,11 @@
 import { BadgeCheck, Users } from 'lucide-react';
+import { SITE_URL } from '@/lib/seo/structuredData';
 import { SealMotif } from './CertificateMotif';
+
+// Printed the way real certificates print their link: this site's host and
+// a 12-character certificate ID (the ID itself is sample data).
+const SAMPLE_VERIFY_HOST = new URL(SITE_URL).host;
+const SAMPLE_CERTIFICATE_ID = 'Xk3Lq9TbR2mP';
 
 /**
  * Hero product composition.
@@ -91,9 +97,9 @@ export function HeroShowcase() {
               <QrGlyph />
             </span>
             <span className="font-mono text-[clamp(4px,0.5vw,7px)] leading-tight text-slate-400">
-              verify.serenity.app
+              {SAMPLE_VERIFY_HOST}
               <br />
-              /c/SC24831
+              /verify/{SAMPLE_CERTIFICATE_ID}
             </span>
           </div>
         </div>
@@ -148,7 +154,7 @@ export function HeroShowcase() {
         <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[rgb(var(--sr-canvas-sunken))]">
           <div className="h-full w-3/5 rounded-full bg-[rgb(var(--sr-brand))]" />
         </div>
-        <p className="mt-2 text-[0.6875rem] text-[rgb(var(--sr-ink-faint))]">18 of 30 · PDF + PNG</p>
+        <p className="mt-2 text-[0.6875rem] text-[rgb(var(--sr-ink-faint))]">18 of 30 · PDF</p>
       </div>
     </div>
   );

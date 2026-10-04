@@ -14,6 +14,7 @@ import {
   X, Tag, Library
 } from 'lucide-react';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
+import { plural } from '@/lib/utils';
 
 interface UserTemplate {
   id: string;
@@ -207,11 +208,14 @@ export default function MyTemplatesPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search templates"
                 placeholder="Search templates..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm"
               />
               {searchQuery && (
                 <button
+                  type="button"
+                  aria-label="Clear search"
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
@@ -222,6 +226,7 @@ export default function MyTemplatesPage() {
 
             {/* Sort */}
             <select
+              aria-label="Sort templates"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
               className="px-4 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -388,7 +393,7 @@ export default function MyTemplatesPage() {
                       )}
                       <span className="flex items-center gap-1">
                         <FileText className="w-3 h-3" />
-                        {template.certificateCount} certs
+                        {template.certificateCount} {plural(template.certificateCount, 'cert')}
                       </span>
                     </div>
                     {template.tags && template.tags.length > 0 && (

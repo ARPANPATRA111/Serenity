@@ -61,17 +61,23 @@ import { SerenityMark } from '@/components/brand/SerenityBrand';
 import { ToolPanel, ToolPanelItem, ToolPanelDivider, ToolPanelSection } from './ToolPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { createQRCodeImage, findQRCodeImage, A4_LANDSCAPE } from '@/lib/fabric';
-import { exportCanvasImage, QR_LOGICAL_SIZE } from '@/lib/fabric/exportQuality';
+import { exportCanvasImage, QR_LOGICAL_SIZE, type EditorChromeCanvas } from '@/lib/fabric/exportQuality';
+
+/** Everything Preview may change on an object, so Exit Preview restores it exactly. */
+const PREVIEW_SNAPSHOT_KEYS = ['text', 'width', 'stroke', 'strokeWidth', 'strokeDashArray', 'selectable', 'evented', 'hoverCursor'] as const;
+type PreviewSnapshot = Partial<Record<(typeof PREVIEW_SNAPSHOT_KEYS)[number], unknown>>;
 
 interface ToolbarProps {
   onSave?: () => Promise<{ success: boolean; error?: string } | void>;
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  /** True until a requested template is fully on the canvas. */
+  isTemplateLoading?: boolean;
   onGenerate?: () => void;
   onPreview?: () => void;
   onOpenCertificateInfo?: () => void;
 }
 
-export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, onOpenCertificateInfo }: ToolbarProps) {
+export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false, onGenerate, onPreview, onOpenCertificateInfo }: ToolbarProps) {
   const { fabricInstance } = useFabricContext();
   const { user } = useAuth();
   const isPremiumUser = user?.isPremium === true;
@@ -90,6 +96,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
   
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [previewOriginalTexts, setPreviewOriginalTexts] = useState<Map<string, string>>(new Map());
+  const previewSnapshotsRef = useRef<Map<object, PreviewSnapshot>>(new Map());
   const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#ffffff');
   const [borderColor, setBorderColor] = useState('#d4af37');
   const { rows, getPreviewRow, previewRowIndex } = useDataSourceStore();
@@ -462,8 +469,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
       const previewRow = getPreviewRow();
       const originalTexts = new Map<string, string>();
       const objects = canvas.getObjects();
+      const snapshots = new Map<object, PreviewSnapshot>();
       
       objects.forEach((obj: any, index: number) => {
+        snapshots.set(obj, Object.fromEntries(PREVIEW_SNAPSHOT_KEYS.filter((key) => obj[key] !== undefined).map((key) => [key, obj[key]])));
         const objId = `obj_${index}`;
         const objType = obj.type?.toLowerCase() || '';
         const isTextObj = objType === 'textbox' || objType === 'variabletextbox' || objType === 'i-text';
@@ -475,12 +484,6 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
           // Replace with preview data if available
           if (previewRow && previewRow[obj.dynamicKey] !== undefined) {
             obj.set('text', String(previewRow[obj.dynamicKey]));
-            // Remove placeholder styling for preview
-            obj.set({
-              strokeWidth: 0,
-              stroke: undefined,
-              strokeDashArray: undefined,
-            });
           }
         }
         // Also check for textboxes with {{placeholder}} pattern but no dynamicKey (manually typed)
@@ -513,61 +516,33 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
         }
       });
       
+      previewSnapshotsRef.current = snapshots;
       setPreviewOriginalTexts(originalTexts);
       canvas.discardActiveObject();
       canvas.selection = false;
     } else {
-      // Exiting preview mode - restore original texts
-      const objects = canvas.getObjects();
-      
-      objects.forEach((obj: any, index: number) => {
-        const objId = `obj_${index}`;
-        const originalText = previewOriginalTexts.get(objId);
-        const objType = obj.type?.toLowerCase() || '';
-        const isTextObj = objType === 'textbox' || objType === 'variabletextbox' || objType === 'i-text';
-        
-        // Restore verification URL placeholder first (before general text handling)
-        if (obj.isVerificationUrl) {
-          const originalVerifyText = previewOriginalTexts.get(`verify_${index}`);
-          if (originalVerifyText !== undefined) {
-            obj.set('text', originalVerifyText);
-            // Restore verification URL original styling (red border, no stroke)
-            obj.set({
-              borderColor: '#dc2626',
-              borderDashArray: [4, 2],
-              strokeWidth: 0,
-              stroke: undefined,
-              strokeDashArray: undefined,
-            });
-          }
-        }
-        else if (isTextObj && originalText !== undefined) {
-          obj.set('text', originalText);
-          // Restore placeholder styling if it was a placeholder
-          if (obj.dynamicKey || originalText.includes('{{')) {
-            obj.set({
-              strokeWidth: 1,
-              stroke: '#3b82f6',
-              strokeDashArray: [4, 2],
-            });
-          }
-        }
-        
-        // Re-enable selection for non-boundary elements
-        if (!obj.isBoundary && !obj.isOuterShade && !obj.isInnerClear) {
-          obj.selectable = true;
-          obj.evented = true;
-          obj.hoverCursor = 'move'; // Reset cursor
-        }
+      // Exiting preview mode - put every object back exactly as it was,
+      // so previewing never changes what is saved or printed.
+      const snapshots = previewSnapshotsRef.current;
+      canvas.getObjects().forEach((obj: any) => {
+        const snapshot = snapshots.get(obj);
+        if (!snapshot) return;
+        obj.set(snapshot);
+        obj.initDimensions?.();
+        obj.setCoords();
+        obj.dirty = true;
       });
       
+      previewSnapshotsRef.current = new Map();
       canvas.selection = true;
       setPreviewOriginalTexts(new Map());
     }
     
+    // Placeholder frames and badges are editing aids; Preview shows the print.
+    (canvas as typeof canvas & EditorChromeCanvas).hideEditorChrome = newPreviewState;
     canvas.requestRenderAll();
     setPreviewMode(newPreviewState);
-  }, [isPreviewMode, setPreviewMode, fabricInstance, getPreviewRow, previewOriginalTexts]);
+  }, [isPreviewMode, setPreviewMode, fabricInstance, getPreviewRow]);
 
   // Update ref for keyboard shortcut
   handleTogglePreviewRef.current = handleTogglePreview;
@@ -797,14 +772,16 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
           <SerenityMark className="h-7 w-7 sm:h-8 sm:w-8" />
         </Link>
         
-        {/* Template Name Input */}
-        <div className="flex items-center gap-2 min-w-0 flex-shrink mx-1 sm:mx-2">
+        {/* Template Name Input: fixed width so it never collapses under the
+            tools on narrow screens; the toolbar row scrolls instead. */}
+        <div className="flex flex-shrink-0 items-center gap-2 mx-1 sm:mx-2">
            <input 
              type="text" 
              value={templateName} 
              onChange={(e) => setTemplateName(e.target.value)}
              disabled={isPreviewMode}
-             className="h-5 sm:h-6 min-w-12 sm:min-w-20 w-full max-w-24 sm:max-w-48 rounded border-transparent bg-transparent px-1 text-xs sm:text-sm font-semibold hover:border-border hover:bg-muted focus:border-primary focus:bg-background focus:outline-none disabled:opacity-50"
+             aria-label="Template name"
+             className="h-5 sm:h-6 w-24 sm:w-48 rounded border-transparent bg-transparent px-1 text-xs sm:text-sm font-semibold hover:border-border hover:bg-muted focus:border-primary focus:bg-background focus:outline-none disabled:opacity-50"
              placeholder="Untitled"
            />
            {isPremiumUser && !isPreviewMode && (
@@ -923,7 +900,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
 
            <button
              onClick={() => onSave?.()}
-             disabled={saveStatus === 'saving' || isPreviewMode}
+             disabled={saveStatus === 'saving' || isPreviewMode || isTemplateLoading}
              className="flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 flex-shrink-0"
            >
              {saveStatus === 'saving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -932,8 +909,8 @@ export function Toolbar({ onSave, saveStatus = 'idle', onGenerate, onPreview, on
 
            <button
              onClick={onGenerate}
-             disabled={rows.length === 0 || isPreviewMode}
-             title={rows.length === 0 ? "Connect data source" : "Generate"}
+             disabled={rows.length === 0 || isPreviewMode || isTemplateLoading}
+             title={isTemplateLoading ? "Loading template…" : rows.length === 0 ? "Connect data source" : "Generate"}
              className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex-shrink-0"
            >
              <Wand2 className="h-3.5 w-3.5" />

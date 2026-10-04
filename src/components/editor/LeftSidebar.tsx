@@ -19,6 +19,7 @@ import {
   Zap,
 } from 'lucide-react';
 import Image from 'next/image';
+import { plural } from '@/lib/utils';
 
 // Maximum file size: 5MB (before compression)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -225,7 +226,7 @@ export function LeftSidebar() {
           <h2 className="font-semibold text-foreground">Media Library</h2>
         </div>
         <div className="text-xs text-muted-foreground">
-          {mediaAssets.length} files
+          {mediaAssets.length} {plural(mediaAssets.length, 'file')}
         </div>
       </div>
 

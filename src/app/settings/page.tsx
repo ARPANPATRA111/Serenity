@@ -157,8 +157,9 @@ export default function SettingsPage() {
             {/* Form fields */}
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1.5">Full Name</label>
+                <label htmlFor="settings-name" className="block text-sm font-medium mb-1.5">Full Name</label>
                 <input
+                  id="settings-name"
                   type="text"
                   value={settings.name}
                   onChange={(e) => setSettings(prev => ({ ...prev, name: e.target.value }))}
@@ -168,8 +169,9 @@ export default function SettingsPage() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1.5">Email Address</label>
+                <label htmlFor="settings-email" className="block text-sm font-medium mb-1.5">Email Address</label>
                 <input
+                  id="settings-email"
                   type="email"
                   value={settings.email}
                   disabled

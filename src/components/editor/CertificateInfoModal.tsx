@@ -258,11 +258,12 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
 
             {/* Title field */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium mb-2">
+              <label htmlFor="certificate-info-title" className="flex items-center gap-2 text-sm font-medium mb-2">
                 <Award className="h-4 w-4 text-muted-foreground" />
                 Certificate Title <span className="text-destructive">*</span>
               </label>
               <input
+                id="certificate-info-title"
                 type="text"
                 value={title}
                 onChange={(e) => {
@@ -284,11 +285,12 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
 
             {/* Issued By field */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium mb-2">
+              <label htmlFor="certificate-info-issuer" className="flex items-center gap-2 text-sm font-medium mb-2">
                 <Building className="h-4 w-4 text-muted-foreground" />
                 Issued By <span className="text-destructive">*</span>
               </label>
               <input
+                id="certificate-info-issuer"
                 type="text"
                 value={issuedBy}
                 onChange={(e) => {
@@ -310,11 +312,12 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
 
             {/* Description field (optional) */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium mb-2">
+              <label htmlFor="certificate-info-description" className="flex items-center gap-2 text-sm font-medium mb-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 Description <span className="text-muted-foreground text-xs">(optional)</span>
               </label>
               <textarea
+                id="certificate-info-description"
                 value={description}
                 onChange={(e) => {
                   const value = e.target.value.slice(0, 500);
@@ -334,11 +337,12 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
 
             {/* Category field (optional) */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium mb-2">
+              <label htmlFor="certificate-info-category" className="flex items-center gap-2 text-sm font-medium mb-2">
                 <Tag className="h-4 w-4 text-muted-foreground" />
                 Category <span className="text-muted-foreground text-xs">(optional - for public templates)</span>
               </label>
               <select
+                id="certificate-info-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full h-10 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -356,11 +360,12 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
             {/* Optional event context */}
             {EVENTS_ENABLED && (
             <div className="rounded-xl border border-border bg-muted/20 p-4">
-              <label className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <label htmlFor="certificate-info-event" className="mb-2 flex items-center gap-2 text-sm font-medium">
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
                 Linked Event <span className="text-xs font-normal text-muted-foreground">(optional)</span>
               </label>
               <select
+                id="certificate-info-event"
                 value={eventId}
                 onChange={(event) => setEventId(event.target.value)}
                 disabled={eventsLoading}
