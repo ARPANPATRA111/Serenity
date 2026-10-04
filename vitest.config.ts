@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 /**
@@ -6,6 +7,10 @@ import { defineConfig } from 'vitest/config';
  * include to `tests/` and exclude the Playwright directory explicitly.
  */
 export default defineConfig({
+  resolve: {
+    // Mirror the `@/*` path alias from tsconfig.json.
+    alias: { '@': path.resolve(__dirname, 'src') },
+  },
   test: {
     include: ['tests/**/*.test.ts'],
     exclude: ['e2e/**', 'node_modules/**', '.next/**', 'playwright-report/**', 'test-results/**'],

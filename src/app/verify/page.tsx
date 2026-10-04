@@ -3,35 +3,33 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Search, ArrowRight, Loader2, CheckCircle, QrCode, Link2, FileSearch } from 'lucide-react';
+import { ShieldCheck, Search, ArrowRight, Loader2, QrCode, FileSearch, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { SerenityBrand, SerenityMark } from '@/components/brand/SerenityBrand';
+import { extractCertificateId } from '@/lib/verification/certificateId';
 
 export default function VerifyPage() {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [inputError, setInputError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
 
-    setIsSearching(true);
-    
-    // Extract ID if a full URL is pasted
-    let id = query.trim();
-    if (id.includes('/verify/')) {
-      const parts = id.split('/verify/');
-      if (parts.length > 1) {
-        id = parts[1].split('?')[0]; // Remove query params if any
-      }
+    // Accepts a bare ID, any verification URL (with tracking parameters,
+    // repeated slashes or trailing punctuation) or a line of text holding one.
+    const id = extractCertificateId(query);
+    if (!id) {
+      setInputError('That does not look like a certificate ID or verification link. Check it and try again.');
+      return;
     }
 
-    // Simulate short delay for UX then redirect
-    setTimeout(() => {
-      router.push(`/verify/${id}`);
-    }, 500);
+    setInputError(null);
+    setIsSearching(true);
+    router.push(`/verify/${id}`);
   };
 
   const features = [
@@ -120,14 +118,29 @@ export default function VerifyPage() {
                 <input
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    if (inputError) setInputError(null);
+                  }}
                   placeholder="Certificate ID or verification URL"
+                  aria-label="Certificate ID or verification URL"
+                  aria-invalid={inputError ? true : undefined}
+                  aria-describedby={inputError ? 'verify-input-error' : undefined}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="h-14 w-full rounded-xl border border-border bg-card pl-12 pr-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all"
                   required
                 />
               </div>
             </div>
-            
+            {inputError && (
+              <p id="verify-input-error" role="alert" className="flex items-start gap-2 text-left text-sm text-error">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                {inputError}
+              </p>
+            )}
+
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
