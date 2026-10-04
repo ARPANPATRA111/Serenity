@@ -16,6 +16,8 @@ const baseURL = STAGING_BASE_URL || `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
+  // Emulator-backed flows have their own config (playwright.emulator.config.ts).
+  testIgnore: ['**/emulator/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

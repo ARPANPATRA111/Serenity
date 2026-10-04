@@ -16,6 +16,9 @@
     "seed:emulator": "node scripts/seed-emulator.mjs",
     "test:smoke": "node scripts/smoke-routes.mjs",
     "test:e2e": "playwright test",
+    "build:emulator": "node scripts/run-with-emulator-env.mjs build 3000",
+    "start:emulator": "node scripts/run-with-emulator-env.mjs start 3000",
+    "test:e2e:emulator": "playwright test -c playwright.emulator.config.ts",
     "verify:local": "pnpm lint && pnpm test:all && pnpm build && pnpm test:smoke"
   },
   "dependencies": {
@@ -60,6 +63,7 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.3",
     "firebase-tools": "13.35.1",
+    "jsqr": "1.4.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5",
