@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import { buildVerificationUrl } from './verification/url';
 
 export interface QRCodeOptions {
   width?: number;
@@ -35,8 +36,7 @@ export async function generateQRCodeDataURL(
 }
 
 export function generateVerificationURL(certificateId: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-  return `${baseUrl}/verify/${certificateId}`;
+  return buildVerificationUrl(certificateId);
 }
 
 export async function generateCertificateQRCode(

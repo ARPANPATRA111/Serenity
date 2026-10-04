@@ -3,34 +3,33 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Search, ArrowRight, Loader2, Award, CheckCircle, QrCode, Link2, FileSearch } from 'lucide-react';
+import { ShieldCheck, Search, ArrowRight, Loader2, QrCode, FileSearch, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { SerenityBrand, SerenityMark } from '@/components/brand/SerenityBrand';
+import { extractCertificateId } from '@/lib/verification/certificateId';
 
 export default function VerifyPage() {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [inputError, setInputError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
 
-    setIsSearching(true);
-    
-    // Extract ID if a full URL is pasted
-    let id = query.trim();
-    if (id.includes('/verify/')) {
-      const parts = id.split('/verify/');
-      if (parts.length > 1) {
-        id = parts[1].split('?')[0]; // Remove query params if any
-      }
+    // Accepts a bare ID, any verification URL (with tracking parameters,
+    // repeated slashes or trailing punctuation) or a line of text holding one.
+    const id = extractCertificateId(query);
+    if (!id) {
+      setInputError('That does not look like a certificate ID or verification link. Check it and try again.');
+      return;
     }
 
-    // Simulate short delay for UX then redirect
-    setTimeout(() => {
-      router.push(`/verify/${id}`);
-    }, 500);
+    setInputError(null);
+    setIsSearching(true);
+    router.push(`/verify/${id}`);
   };
 
   const features = [
@@ -38,33 +37,28 @@ export default function VerifyPage() {
       icon: ShieldCheck,
       title: 'Verify Authenticity',
       description: 'Confirm the certificate is genuine and has not been tampered with',
-      color: 'from-green-500 to-emerald-500',
+      tile: 'tile-accent',
     },
     {
       icon: FileSearch,
       title: 'View Details',
       description: 'See issuer information, recipient, and issuance date',
-      color: 'from-blue-500 to-cyan-500',
+      tile: 'tile-primary',
     },
     {
       icon: QrCode,
       title: 'QR Code Support',
       description: 'Paste verification URLs from scanned QR codes',
-      color: 'from-violet-500 to-purple-500',
+      tile: 'tile-secondary',
     },
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="app-shell flex min-h-screen flex-col bg-background">
       {/* Navbar */}
-      <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-display text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
-          </Link>
+      <header className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
+        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6 lg:px-8">
+          <Link href="/"><SerenityBrand /></Link>
           <div className="flex items-center gap-4">
             <Link href="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Home
@@ -124,14 +118,29 @@ export default function VerifyPage() {
                 <input
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    if (inputError) setInputError(null);
+                  }}
                   placeholder="Certificate ID or verification URL"
+                  aria-label="Certificate ID or verification URL"
+                  aria-invalid={inputError ? true : undefined}
+                  aria-describedby={inputError ? 'verify-input-error' : undefined}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="h-14 w-full rounded-xl border border-border bg-card pl-12 pr-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all"
                   required
                 />
               </div>
             </div>
-            
+            {inputError && (
+              <p id="verify-input-error" role="alert" className="flex items-start gap-2 text-left text-sm text-error">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                {inputError}
+              </p>
+            )}
+
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -168,8 +177,8 @@ export default function VerifyPage() {
                 transition={{ delay: 0.5 + index * 0.1 }}
                 className="rounded-xl border border-border bg-card p-5 text-left hover:border-primary/30 hover:bg-card/80 transition-all"
               >
-                <div className={`inline-flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${feature.color} mb-3`}>
-                  <feature.icon className="h-5 w-5 text-white" />
+                <div className={`${feature.tile} mb-3 h-10 w-10`}>
+                  <feature.icon className="h-5 w-5" />
                 </div>
                 <h3 className="font-semibold text-sm mb-1">{feature.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{feature.description}</p>
@@ -182,7 +191,7 @@ export default function VerifyPage() {
       {/* Footer */}
       <footer className="border-t border-border bg-card/50 py-6 text-center text-sm text-muted-foreground">
         <div className="flex items-center justify-center gap-2">
-          <Award className="h-4 w-4 text-primary" />
+          <SerenityMark className="h-5 w-5" />
           <span>© {new Date().getFullYear()} Serenity. All rights reserved.</span>
         </div>
       </footer>

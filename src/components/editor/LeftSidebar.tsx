@@ -4,6 +4,7 @@ import { useCallback, useState, useEffect, useRef } from 'react';
 import { useFabricContext } from './FabricContext';
 import { useEditorStore, MediaAsset } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 import imageCompression from 'browser-image-compression';
 import {
   Upload,
@@ -21,7 +22,7 @@ import Image from 'next/image';
 
 // Maximum file size: 5MB (before compression)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp'];
+const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 // Compression options - maintains quality while reducing size
 const COMPRESSION_OPTIONS = {
@@ -66,7 +67,7 @@ export function LeftSidebar() {
       
       setIsLoadingMedia(true);
       try {
-        const res = await fetch(`/api/media?userId=${user.id}`);
+        const res = await authenticatedFetch('/api/media');
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
@@ -89,18 +90,13 @@ export function LeftSidebar() {
       return `File too large (${formatFileSize(file.size)}). Maximum size is 5MB.`;
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return `Invalid file type. Allowed: Images, SVGs, GIFs`;
+      return `Invalid file type. Allowed: PNG, JPEG, JPG, WebP`;
     }
     return null;
   };
 
   // Compress image before upload
   const compressImage = async (file: File): Promise<File> => {
-    // Skip compression for SVGs and GIFs (they don't benefit from this type of compression)
-    if (file.type === 'image/svg+xml' || file.type === 'image/gif') {
-      return file;
-    }
-
     try {
       console.log(`[Media] Compressing ${file.name}: ${formatFileSize(file.size)}`);
       const compressedFile = await imageCompression(file, COMPRESSION_OPTIONS);
@@ -144,12 +140,11 @@ export function LeftSidebar() {
         
         const formData = new FormData();
         formData.append('file', compressedFile);
-        formData.append('userId', user.id);
         // Keep original filename but note the original size
         formData.append('originalName', file.name);
         formData.append('originalSize', file.size.toString());
 
-        const res = await fetch('/api/media', {
+        const res = await authenticatedFetch('/api/media', {
           method: 'POST',
           body: formData,
         });
@@ -178,7 +173,7 @@ export function LeftSidebar() {
     if (!user?.id) return;
 
     try {
-      const res = await fetch(`/api/media?assetId=${assetId}&userId=${user.id}`, {
+      const res = await authenticatedFetch(`/api/media?assetId=${assetId}`, {
         method: 'DELETE',
       });
 
@@ -249,7 +244,7 @@ export function LeftSidebar() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,.svg"
+            accept="image/png,image/jpeg,image/jpg,image/webp"
             multiple
             onChange={(e) => e.target.files && handleUpload(e.target.files)}
             className="hidden"
@@ -279,7 +274,7 @@ export function LeftSidebar() {
                     Auto-optimizing for best quality
                   </span>
                 ) : (
-                  'Images, SVGs, GIFs • Max 5MB'
+                  'PNG, JPEG, WebP - Max 5MB'
                 )}
               </p>
             </div>
@@ -301,7 +296,7 @@ export function LeftSidebar() {
         <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <HardDrive className="h-3 w-3" />
           <span>Storage: {formatFileSize(totalStorage)}</span>
-          <span className="ml-auto flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+          <span className="ml-auto flex items-center gap-1 text-success">
             <Zap className="h-3 w-3" />
             <span>Optimized</span>
           </span>
@@ -342,8 +337,8 @@ export function LeftSidebar() {
 
       {/* Preview Mode Notice */}
       {isPreviewMode && (
-        <div className="border-t border-border bg-amber-500/10 p-3 text-center">
-          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+        <div className="border-t border-border bg-warning/10 p-3 text-center">
+          <p className="text-xs font-medium text-warning">
             Preview Mode Active - Editing Disabled
           </p>
         </div>

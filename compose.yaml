@@ -1,0 +1,69 @@
+name: serenity-local
+
+x-serenity-environment: &serenity-environment
+  USE_FIREBASE_EMULATORS: "true"
+  NEXT_PUBLIC_FIREBASE_EMULATOR_HOST: localhost
+  FB_CREDENTIAL: demo-api-key
+  FB_AUTH_DOMAIN: demo-serenity.firebaseapp.com
+  FB_PROJECT: demo-serenity
+  FB_BUCKET: demo-serenity.appspot.com
+  FB_SENDER: "000000000000"
+  FB_APP: 1:000000000000:web:demo
+  FIREBASE_ADMIN_PROJECT_ID: demo-serenity
+  FIREBASE_AUTH_EMULATOR_HOST: firebase-emulators:9099
+  FIRESTORE_EMULATOR_HOST: firebase-emulators:8080
+  FIREBASE_STORAGE_EMULATOR_HOST: firebase-emulators:9199
+  NEXT_PUBLIC_SITE_URL: http://localhost:3000
+  DAILY_IP_SALT: local-demo-salt
+  ENABLE_BULK_EMAIL_API: "false"
+  PUBLIC_TEMPLATE_PUBLISHING_V2: "true"
+  EMAIL_TRANSPORT: mailpit
+  MAILPIT_HOST: mailpit
+  MAILPIT_PORT: "1025"
+
+services:
+  web:
+    build:
+      context: .
+      target: development
+    environment: *serenity-environment
+    command: pnpm dev --hostname 0.0.0.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      firebase-emulators:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    volumes:
+      - .:/app
+      - serenity-node-modules:/app/node_modules
+      - serenity-next:/app/.next
+
+  firebase-emulators:
+    build:
+      context: .
+      target: development
+    environment:
+      FIREBASE_CLI_DISABLE_UPDATE_CHECK: "true"
+    command: pnpm firebase emulators:start --project demo-serenity
+    ports:
+      - "4000:4000"
+      - "8080:8080"
+      - "9099:9099"
+      - "9199:9199"
+    volumes:
+      - .:/app
+      - serenity-node-modules:/app/node_modules
+      - serenity-emulator-data:/app/.firebase-data
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  serenity-node-modules:
+  serenity-next:
+  serenity-emulator-data:

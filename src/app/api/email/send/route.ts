@@ -1,10 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import { verifyAuth } from '@/lib/firebase/verifyAuth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getTodayDateString } from '@/lib/utils';
 import { createLogger, getErrorDetails } from '@/lib/logger';
+import { buildVerificationUrl } from '@/lib/verification/url';
+import { isSafeCertificateMediaUrl } from '@/lib/security/mediaUrl';
+import nodemailer from 'nodemailer';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const logger = createLogger('Email.Send');
+const MAX_ATTACHMENT_BASE64_LENGTH = 8_000_000;
+
+/** Escape user-controlled values before interpolating into email HTML. */
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
@@ -47,6 +64,61 @@ async function sendEmailWithBrevo(payload: BrevoEmailPayload): Promise<{ message
   return { messageId: result.messageId || `brevo_${Date.now()}` };
 }
 
+const LOCAL_TRANSPORTS = new Set(['mailpit', 'json']);
+
+async function sendEmail(payload: BrevoEmailPayload): Promise<{ messageId: string }> {
+  const transportName = process.env.EMAIL_TRANSPORT || '';
+  const emulatorMode = process.env.USE_FIREBASE_EMULATORS === 'true';
+
+  // `.env.local` carries the production Brevo key and Next.js loads it even
+  // in emulator mode, so emulator mode must never fall through to Brevo.
+  if (emulatorMode && !LOCAL_TRANSPORTS.has(transportName)) {
+    throw new Error('Emulator mode only supports the local mailpit or json email transports');
+  }
+  if (!LOCAL_TRANSPORTS.has(transportName)) return sendEmailWithBrevo(payload);
+
+  if (!emulatorMode) {
+    throw new Error('Local email transports are restricted to the isolated emulator environment');
+  }
+
+  const transport = transportName === 'json'
+    ? nodemailer.createTransport({ jsonTransport: true })
+    : nodemailer.createTransport({
+        host: process.env.MAILPIT_HOST || '127.0.0.1',
+        port: Number(process.env.MAILPIT_PORT || 1025),
+        secure: false,
+      });
+  const result = await transport.sendMail({
+    from: { name: payload.sender.name, address: payload.sender.email },
+    to: payload.to.map((recipient) => ({ name: recipient.name || '', address: recipient.email })),
+    subject: payload.subject,
+    html: payload.htmlContent,
+    attachments: payload.attachment?.map((attachment) => ({
+      filename: attachment.name,
+      content: Buffer.from(attachment.content, 'base64'),
+    })),
+  });
+
+  if (transportName === 'json') {
+    // Emulator-only outbox so automated tests can inspect what would be sent.
+    const outbox = path.join(process.cwd(), '.local-object-store', 'outbox');
+    await mkdir(outbox, { recursive: true });
+    const fileName = `${Date.now()}-${String(result.messageId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`;
+    await writeFile(path.join(outbox, fileName), JSON.stringify({
+      messageId: result.messageId,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.htmlContent,
+      attachments: (payload.attachment || []).map((attachment) => ({
+        filename: attachment.name,
+        bytes: Buffer.byteLength(attachment.content, 'base64'),
+      })),
+    }, null, 2));
+  }
+
+  return { messageId: result.messageId };
+}
+
 const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || '300', 10);
 
 interface SendEmailRequest {
@@ -56,6 +128,7 @@ interface SendEmailRequest {
   certificateTitle: string;
   issuerName: string;
   verifyUrl: string;
+  hasAttachment?: boolean;
 }
 
 async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
@@ -90,8 +163,15 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
 }
 
 function generateEmailHTML(data: SendEmailRequest): string {
-  const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
-  
+  const appUrl = new URL(data.verifyUrl).origin;
+
+  // Escape all user-controlled values to prevent HTML/phishing injection.
+  const recipientName = escapeHtml(data.recipientName);
+  const issuerName = escapeHtml(data.issuerName);
+  const certificateTitle = escapeHtml(data.certificateTitle);
+  const certificateId = escapeHtml(data.certificateId);
+  const verifyUrl = escapeHtml(data.verifyUrl);
+
   return `
 <!DOCTYPE html>
 <html>
@@ -118,11 +198,11 @@ function generateEmailHTML(data: SendEmailRequest): string {
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 20px; color: #1e293b; font-size: 18px; line-height: 1.6;">
-                Dear <strong>${data.recipientName}</strong>,
+                Dear <strong>${recipientName}</strong>,
               </p>
               
               <p style="margin: 0 0 30px; color: #64748b; font-size: 16px; line-height: 1.6;">
-                You have been awarded a certificate from <strong>${data.issuerName}</strong>:
+                You have been awarded a certificate from <strong>${issuerName}</strong>:
               </p>
               
               <!-- Certificate Card -->
@@ -130,7 +210,7 @@ function generateEmailHTML(data: SendEmailRequest): string {
                 <tr>
                   <td style="padding: 30px; text-align: center;">
                     <h2 style="margin: 0; color: #78350f; font-size: 24px; font-weight: 700;">
-                      ${data.certificateTitle}
+                      ${certificateTitle}
                     </h2>
                   </td>
                 </tr>
@@ -139,14 +219,16 @@ function generateEmailHTML(data: SendEmailRequest): string {
               <p style="margin: 0 0 30px; color: #64748b; font-size: 16px; line-height: 1.6;">
                 Your certificate includes a unique verification link. Anyone can use it to confirm the authenticity of your achievement.
                 <br><br>
-                <strong style="color: #1e293b;">📎 Your certificate PDF is attached to this email</strong> for easy download and sharing.
+                ${data.hasAttachment === false
+                  ? '<strong style="color: #1e293b;">Open your certificate with the button below.</strong> You can view, share, and download it from its verification page.'
+                  : '<strong style="color: #1e293b;">📎 Your certificate is attached to this email</strong> for easy download and sharing.'}
               </p>
               
               <!-- CTA Button -->
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${data.verifyUrl}" style="display: inline-block; background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 600;">
+                    <a href="${verifyUrl}" style="display: inline-block; background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-size: 16px; font-weight: 600;">
                       View Your Certificate
                     </a>
                   </td>
@@ -154,7 +236,7 @@ function generateEmailHTML(data: SendEmailRequest): string {
               </table>
               
               <p style="margin: 30px 0 0; color: #94a3b8; font-size: 14px; text-align: center;">
-                Certificate ID: <code style="background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${data.certificateId}</code>
+                Certificate ID: <code style="background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${certificateId}</code>
               </p>
             </td>
           </tr>
@@ -183,8 +265,26 @@ export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7);
   
   try {
+    // Require a verified Firebase ID token. Identity is derived from the token,
+    // never from a client-supplied userId. Closes the unauthenticated email
+    // relay / spam-abuse vector on this endpoint.
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+    if (!authUser.emailVerified) {
+      return NextResponse.json(
+        { success: false, error: 'Email verification required' },
+        { status: 403 }
+      );
+    }
+    const userId = authUser.uid;
+
     const body = await request.json();
-    const { to, recipientName, certificateId, certificateTitle, issuerName, userId, certificatePdfBase64, certificateImageUrl } = body;
+    const { to, recipientName, certificateId, certificateTitle, issuerName, certificatePdfBase64, certificateImageUrl } = body;
 
     logger.debug('Processing email send request', { requestId, to, certificateId, userId });
 
@@ -205,7 +305,69 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rateLimit = await checkRateLimit(userId || 'anonymous');
+    if (certificatePdfBase64 !== undefined && typeof certificatePdfBase64 !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid certificate attachment' },
+        { status: 400 }
+      );
+    }
+
+    if (certificatePdfBase64 && certificatePdfBase64.length > MAX_ATTACHMENT_BASE64_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate attachment is too large' },
+        { status: 413 }
+      );
+    }
+
+    if (
+      typeof certificateImageUrl === 'string' &&
+      certificateImageUrl.startsWith('data:') &&
+      certificateImageUrl.length > MAX_ATTACHMENT_BASE64_LENGTH
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate image attachment is too large' },
+        { status: 413 }
+      );
+    }
+
+    if (
+      certificateImageUrl &&
+      !certificateImageUrl.startsWith('data:') &&
+      !isSafeCertificateMediaUrl(certificateImageUrl)
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate image URL is not from an approved media host' },
+        { status: 400 },
+      );
+    }
+
+    const db = getAdminFirestore();
+    const certificateRef = db.collection('certificates').doc(certificateId);
+    const certificateDoc = await certificateRef.get();
+
+    if (!certificateDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate not found' },
+        { status: 404 }
+      );
+    }
+
+    const certificateData = certificateDoc.data();
+    if (certificateData?.userId !== userId) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
+    if (certificateData?.isActive === false) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate has been revoked' },
+        { status: 410 }
+      );
+    }
+
+    const rateLimit = await checkRateLimit(userId);
     if (!rateLimit.allowed) {
       logger.info('Rate limit exceeded', { requestId, userId, limit: DAILY_EMAIL_LIMIT });
       return NextResponse.json(
@@ -218,8 +380,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
-    const verifyUrl = `${appUrl}/verify/${certificateId}`;
+    const verifyUrl = buildVerificationUrl(certificateId);
 
     const emailData: SendEmailRequest = {
       to,
@@ -251,6 +412,16 @@ export async function POST(request: NextRequest) {
           },
         ];
       } else if (certificateImageUrl) {
+        if (
+          certificateImageUrl !== certificateData?.certificateImage &&
+          !certificateImageUrl.startsWith('data:')
+        ) {
+          return NextResponse.json(
+            { success: false, error: 'Certificate image does not match the saved certificate' },
+            { status: 400 }
+          );
+        }
+
         // If no PDF but image URL is provided, fetch and attach the image
         try {
           let base64Content: string;
@@ -262,7 +433,14 @@ export async function POST(request: NextRequest) {
             // Fetch image from URL and convert to base64
             const imageResponse = await fetch(certificateImageUrl);
             if (imageResponse.ok) {
+              const contentType = imageResponse.headers.get('content-type') || '';
+              if (!['image/png', 'image/jpeg', 'image/webp'].some(type => contentType.startsWith(type))) {
+                throw new Error('Certificate image response has an unsupported content type');
+              }
               const arrayBuffer = await imageResponse.arrayBuffer();
+              if (arrayBuffer.byteLength > 6_000_000) {
+                throw new Error('Certificate image response is too large');
+              }
               base64Content = Buffer.from(arrayBuffer).toString('base64');
             } else {
               logger.warn('Failed to fetch certificate image', { requestId, imageUrl: certificateImageUrl.substring(0, 50) });
@@ -284,26 +462,33 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const info = await sendEmailWithBrevo(brevoPayload);
+      // Build the body last so it only promises an attachment that is present.
+      brevoPayload.htmlContent = generateEmailHTML({
+        ...emailData,
+        hasAttachment: !!brevoPayload.attachment?.length,
+      });
 
-      const db = getAdminFirestore();
+      const info = await sendEmail(brevoPayload);
+
       await db.collection('emailLogs').add({
         to,
         certificateId,
         messageId: info.messageId,
         sentAt: FieldValue.serverTimestamp(),
-        userId: userId || 'anonymous',
+        userId,
         hasAttachment: !!(brevoPayload.attachment && brevoPayload.attachment.length > 0),
       });
 
       // Update certificate with email status
       if (certificateId) {
         try {
-          await db.collection('certificates').doc(certificateId).update({
+          await certificateRef.update({
             emailStatus: 'sent',
             emailSentAt: FieldValue.serverTimestamp(),
             recipientEmail: to,
             emailError: null,
+            emailMessageId: info.messageId,
+            emailHadAttachment: !!(brevoPayload.attachment && brevoPayload.attachment.length > 0),
           });
         } catch (updateError) {
           logger.warn('Failed to update certificate email status', { requestId, certificateId }, updateError as Error);
@@ -324,8 +509,7 @@ export async function POST(request: NextRequest) {
       // Update certificate with failed status
       if (certificateId) {
         try {
-          const db = getAdminFirestore();
-          await db.collection('certificates').doc(certificateId).update({
+          await certificateRef.update({
             emailStatus: 'failed',
             emailError: errorDetails.message,
           });

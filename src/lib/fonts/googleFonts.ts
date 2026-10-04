@@ -65,11 +65,14 @@ export const GOOGLE_FONTS = [
 
 // Track loaded fonts
 const loadedFonts = new Set<string>();
+const loadingFonts = new Map<string, Promise<void>>();
 
 export async function loadGoogleFont(fontName: string, weights: number[] = [400, 700]): Promise<void> {
   if (loadedFonts.has(fontName)) {
     return;
   }
+  const existingPromise = loadingFonts.get(fontName);
+  if (existingPromise) return existingPromise;
 
   const fontWeights = weights.join(';');
   const fontUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@${fontWeights}&display=swap`;
@@ -77,6 +80,7 @@ export async function loadGoogleFont(fontName: string, weights: number[] = [400,
   // Check if link already exists
   const existingLink = document.querySelector(`link[href*="${encodeURIComponent(fontName)}"]`);
   if (existingLink) {
+    await document.fonts?.load(`16px "${fontName}"`);
     loadedFonts.add(fontName);
     return;
   }
@@ -87,16 +91,45 @@ export async function loadGoogleFont(fontName: string, weights: number[] = [400,
   link.href = fontUrl;
 
   // Wait for font to load
-  return new Promise((resolve, reject) => {
-    link.onload = () => {
-      loadedFonts.add(fontName);
-      resolve();
+  const promise = new Promise<void>((resolve, reject) => {
+    link.onload = async () => {
+      try {
+        await Promise.all(weights.map((weight) => document.fonts?.load(`${weight} 16px "${fontName}"`)));
+        loadedFonts.add(fontName);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
     };
     link.onerror = () => {
       reject(new Error(`Failed to load font: ${fontName}`));
     };
     document.head.appendChild(link);
   });
+  loadingFonts.set(fontName, promise);
+  return promise.finally(() => loadingFonts.delete(fontName));
+}
+
+export async function loadFontsForTemplate(template: string | object): Promise<void> {
+  let data: any;
+  try {
+    data = typeof template === 'string' ? JSON.parse(template) : template;
+  } catch {
+    return;
+  }
+
+  const requested = new Map<string, Set<number>>();
+  for (const object of Array.isArray(data?.objects) ? data.objects : []) {
+    const family = typeof object?.fontFamily === 'string' ? object.fontFamily : '';
+    if (!isGoogleFont(family)) continue;
+    const weight = Number.parseInt(String(object.fontWeight), 10);
+    const weights = requested.get(family) || new Set<number>();
+    weights.add(Number.isFinite(weight) ? weight : 400);
+    requested.set(family, weights);
+  }
+
+  await Promise.all(Array.from(requested, ([family, weights]) => loadGoogleFont(family, Array.from(weights))));
+  await document.fonts?.ready;
 }
 
 export async function loadAllGoogleFonts(): Promise<void> {

@@ -5,6 +5,8 @@ export interface CertificateMetadata {
   title: string;
   issuedBy: string;
   description: string;
+  category?: string;
+  eventId?: string;
 }
 
 export interface Template {
@@ -23,6 +25,13 @@ export interface Template {
   tags?: string[];
   category?: string;
   certificateMetadata?: CertificateMetadata;
+  normalizedName?: string;
+  schemaVersion?: 2;
+  publicationStatus?: 'private' | 'pending_review' | 'public' | 'rejected';
+  publicationRequestedAt?: string;
+  publishedAt?: string;
+  reviewedAt?: string;
+  source?: 'user' | 'serenity_curated';
 }
 
 export interface CreateTemplateInput {
@@ -46,9 +55,20 @@ export interface UpdateTemplateInput {
   tags?: string[];
   category?: string;
   certificateMetadata?: CertificateMetadata;
+  normalizedName?: string;
+  schemaVersion?: 2;
+  publicationStatus?: 'private' | 'pending_review' | 'public' | 'rejected';
+  publicationRequestedAt?: string;
+  publishedAt?: string;
+  reviewedAt?: string;
+  source?: 'user' | 'serenity_curated';
 }
 
 const COLLECTION = 'templates';
+
+export function normalizeTemplateName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
+}
 
 function generateTemplateId(): string {
   return `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -75,6 +95,10 @@ export async function createTemplate(input: CreateTemplateInput): Promise<Templa
     tags: input.tags || [],
     category: input.category,
     certificateMetadata: input.certificateMetadata,
+    normalizedName: normalizeTemplateName(input.name),
+    schemaVersion: 2,
+    publicationStatus: input.isPublic ? 'public' : 'private',
+    source: 'user',
   };
 
   // Remove undefined values to avoid Firestore issues
@@ -168,15 +192,30 @@ export async function getUserTemplates(userId: string): Promise<Template[]> {
   }
 }
 
+export async function findTemplateByNormalizedName(
+  userId: string,
+  name: string,
+  excludeId?: string,
+): Promise<Template | null> {
+  const db = getAdminFirestore();
+  const snapshot = await db.collection(COLLECTION)
+    .where('userId', '==', userId)
+    .where('normalizedName', '==', normalizeTemplateName(name))
+    .limit(2)
+    .get();
+
+  const document = snapshot.docs.find((candidate) => candidate.id !== excludeId);
+  return document ? document.data() as Template : null;
+}
+
 export async function getPublicTemplates(limit: number = 50): Promise<Template[]> {
   const db = getAdminFirestore();
   
   try {
-    // Simple query without compound ordering to avoid index requirements  
     const snapshot = await db
       .collection(COLLECTION)
       .where('isPublic', '==', true)
-      .limit(limit * 2) // Get more to account for sorting
+      .limit(limit)
       .get();
     
     // Sort in memory by stars first, then by updatedAt
@@ -191,8 +230,7 @@ export async function getPublicTemplates(limit: number = 50): Promise<Template[]
       .sort((a, b) => {
         if (b.stars !== a.stars) return b.stars - a.stars;
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      })
-      .slice(0, limit);
+      });
   } catch (error) {
     console.error('[Firebase Templates] Error getting public templates:', error);
     return [];
@@ -201,21 +239,22 @@ export async function getPublicTemplates(limit: number = 50): Promise<Template[]
 
 export async function searchTemplates(query: string, publicOnly: boolean = true): Promise<Template[]> {
   const db = getAdminFirestore();
-  let baseQuery = db.collection(COLLECTION);
-  
-  // Firestore doesn't support full-text search, so we'll get templates and filter
-  const snapshot = publicOnly 
-    ? await baseQuery.where('isPublic', '==', true).get()
-    : await baseQuery.get();
-  
-  const lowerQuery = query.toLowerCase();
-  
+  const normalizedQuery = normalizeTemplateName(query);
+  let firestoreQuery: FirebaseFirestore.Query = db.collection(COLLECTION);
+  if (publicOnly) firestoreQuery = firestoreQuery.where('isPublic', '==', true);
+  const snapshot = await firestoreQuery
+    .orderBy('normalizedName', 'asc')
+    .startAt(normalizedQuery)
+    .endAt(`${normalizedQuery}\uf8ff`)
+    .limit(25)
+    .get();
+
   return snapshot.docs
-    .map(doc => doc.data() as Template)
-    .filter(template => 
-      template.name.toLowerCase().includes(lowerQuery) ||
-      template.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
-    )
+    .map(doc => {
+      const data = doc.data() as Template;
+      const { canvasJSON, ...rest } = data;
+      return { ...rest, canvasJSON: '' } as Template;
+    })
     .sort((a, b) => b.stars - a.stars);
 }
 

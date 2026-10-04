@@ -58,11 +58,56 @@ export function generateId(length = 8): string {
   return result;
 }
 
+/**
+ * Coerce the date shapes that reach the UI into a `Date`.
+ *
+ * Firestore timestamps arrive as live `Timestamp` instances on the server and
+ * as plain `{ _seconds, _nanoseconds }` (or `{ seconds, nanoseconds }`) objects
+ * once a response has been through JSON, so a bare `toLocaleDateString` call
+ * throws and takes the surrounding page down with it.
+ */
+function toDate(value: unknown): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  if (typeof value === 'number' || typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (value && typeof value === 'object') {
+    const candidate = value as {
+      toDate?: () => Date;
+      _seconds?: number;
+      seconds?: number;
+    };
+
+    if (typeof candidate.toDate === 'function') {
+      try {
+        const converted = candidate.toDate();
+        if (converted instanceof Date && !Number.isNaN(converted.getTime())) return converted;
+      } catch {
+        return null;
+      }
+    }
+
+    const seconds = candidate._seconds ?? candidate.seconds;
+    if (typeof seconds === 'number' && Number.isFinite(seconds)) {
+      const parsed = new Date(seconds * 1000);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+  }
+
+  return null;
+}
+
 export function formatDate(
-  date: Date | number | string,
-  options?: Intl.DateTimeFormatOptions
+  date: unknown,
+  options?: Intl.DateTimeFormatOptions,
+  fallback = 'Unknown date'
 ): string {
-  const d = typeof date === 'number' || typeof date === 'string' ? new Date(date) : date;
+  const d = toDate(date);
+  if (!d) return fallback;
+
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',

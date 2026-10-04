@@ -10,7 +10,6 @@ import {
   Calendar, 
   Eye, 
   Search, 
-  Award,
   ChevronRight,
   Mail,
   MailCheck,
@@ -25,6 +24,9 @@ import {
   FileText
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { getIdToken } from '@/lib/firebase/client';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 interface CertificateRecord {
   id: string;
@@ -32,7 +34,7 @@ interface CertificateRecord {
   recipientEmail: string;
   title: string;
   issuerName: string;
-  issuedAt: number;
+  issuedAt: string;
   templateId?: string;
   templateName?: string;
   isActive: boolean;
@@ -60,6 +62,10 @@ export default function HistoryPage() {
   const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<'all' | 'sent' | 'failed' | 'not_sent'>('all');
   
@@ -87,14 +93,19 @@ export default function HistoryPage() {
     }
     
     try {
-      const response = await fetch('/api/certificates', {
-        headers: { 'x-user-id': user.id },
+      const response = await authenticatedFetch('/api/certificates?limit=50', {
         cache: 'no-store',
       });
       
       if (response.ok) {
         const data = await response.json();
-        setCertificates(data.certificates || []);
+        setCertificates(data.items || data.certificates || []);
+        setNextCursor(data.nextCursor || null);
+        setHasMore(data.hasMore === true);
+        setLoadError(null);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setLoadError(data.error || 'Certificate history is temporarily unavailable.');
       }
     } catch (error) {
       console.error('[HistoryPage] Error fetching certificates:', error);
@@ -106,6 +117,34 @@ export default function HistoryPage() {
   useEffect(() => {
     fetchCertificates();
   }, [fetchCertificates]);
+
+  const loadMoreCertificates = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/certificates?limit=50&cursor=${encodeURIComponent(nextCursor)}`,
+        { cache: 'no-store' },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to load more certificates.');
+
+      const nextItems: CertificateRecord[] = data.items || data.certificates || [];
+      setCertificates((current) => {
+        const byId = new Map(current.map((certificate) => [certificate.id, certificate]));
+        nextItems.forEach((certificate) => byId.set(certificate.id, certificate));
+        return Array.from(byId.values());
+      });
+      setNextCursor(data.nextCursor || null);
+      setHasMore(data.hasMore === true);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load more certificates.');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // Group certificates by template and date
   const batchGroups = useMemo((): BatchGroup[] => {
@@ -210,10 +249,14 @@ export default function HistoryPage() {
     try {
       const cert = resendModal.certificate;
       const verifyUrl = `${window.location.origin}/verify/${cert.id}`;
-      
+      const idToken = await getIdToken();
+
       const response = await fetch('/api/email/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({
           to: resendModal.newEmail,
           recipientName: cert.recipientName,
@@ -221,7 +264,6 @@ export default function HistoryPage() {
           certificateTitle: cert.title,
           issuerName: cert.issuerName,
           verifyUrl,
-          userId: user?.id,
           // Include certificate image for attachment
           certificateImageUrl: cert.certificateImage || undefined,
         }),
@@ -253,13 +295,13 @@ export default function HistoryPage() {
     switch (status) {
       case 'sent':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
             <MailCheck className="h-3 w-3" /> Sent
           </span>
         );
       case 'failed':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-xs font-medium text-error">
             <MailX className="h-3 w-3" /> Failed
           </span>
         );
@@ -281,16 +323,11 @@ export default function HistoryPage() {
   }), [certificates]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-screen bg-background">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
-          </Link>
+      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
+        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
+          <Link href="/"><SerenityBrand /></Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />
             <Link href="/editor" className="btn-primary">
@@ -331,8 +368,8 @@ export default function HistoryPage() {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-green-500/10 p-2">
-                <MailCheck className="h-5 w-5 text-green-500" />
+              <div className="rounded-lg bg-success/10 p-2">
+                <MailCheck className="h-5 w-5 text-success" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{totalStats.sent}</p>
@@ -342,8 +379,8 @@ export default function HistoryPage() {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-red-500/10 p-2">
-                <MailX className="h-5 w-5 text-red-500" />
+              <div className="rounded-lg bg-error/10 p-2">
+                <MailX className="h-5 w-5 text-error" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{totalStats.failed}</p>
@@ -353,8 +390,8 @@ export default function HistoryPage() {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-500/10 p-2">
-                <Eye className="h-5 w-5 text-blue-500" />
+              <div className="rounded-lg bg-primary/10 p-2">
+                <Eye className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{totalStats.totalViews}</p>
@@ -392,6 +429,11 @@ export default function HistoryPage() {
         </div>
 
         {/* Loading State */}
+        {loadError && (
+          <div role="alert" className="mb-4 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+            {loadError}
+          </div>
+        )}
         {loading ? (
           <div className="card py-16 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
@@ -406,25 +448,28 @@ export default function HistoryPage() {
                   onClick={() => toggleBatch(batch.id)}
                   className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className={`transition-transform ${expandedBatches.has(batch.id) ? 'rotate-90' : ''}`}>
+                  <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                    <div className={`shrink-0 transition-transform ${expandedBatches.has(batch.id) ? 'rotate-90' : ''}`}>
                       <ChevronRight className="h-5 w-5 text-muted-foreground" />
                     </div>
-                    <div className="text-left">
-                      <h3 className="font-semibold">{batch.templateName}</h3>
-                      <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3.5 w-3.5" />
+                    {/* `min-w-0` plus non-wrapping metadata: the three facts
+                        below used to break onto three lines each on a phone,
+                        turning one row into a paragraph. */}
+                    <div className="min-w-0 text-left">
+                      <h3 className="truncate font-semibold">{batch.templateName}</h3>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:gap-x-4 sm:text-sm">
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" />
                           {new Date(batch.generatedAt).toLocaleDateString('en-US', {
                             month: 'short', day: 'numeric', year: 'numeric'
                           })}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Users className="h-3.5 w-3.5" />
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                          <Users className="h-3.5 w-3.5 shrink-0" />
                           {batch.certificates.length} certificates
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Eye className="h-3.5 w-3.5" />
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                          <Eye className="h-3.5 w-3.5 shrink-0" />
                           {batch.totalViews} views
                         </span>
                       </div>
@@ -432,12 +477,12 @@ export default function HistoryPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     {batch.sentCount > 0 && (
-                      <span className="text-xs px-2 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
+                      <span className="text-xs px-2 py-1 rounded-full bg-success/10 text-success">
                         {batch.sentCount} sent
                       </span>
                     )}
                     {batch.failedCount > 0 && (
-                      <span className="text-xs px-2 py-1 rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
+                      <span className="text-xs px-2 py-1 rounded-full bg-error/10 text-error">
                         {batch.failedCount} failed
                       </span>
                     )}
@@ -479,7 +524,7 @@ export default function HistoryPage() {
                                     </span>
                                   )}
                                   {cert.emailError && (
-                                    <span className="text-xs text-red-500">{cert.emailError}</span>
+                                    <span className="text-xs text-error">{cert.emailError}</span>
                                   )}
                                 </div>
                               </td>
@@ -542,8 +587,17 @@ export default function HistoryPage() {
 
         {/* Summary */}
         {!loading && certificates.length > 0 && (
-          <div className="mt-6 text-sm text-muted-foreground text-center">
-            Showing {filteredBatches.reduce((sum, b) => sum + b.certificates.length, 0)} of {certificates.length} certificates
+          <div className="mt-6 flex flex-col items-center gap-3 text-sm text-muted-foreground">
+            <span>
+              Showing {filteredBatches.reduce((sum, b) => sum + b.certificates.length, 0)} loaded certificates
+            </span>
+            {hasMore && (
+              <Button variant="outline" onClick={loadMoreCertificates} disabled={loadingMore}>
+                {loadingMore ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading…</>
+                ) : 'Load more'}
+              </Button>
+            )}
           </div>
         )}
       </main>
@@ -556,8 +610,8 @@ export default function HistoryPage() {
       >
         {resendModal.success ? (
           <div className="text-center py-6">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
-              <CheckCircle className="h-8 w-8 text-green-500" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/20">
+              <CheckCircle className="h-8 w-8 text-success" />
             </div>
             <h3 className="text-lg font-semibold">Email Sent Successfully!</h3>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -607,16 +661,16 @@ export default function HistoryPage() {
                 {/* Note about attachment */}
                 <div className={`rounded-lg p-3 flex items-start gap-2 ${
                   resendModal.certificate?.certificateImage 
-                    ? 'bg-green-500/10 border border-green-500/20' 
-                    : 'bg-amber-500/10 border border-amber-500/20'
+                    ? 'bg-success/10 border border-success/20'
+                    : 'bg-warning/10 border border-warning/20'
                 }`}>
                   <AlertCircle className={`h-4 w-4 shrink-0 mt-0.5 ${
-                    resendModal.certificate?.certificateImage ? 'text-green-500' : 'text-amber-500'
+                    resendModal.certificate?.certificateImage ? 'text-success' : 'text-warning'
                   }`} />
                   <p className={`text-xs ${
                     resendModal.certificate?.certificateImage 
-                      ? 'text-green-700 dark:text-green-400' 
-                      : 'text-amber-700 dark:text-amber-400'
+                      ? 'text-success dark:text-success'
+                      : 'text-warning dark:text-warning'
                   }`}>
                     {resendModal.certificate?.certificateImage 
                       ? <><strong>Certificate image will be attached</strong> to this email.</>
@@ -626,9 +680,9 @@ export default function HistoryPage() {
                 </div>
 
                 {resendModal.error && (
-                  <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-500">{resendModal.error}</p>
+                  <div className="rounded-lg bg-error/10 border border-error/20 p-3 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-error shrink-0 mt-0.5" />
+                    <p className="text-sm text-error">{resendModal.error}</p>
                   </div>
                 )}
 

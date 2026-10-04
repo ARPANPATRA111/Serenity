@@ -102,10 +102,10 @@ export function ToolPanelItem({ icon: Icon, label, onClick, disabled, shortcut, 
       className={`flex items-center justify-between w-full gap-2 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isBlocked ? 'opacity-70' : ''}`}
     >
       <div className="flex items-center gap-2.5">
-        <Icon className={`h-4 w-4 ${isBlocked ? 'text-amber-500' : 'text-muted-foreground'}`} />
+        <Icon className={`h-4 w-4 ${isBlocked ? 'text-warning' : 'text-muted-foreground'}`} />
         <span>{label}</span>
         {premium && (
-          <Crown className="h-3 w-3 text-amber-500 shrink-0" />
+          <Crown className="h-3 w-3 text-warning shrink-0" />
         )}
       </div>
       {shortcut && (

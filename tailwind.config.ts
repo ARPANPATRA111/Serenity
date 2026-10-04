@@ -41,7 +41,9 @@ const config: Config = {
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
-        display: ['var(--font-display)', 'system-ui', 'sans-serif'],
+        // Bricolage Grotesque leads so headings across the signed-in app match
+        // the public pages; Space Grotesk stays as the fallback.
+        display: ['var(--font-marketing)', 'var(--font-display)', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         'glow-sm': '0 0 10px rgba(var(--color-primary), 0.3)',

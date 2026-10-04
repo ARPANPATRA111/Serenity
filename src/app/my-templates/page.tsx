@@ -7,11 +7,13 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/api/authFetch';
 import { 
-  ArrowLeft, Plus, Search, Filter, Star, Award, Globe, Lock, 
+  ArrowLeft, Plus, Search, Filter, Bookmark, Globe, Lock,
   MoreVertical, Edit3, Trash2, Eye, Clock, FileText, Crown,
-  X, Tag, Sparkles
+  X, Tag, Library
 } from 'lucide-react';
+import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 interface UserTemplate {
   id: string;
@@ -59,7 +61,7 @@ export default function MyTemplatesPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/templates?userId=${user.id}`);
+      const res = await authenticatedFetch('/api/templates');
       const data = await res.json();
       if (data.success && data.templates) {
         setTemplates(data.templates);
@@ -118,7 +120,7 @@ export default function MyTemplatesPage() {
 
   const handleDelete = async (templateId: string) => {
     try {
-      const res = await fetch(`/api/templates/${templateId}`, {
+      const res = await authenticatedFetch(`/api/templates/${templateId}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -132,8 +134,8 @@ export default function MyTemplatesPage() {
 
   const handleToggleVisibility = async (templateId: string, currentPublic: boolean) => {
     try {
-      const res = await fetch(`/api/templates/${templateId}`, {
-        method: 'PATCH',
+      const res = await authenticatedFetch(`/api/templates/${templateId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPublic: !currentPublic }),
       });
@@ -152,15 +154,12 @@ export default function MyTemplatesPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-screen bg-background">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
+        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
           <Link href="/" className="flex items-center gap-2">
-            <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-              <Award className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
+            <SerenityBrand />
           </Link>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -314,7 +313,7 @@ export default function MyTemplatesPage() {
                     <div className="absolute top-3 left-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                         template.isPublic
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                          ? 'bg-success dark:bg-success/30 text-success dark:text-success'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                       }`}>
                         {template.isPublic ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
@@ -352,7 +351,7 @@ export default function MyTemplatesPage() {
                           </button>
                           <button
                             onClick={() => { setDeleteConfirm(template.id); setActiveMenu(null); }}
-                            className="flex items-center gap-2 px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm text-red-600 dark:text-red-400 transition-colors w-full text-left"
+                            className="flex items-center gap-2 px-4 py-3 hover:bg-error dark:hover:bg-error/20 text-sm text-error transition-colors w-full text-left"
                           >
                             <Trash2 className="w-4 h-4" />
                             Delete
@@ -383,7 +382,7 @@ export default function MyTemplatesPage() {
                       </span>
                       {template.stars > 0 && (
                         <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 text-amber-500" />
+                          <Bookmark className="w-3 h-3 text-primary" />
                           {template.stars}
                         </span>
                       )}
@@ -418,7 +417,7 @@ export default function MyTemplatesPage() {
             <span className="hidden sm:inline">•</span>
             <span>{templates.filter(t => !t.isPublic).length} private</span>
             <span className="hidden sm:inline">•</span>
-            <span>{templates.reduce((sum, t) => sum + t.stars, 0)} total stars</span>
+            <span>{templates.reduce((sum, t) => sum + t.stars, 0)} total saves</span>
           </div>
         )}
 
@@ -434,7 +433,7 @@ export default function MyTemplatesPage() {
             href="/templates"
             className="mt-4 inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
           >
-            <Sparkles className="w-4 h-4" />
+            <Library className="w-4 h-4" />
             Browse Public Templates
           </Link>
         </div>
@@ -456,8 +455,8 @@ export default function MyTemplatesPage() {
               className="bg-card rounded-2xl border border-border shadow-2xl p-6 max-w-sm w-full"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                  <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+                <div className="w-10 h-10 rounded-full bg-error dark:bg-error/30 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-error" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground">Delete Template?</h3>
               </div>
@@ -473,7 +472,7 @@ export default function MyTemplatesPage() {
                 </button>
                 <button
                   onClick={() => handleDelete(deleteConfirm)}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition-colors"
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-error hover:bg-error text-white font-medium text-sm transition-colors"
                 >
                   Delete
                 </button>

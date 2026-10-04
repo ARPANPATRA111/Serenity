@@ -1,3 +1,7 @@
+'use client';
+
+import { authenticatedFetch } from '@/lib/api/authFetch';
+
 export interface AutosaveData {
   canvasJSON: string;
   templateId: string | null;
@@ -8,17 +12,16 @@ export interface AutosaveData {
 
 export class AutosaveService {
   static async save(
-    userId: string,
+    _userId: string,
     canvasJSON: string,
     templateId?: string | null,
     templateName?: string
   ): Promise<boolean> {
     try {
-      const response = await fetch('/api/autosave', {
+      const response = await authenticatedFetch('/api/autosave', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': userId,
         },
         body: JSON.stringify({
           canvasJSON,
@@ -35,13 +38,10 @@ export class AutosaveService {
     }
   }
 
-  static async load(userId: string): Promise<AutosaveData | null> {
+  static async load(_userId: string): Promise<AutosaveData | null> {
     try {
-      const response = await fetch('/api/autosave', {
+      const response = await authenticatedFetch('/api/autosave', {
         method: 'GET',
-        headers: {
-          'x-user-id': userId,
-        },
       });
 
       const data = await response.json();
@@ -55,13 +55,10 @@ export class AutosaveService {
     }
   }
 
-  static async clear(userId: string): Promise<boolean> {
+  static async clear(_userId: string): Promise<boolean> {
     try {
-      const response = await fetch('/api/autosave', {
+      const response = await authenticatedFetch('/api/autosave', {
         method: 'DELETE',
-        headers: {
-          'x-user-id': userId,
-        },
       });
 
       const data = await response.json();

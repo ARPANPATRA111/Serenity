@@ -1,171 +1,81 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
-import { getAdminFirestore } from '@/lib/firebase/admin';
-import { FieldValue } from 'firebase-admin/firestore';
-
-function getDailySalt(): string {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const baseSalt = process.env.DAILY_IP_SALT || 'serenity-default-salt';
-  return `${baseSalt}-${today}`;
-}
-
-function hashIP(ip: string): string {
-  const salt = getDailySalt();
-  return createHash('sha256')
-    .update(`${ip}-${salt}`)
-    .digest('hex')
-    .substring(0, 32); // Truncate for storage efficiency
-}
-
-function getClientIP(request: NextRequest): string {
-  // Check various headers for IP (supports proxies/load balancers)
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  
-  const realIP = request.headers.get('x-real-ip');
-  if (realIP) {
-    return realIP;
-  }
-  
-  // Fallback
-  return '127.0.0.1';
-}
+import { normalizeCertificateId } from '@/lib/verification/certificateId';
+import { clientFromHeaders, getVerification, noteCountedView } from '@/lib/verification/service';
+import { recordVerificationViewWithin } from '@/lib/verification/viewTracking';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 interface RouteParams {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: RouteParams
-) {
-  try {
-    const { id: certificateId } = await params;
-    console.log('[API/verify] Verifying certificate:', certificateId);
-    
-    if (!certificateId || certificateId.length < 8) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid certificate ID' },
-        { status: 400 }
-      );
-    }
+const NO_STORE = { 'Cache-Control': 'private, no-store' };
 
-    let db;
-    try {
-      db = getAdminFirestore();
-    } catch (firebaseError) {
-      console.error('[API/verify] Firebase initialization error:', firebaseError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          isValid: false,
-          error: 'Database not configured' 
-        },
-        { status: 500 }
-      );
-    }
-    
-    const certificateRef = db.collection('certificates').doc(certificateId);
-    
-    // Get certificate data
-    const certificateDoc = await certificateRef.get();
-    
-    if (!certificateDoc.exists) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          isValid: false,
-          error: 'Certificate not found' 
-        },
-        { status: 404 }
-      );
-    }
+/**
+ * Public verification API.
+ *
+ * The response contract is unchanged from earlier releases (status codes,
+ * `success`/`isValid`, error strings, and the certificate shape), with two
+ * compatible refinements: `issuedAt` is always an ISO string, and an
+ * infrastructure problem returns a retryable 503 instead of a generic 500 so
+ * a verifier is never told that a genuine certificate is invalid.
+ */
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const certificateId = normalizeCertificateId(params.id);
+  if (!certificateId) {
+    return NextResponse.json(
+      { success: false, isValid: false, error: 'Invalid certificate ID' },
+      { status: 400, headers: NO_STORE },
+    );
+  }
 
-    const certificateData = certificateDoc.data();
-    
-    // Check if certificate is active
-    if (!certificateData?.isActive) {
+  const client = clientFromHeaders(request.headers);
+  const result = await getVerification(certificateId, { client });
+
+  switch (result.status) {
+    case 'not_found':
+    case 'invalid_id':
       return NextResponse.json(
-        { 
+        { success: false, isValid: false, error: 'Certificate not found' },
+        { status: 404, headers: NO_STORE },
+      );
+    case 'revoked':
+      return NextResponse.json(
+        { success: false, isValid: false, status: 'revoked', error: 'Certificate has been revoked' },
+        { status: 410, headers: NO_STORE },
+      );
+    case 'unavailable':
+      return NextResponse.json(
+        {
           success: false,
           isValid: false,
-          error: 'Certificate has been revoked' 
+          retryable: true,
+          reason: result.reason,
+          error: 'Verification is temporarily unavailable. This does not mean the certificate is invalid.',
         },
-        { status: 410 }
+        { status: 503, headers: { ...NO_STORE, 'Retry-After': '30' } },
+      );
+    case 'valid': {
+      const outcome = await recordVerificationViewWithin(1_500, certificateId, {
+        ip: client,
+        userAgent: request.headers.get('user-agent'),
+      });
+      const isNewView = outcome === 'counted';
+      if (isNewView) noteCountedView(certificateId);
+      return NextResponse.json(
+        {
+          success: true,
+          isValid: true,
+          isNewView,
+          ...(result.stale ? { stale: true } : {}),
+          certificate: {
+            ...result.certificate,
+            viewCount: result.certificate.viewCount + (isNewView ? 1 : 0),
+          },
+        },
+        { headers: NO_STORE },
       );
     }
-
-    // Handle view counting with IP hashing
-    const clientIP = getClientIP(request);
-    const ipHash = hashIP(clientIP);
-    
-    // Check if this IP has already viewed today
-    const visitorRef = certificateRef.collection('visitors').doc(ipHash);
-    const visitorDoc = await visitorRef.get();
-    
-    let isNewView = false;
-    
-    if (!visitorDoc.exists) {
-      // New visitor - create document and increment view count
-      isNewView = true;
-      
-      // Use transaction to ensure atomicity
-      await db.runTransaction(async (transaction) => {
-        // Create visitor record
-        transaction.set(visitorRef, {
-          firstViewAt: FieldValue.serverTimestamp(),
-          viewCount: 1,
-        });
-        
-        // Increment certificate view count
-        transaction.update(certificateRef, {
-          viewCount: FieldValue.increment(1),
-        });
-      });
-    } else {
-      // Returning visitor - just update their view count (optional)
-      await visitorRef.update({
-        lastViewAt: FieldValue.serverTimestamp(),
-        viewCount: FieldValue.increment(1),
-      });
-    }
-
-    // Get updated view count
-    const updatedDoc = await certificateRef.get();
-    const viewCount = updatedDoc.data()?.viewCount || 0;
-
-    // Return certificate verification data (privacy-preserving)
-    return NextResponse.json({
-      success: true,
-      isValid: true,
-      isNewView,
-      certificate: {
-        id: certificateId,
-        recipientName: certificateData.recipientName,
-        recipientEmail: certificateData.recipientEmail,
-        title: certificateData.title,
-        description: certificateData.description || null,
-        issuedAt: certificateData.issuedAt,
-        issuerName: certificateData.issuerName,
-        viewCount,
-        certificateImage: certificateData.certificateImage || null,
-        templateId: certificateData.templateId || null,
-      },
-    });
-
-  } catch (error) {
-    console.error('Verification error:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Internal server error' 
-      },
-      { status: 500 }
-    );
   }
 }

@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase/admin';
+import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id');
-    
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'User ID required' }, { status: 401 });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const clientUserId = request.headers.get('x-user-id');
+    if (clientUserId && clientUserId !== authUser.uid) {
+      return forbiddenResponse('Authenticated user does not match requested user ID');
+    }
+
+    const userId = authUser.uid;
     const db = getAdminFirestore();
     const autosaveRef = db.collection('autosave').doc(userId);
     const doc = await autosaveRef.get();
@@ -32,12 +38,17 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id');
-    
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'User ID required' }, { status: 401 });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const clientUserId = request.headers.get('x-user-id');
+    if (clientUserId && clientUserId !== authUser.uid) {
+      return forbiddenResponse('Authenticated user does not match requested user ID');
+    }
+
+    const userId = authUser.uid;
     const body = await request.json();
     const { canvasJSON, templateId, templateName } = body;
 
@@ -65,12 +76,17 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id');
-    
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'User ID required' }, { status: 401 });
+    const authUser = await verifyAuth(request);
+    if (!authUser) {
+      return unauthorizedResponse();
     }
 
+    const clientUserId = request.headers.get('x-user-id');
+    if (clientUserId && clientUserId !== authUser.uid) {
+      return forbiddenResponse('Authenticated user does not match requested user ID');
+    }
+
+    const userId = authUser.uid;
     const db = getAdminFirestore();
     const autosaveRef = db.collection('autosave').doc(userId);
     await autosaveRef.delete();

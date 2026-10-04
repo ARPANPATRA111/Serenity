@@ -82,6 +82,7 @@ export interface CertificateRecord {
   templateId: string;
   userId?: string;
   templateName?: string;
+  eventId?: string;
   recipientName: string;
   recipientEmail?: string;
   recipientEmailHash?: string;
@@ -92,6 +93,13 @@ export interface CertificateRecord {
   viewCount: number;
   pdfUrl?: string;
   certificateImage?: string;
+  generationBatchId?: string;
+  rowIndex?: number;
+  generationStatus?: 'rendered' | 'saved' | 'save_failed';
+  idempotencyKey?: string;
+  emailStatus?: 'not_sent' | 'sent' | 'failed';
+  emailSentAt?: string;
+  emailError?: string | null;
   metadata: Record<string, string>;
   isActive: boolean;
 }
@@ -134,7 +142,7 @@ export interface UserProfile {
 export interface LeadCaptureEvent {
   userId: string;
   email: string;
-  feature: 'bulk_email' | 'bulk_download' | 'custom_branding' | 'api_access';
+  feature: 'bulk_email' | 'bulk_download' | 'custom_branding' | 'api_access' | 'pro_pricing';
   timestamp: number;
   metadata?: Record<string, unknown>;
 }
@@ -154,6 +162,7 @@ export interface VerificationResponse {
     issuedAt: number;
     issuerName: string;
     viewCount: number;
+    eventId?: string;
   };
   error?: string;
 }
@@ -182,7 +191,6 @@ export interface EditorState {
   setIsEditingText: (editing: boolean) => void;
   setZoomLevel: (zoom: number) => void;
   setCanvasDimensions: (dims: { width: number; height: number }) => void;
-  pushHistory: (json: string) => void;
   undo: () => string | null;
   redo: () => string | null;
   setClipboard: (obj: fabric.Object | null) => void;

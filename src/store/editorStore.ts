@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { fabric } from 'fabric';
+import type { fabric } from 'fabric';
 
 export interface MediaAsset {
   id: string;
@@ -17,6 +17,7 @@ export interface CertificateMetadata {
   issuedBy: string;
   description: string;
   category?: string;
+  eventId?: string;
 }
 
 export type LeftSidebarTab = 'media' | 'colors' | 'effects';
@@ -51,8 +52,7 @@ export interface EditorState {
   setLeftSidebarOpen: (open: boolean) => void;
   setRightSidebarOpen: (open: boolean) => void;
   setLeftSidebarTab: (tab: LeftSidebarTab) => void;
-  pushHistory: (json: string) => void;
-  setHistoryState: (canUndo: boolean, canRedo: boolean) => void;
+  setHistoryState: (canUndo: boolean, canRedo: boolean, position?: number, length?: number) => void;
   setClipboard: (obj: fabric.Object | null) => void;
   setTemplateInfo: (id: string | null, name: string) => void;
   setTemplateName: (name: string) => void;
@@ -96,7 +96,7 @@ const initialState = {
   } as CertificateMetadata,
 };
 
-export const useEditorStore = create<EditorState>((set, get) => ({
+export const useEditorStore = create<EditorState>((set) => ({
   ...initialState,
 
   setSelectedObject: (obj) => {
@@ -116,19 +116,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
   setLeftSidebarTab: (tab) => set({ leftSidebarTab: tab }),
 
-  pushHistory: () => {
-    const { historyIndex } = get();
-    const newIndex = historyIndex + 1;
-    set({
-      historyIndex: newIndex,
-      historyLength: newIndex + 1,
-      canUndo: newIndex > 0,
-      canRedo: false,
-      isDirty: true,
-    });
-  },
-
-  setHistoryState: (canUndo, canRedo) => set({ canUndo, canRedo }),
+  setHistoryState: (canUndo, canRedo, position, length) => set((state) => ({
+    canUndo,
+    canRedo,
+    historyIndex: position ?? state.historyIndex,
+    historyLength: length ?? state.historyLength,
+    isDirty: canUndo || state.isDirty,
+  })),
 
   setClipboard: (obj) => set({ clipboard: obj }),
 

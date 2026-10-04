@@ -1,9 +1,9 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
@@ -16,6 +16,8 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, initializeFirebase } from '@/lib/firebase/client';
+import { authenticatedFetch } from '@/lib/api/authFetch';
+import { sanitizeAuthRedirect } from '@/lib/navigation/safeRedirect';
 
 interface User {
   id: string;
@@ -45,37 +47,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const PROTECTED_ROUTES = ['/dashboard', '/editor', '/history', '/templates', '/settings'];
+const PROTECTED_ROUTES = ['/dashboard', '/editor', '/events', '/history', '/templates', '/settings'];
 const AUTH_ROUTES = ['/login', '/signup'];
-
-function generateOldUserIdFromEmail(email: string): string {
-  let hash = 0;
-  const normalizedEmail = email.toLowerCase().trim();
-  for (let i = 0; i < normalizedEmail.length; i++) {
-    const char = normalizedEmail.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  const positiveHash = Math.abs(hash);
-  return `user_${positiveHash.toString(36)}`;
-}
-
-async function migrateUserData(oldUserId: string, newUserId: string): Promise<void> {
-  try {
-    const response = await fetch('/api/migrate-user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldUserId, newUserId }),
-    });
-    
-    const data = await response.json();
-    if (data.success && data.migratedTemplates > 0) {
-      console.log(`[Auth] Migrated ${data.migratedTemplates} templates and ${data.migratedCertificates} certificates`);
-    }
-  } catch (error) {
-    console.error('[Auth] Error migrating user data:', error);
-  }
-}
 
 async function saveUserViaAPI(user: {
   id: string;
@@ -85,7 +58,7 @@ async function saveUserViaAPI(user: {
   avatar?: string;
 }): Promise<void> {
   try {
-    const response = await fetch('/api/users', {
+    const response = await authenticatedFetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(user),
@@ -113,15 +86,22 @@ function mapFirebaseUser(firebaseUser: FirebaseUser, displayName?: string): User
 }
 
 // Fetch user profile from Firestore (includes updated name, etc.)
-async function fetchUserProfile(userId: string): Promise<{ name?: string; avatar?: string } | null> {
+async function fetchUserProfile(_userId: string): Promise<{
+  name?: string;
+  avatar?: string;
+  isPremium: boolean;
+  certificatesGenerated: number;
+} | null> {
   try {
-    const response = await fetch(`/api/users?id=${userId}`);
+    const response = await authenticatedFetch('/api/users');
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.user) {
         return {
           name: data.user.name,
           avatar: data.user.avatar,
+          isPremium: data.user.isPremium === true,
+          certificatesGenerated: data.user.certificatesGenerated || 0,
         };
       }
     }
@@ -131,9 +111,9 @@ async function fetchUserProfile(userId: string): Promise<{ name?: string; avatar
   return null;
 }
 
-async function fetchPremiumStatus(userId: string): Promise<{ isPremium: boolean; certificatesGenerated: number }> {
+async function fetchPremiumStatus(_userId: string): Promise<{ isPremium: boolean; certificatesGenerated: number }> {
   try {
-    const response = await fetch(`/api/users/premium?userId=${userId}`);
+    const response = await authenticatedFetch('/api/users/premium');
     if (response.ok) {
       const data = await response.json();
       if (data.success) {
@@ -153,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const authRefreshSequence = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -163,24 +144,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!auth) return;
+    if (!auth) {
+      setIsLoading(false);
+      return;
+    }
 
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+    let initialStateResolved = false;
+    const handleAuthState = (fbUser: FirebaseUser | null) => {
+      initialStateResolved = true;
+      const refreshSequence = ++authRefreshSequence.current;
+
       if (fbUser) {
         setFirebaseUser(fbUser);
         
         if (fbUser.emailVerified) {
-          // Fetch user profile from Firestore first (includes updated name)
-          const userProfile = await fetchUserProfile(fbUser.uid);
-          const mappedUser = mapFirebaseUser(fbUser, userProfile?.name);
-          await saveUserViaAPI(mappedUser);
-          // Fetch premium status
-          const premiumInfo = await fetchPremiumStatus(fbUser.uid);
-          setUser({ 
-            ...mappedUser, 
-            ...premiumInfo,
-            avatar: userProfile?.avatar || mappedUser.avatar,
+          const mappedUser = mapFirebaseUser(fbUser);
+
+          // Firebase identity is sufficient to render protected routes. Profile
+          // and plan metadata refresh without holding the application shell.
+          setUser(mappedUser);
+          setIsLoading(false);
+
+          // Persisted sessions only need one profile read. User-document writes
+          // are reserved for an interactive sign-in/signup instead of every
+          // reload, which reduces latency and Firestore write pressure.
+          void fetchUserProfile(fbUser.uid).then((userProfile) => {
+            if (authRefreshSequence.current !== refreshSequence || auth.currentUser?.uid !== fbUser.uid) {
+              return;
+            }
+
+            setUser({
+              ...mappedUser,
+              isPremium: userProfile?.isPremium ?? mappedUser.isPremium,
+              certificatesGenerated: userProfile?.certificatesGenerated ?? mappedUser.certificatesGenerated,
+              name: userProfile?.name || mappedUser.name,
+              avatar: userProfile?.avatar || mappedUser.avatar,
+            });
           });
+          return;
         } else {
           setUser(null);
         }
@@ -189,9 +190,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       }
       setIsLoading(false);
-    });
+    };
 
-    return () => unsubscribe();
+    const unsubscribe = onIdTokenChanged(auth, handleAuthState);
+    void auth.authStateReady()
+      .then(() => {
+        if (!initialStateResolved) handleAuthState(auth.currentUser);
+      })
+      .catch((error) => {
+        console.error('[Auth] Failed to restore persisted state:', error);
+        if (!initialStateResolved) setIsLoading(false);
+      });
+
+    // A broken network or browser storage implementation must not leave auth
+    // routes on an infinite spinner. Late Firebase callbacks still update the
+    // user and redirect correctly after this fallback.
+    const fallbackTimer = window.setTimeout(() => {
+      if (!initialStateResolved) setIsLoading(false);
+    }, 4_000);
+
+    return () => {
+      window.clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -226,18 +247,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Please verify your email before logging in. Check your inbox for the verification link.');
       }
 
-      const mappedUser = mapFirebaseUser(userCredential.user);
-      await saveUserViaAPI(mappedUser);
-      const premiumInfo = await fetchPremiumStatus(mappedUser.id);
-      setUser({ ...mappedUser, ...premiumInfo });
-
-      const oldUserId = generateOldUserIdFromEmail(email);
-      if (oldUserId !== mappedUser.id) {
-        await migrateUserData(oldUserId, mappedUser.id);
-      }
+      void saveUserViaAPI(mapFirebaseUser(userCredential.user));
 
       const params = new URLSearchParams(window.location.search);
-      const redirect = params.get('redirect') || '/dashboard';
+      const redirect = sanitizeAuthRedirect(params.get('redirect'));
       router.push(redirect);
     } catch (error: any) {
       console.error('Login error:', error);
@@ -312,20 +325,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const provider = new GoogleAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
-      
-      const mappedUser = mapFirebaseUser(userCredential.user);
-      await saveUserViaAPI(mappedUser);
-      const premiumInfo = await fetchPremiumStatus(mappedUser.id);
-      setUser({ ...mappedUser, ...premiumInfo });
+      void saveUserViaAPI(mapFirebaseUser(userCredential.user));
 
-      if (mappedUser.email) {
-        const oldUserId = generateOldUserIdFromEmail(mappedUser.email);
-        if (oldUserId !== mappedUser.id) {
-          await migrateUserData(oldUserId, mappedUser.id);
-        }
-      }
-      
-      router.push('/dashboard');
+      // Honour the same validated redirect the email/password path uses, so
+      // arriving at /login?redirect=/history lands in the right place.
+      const params = new URLSearchParams(window.location.search);
+      router.push(sanitizeAuthRedirect(params.get('redirect')));
     } catch (error: any) {
       console.error('Google login error:', error);
       if (error.code === 'auth/popup-closed-by-user') {
@@ -342,18 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const provider = new GithubAuthProvider();
       const userCredential = await signInWithPopup(auth, provider);
-      
-      const mappedUser = mapFirebaseUser(userCredential.user);
-      await saveUserViaAPI(mappedUser);
-      const premiumInfo = await fetchPremiumStatus(mappedUser.id);
-      setUser({ ...mappedUser, ...premiumInfo });
-
-      if (mappedUser.email) {
-        const oldUserId = generateOldUserIdFromEmail(mappedUser.email);
-        if (oldUserId !== mappedUser.id) {
-          await migrateUserData(oldUserId, mappedUser.id);
-        }
-      }
+      void saveUserViaAPI(mapFirebaseUser(userCredential.user));
       
       router.push('/dashboard');
     } catch (error: any) {
@@ -405,7 +399,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await fetch('/api/users', {
+      const response = await authenticatedFetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: user.id, ...updates }),
@@ -430,7 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       // Soft delete: mark user as deleted in Firestore (data is preserved)
-      const response = await fetch(`/api/users?id=${user.id}`, {
+      const response = await authenticatedFetch('/api/users', {
         method: 'DELETE',
       });
 

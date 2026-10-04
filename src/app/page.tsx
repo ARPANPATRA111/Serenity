@@ -1,789 +1,466 @@
-'use client';
-
 import Link from 'next/link';
-import { motion, useScroll, useTransform, useInView } from 'framer-motion';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { useRef, useEffect, useState } from 'react';
-import { 
-  FileSpreadsheet, Shield, Zap, Download, QrCode, ArrowRight, Star,
-  ChevronRight, Paintbrush, Check, Sparkles, Globe, Lock, Award, Users, Clock,
-  Mail, Verified, BadgeCheck, Layers, Palette, Database, CloudUpload, FileCheck
+import {
+  ArrowRight,
+  Building2,
+  CalendarCheck,
+  Check,
+  Download,
+  FileSpreadsheet,
+  GraduationCap,
+  HeartHandshake,
+  Layers,
+  Mail,
+  Paintbrush,
+  QrCode,
+  ShieldCheck,
+  Sparkles,
+  Users,
 } from 'lucide-react';
+import { MarketingNav } from '@/components/marketing/MarketingNav';
+import { MarketingFooter } from '@/components/marketing/MarketingFooter';
+import { CapabilityMarquee } from '@/components/marketing/CapabilityMarquee';
+import { HeroShowcase } from '@/components/marketing/HeroShowcase';
+import { Reveal } from '@/components/marketing/Reveal';
+import { SectionHeading } from '@/components/marketing/SectionHeading';
+import { WorkflowSteps, type WorkflowStep } from '@/components/marketing/WorkflowSteps';
+import { FeatureStory } from '@/components/marketing/FeatureStory';
+import { ProductShot } from '@/components/marketing/ProductShot';
+import { UseCaseCard } from '@/components/marketing/UseCaseCard';
+import { TemplateGallery } from '@/components/marketing/TemplateGallery';
+import { FaqAccordion } from '@/components/marketing/FaqAccordion';
+import { PricingSection } from '@/components/marketing/PricingSection';
+import { FREE_CERTIFICATE_LIMIT } from '@/lib/plans/certificateLimits';
+import { EVENTS_ENABLED } from '@/lib/featureFlags';
+import { getTemplateShowcase } from '@/lib/templates/publicShowcase';
+import { faqPageSchema, jsonLd, type FaqItem } from '@/lib/seo/structuredData';
+import '@/styles/marketing.css';
 
-function useStats() {
-  const [stats, setStats] = useState({
-    certificatesGenerated: 10000,
-    usersRegistered: 5000,
-  });
+/**
+ * Public landing page.
+ *
+ * Server-rendered end to end. Every product claim maps to shipped behaviour,
+ * the screenshots are captures of the real UI running against the local
+ * emulator with synthetic recipients, the template gallery reads the real
+ * published templates from Firestore, and there is no invented social proof,
+ * rating, customer, or usage count anywhere on the page.
+ */
 
-  useEffect(() => {
-    fetch('/api/stats')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.stats) {
-          setStats(data.stats);
-        }
-      })
-      .catch(() => {
-      });
-  }, []);
+// Templates are read on the server and the page is re-generated periodically,
+// so the gallery stays a static document rather than a per-request Firestore
+// round trip.
+export const revalidate = 1800;
 
-  return stats;
-}
-
-const AnimatedBackground = () => {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) return null;
-
-  return (
-    <div className="fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      {/* Static mesh gradient background - uses CSS animations for performance */}
-      <div className="absolute inset-0">
-        <div 
-          className="absolute top-0 -left-1/4 w-[80%] h-[80%] rounded-full blur-3xl animate-blob"
-          style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.15) 50%, rgba(236, 72, 153, 0.1) 100%)' }}
-        />
-        <div 
-          className="absolute -bottom-1/4 -right-1/4 w-[70%] h-[70%] rounded-full blur-3xl animate-blob animation-delay-2000"
-          style={{ background: 'linear-gradient(225deg, rgba(34, 211, 238, 0.2) 0%, rgba(99, 102, 241, 0.15) 50%, rgba(168, 85, 247, 0.1) 100%)' }}
-        />
-        <div 
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60%] h-[60%] rounded-full blur-3xl animate-pulse-slow"
-          style={{ background: 'radial-gradient(circle, rgba(251, 146, 60, 0.12) 0%, transparent 70%)' }}
-        />
-      </div>
-
-      {/* Minimal floating particles - reduced count for performance */}
-      {Array.from({ length: 12 }).map((_, i) => (
-        <div
-          key={i}
-          className="absolute w-2 h-2 rounded-full bg-gradient-to-br from-primary/50 to-accent/50 animate-float"
-          style={{
-            left: `${(i * 8) + 5}%`,
-            top: `${(i * 7) % 100}%`,
-            animationDelay: `${i * 0.5}s`,
-            animationDuration: `${8 + (i % 4) * 2}s`,
-          }}
-        />
-      ))}
-
-      {/* Static geometric shapes with CSS animations */}
-      <div className="absolute top-20 right-[10%] w-20 h-20 border-2 border-primary/15 rounded-xl animate-spin-slow hidden sm:block" />
-      <div className="absolute bottom-40 left-[15%] w-16 h-16 border-2 border-accent/15 rounded-full animate-pulse-slow hidden sm:block" />
-      <div className="absolute top-1/3 right-[20%] w-12 h-12 bg-gradient-to-br from-yellow-400/15 to-orange-500/15 rounded-lg animate-bounce-slow hidden md:block" />
-
-      {/* Grid pattern */}
-      <div 
-        className="absolute inset-0 opacity-[0.02] dark:opacity-[0.04]"
-        style={{
-          backgroundImage: `linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)`,
-          backgroundSize: '60px 60px',
-        }}
-      />
-    </div>
-  );
-};
-
-const SerenityLogo = ({ size = 24 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="48" height="48" rx="12" className="fill-primary"/>
-    <path 
-      d="M14 16C14 16 18 14 24 14C30 14 34 17 34 21C34 24 31 26 26 26H22C17 26 14 29 14 32C14 36 18 38 24 38C30 38 34 36 34 36" 
-      stroke="white" 
-      strokeWidth="3.5" 
-      strokeLinecap="round" 
-      fill="none"
-    />
-    <circle cx="35" cy="16" r="4" fill="white" fillOpacity="0.9"/>
-  </svg>
-);
-
-const Counter = ({ end, suffix = '' }: { end: number; suffix?: string }) => {
-  const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true });
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!isInView) return;
-    let current = 0;
-    const increment = end / 50;
-    const timer = setInterval(() => {
-      current += increment;
-      if (current >= end) {
-        setCount(end);
-        clearInterval(timer);
-      } else {
-        setCount(Math.floor(current));
-      }
-    }, 40);
-    return () => clearInterval(timer);
-  }, [isInView, end]);
-
-  return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
-};
-
-const FeatureCard = ({ feature, index }: { feature: typeof features[0]; index: number }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, delay: index * 0.08 }}
-      className="group relative"
-    >
-      <div className="absolute -inset-0.5 rounded-3xl bg-gradient-to-b from-primary/30 via-secondary/15 to-accent/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm" />
-      <div className="relative h-full p-6 sm:p-7 rounded-3xl bg-card backdrop-blur-sm border border-border hover:border-primary/50 transition-all duration-300 shadow-sm hover:shadow-lg">
-        <div className={`inline-flex p-3 sm:p-3.5 rounded-xl bg-gradient-to-br ${feature.gradient} mb-4 sm:mb-5 shadow-lg group-hover:scale-105 transition-transform duration-300`}>
-          <feature.icon className="w-5 h-5 text-white" />
-        </div>
-        <h3 className="text-base sm:text-lg font-bold mb-2 text-foreground group-hover:text-primary transition-colors">{feature.title}</h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
-      </div>
-    </motion.div>
-  );
-};
-
-const features = [
-  { icon: Paintbrush, title: 'Visual Editor', description: 'Intuitive drag-and-drop interface with real-time preview and pixel-perfect control.', gradient: 'from-violet-500 to-purple-600' },
-  { icon: FileSpreadsheet, title: 'Smart Data Import', description: 'AI-powered Excel and CSV parsing with automatic column detection.', gradient: 'from-blue-500 to-cyan-500' },
-  { icon: Zap, title: 'Blazing Fast', description: 'Generate 10,000+ certificates in under a minute with parallel processing.', gradient: 'from-amber-500 to-orange-500' },
-  { icon: QrCode, title: 'QR Verification', description: 'Unique QR codes that link to secure verification pages instantly.', gradient: 'from-emerald-500 to-teal-500' },
-  { icon: Mail, title: 'Email Delivery', description: 'Auto-send certificates with PDF attachments to recipients.', gradient: 'from-pink-500 to-rose-500' },
-  { icon: Shield, title: 'Privacy First', description: '100% client-side processing. Your data never leaves your browser.', gradient: 'from-indigo-500 to-blue-600' },
+const workflow: WorkflowStep[] = [
+  {
+    icon: Paintbrush,
+    title: 'Design',
+    body: 'Lay out one reusable certificate — text, logos, signatures, seals, and the verification field.',
+  },
+  {
+    icon: FileSpreadsheet,
+    title: 'Import',
+    body: 'Upload a CSV or Excel file. Serenity reads the header row and lists every column.',
+  },
+  {
+    icon: Users,
+    title: 'Map',
+    body: 'Drop a column onto the design to bind it to a field, then preview real rows.',
+  },
+  {
+    icon: Layers,
+    title: 'Generate',
+    body: 'Produce one personalised certificate per row as PDF, PNG, or a ZIP archive.',
+  },
+  {
+    icon: Mail,
+    title: 'Deliver',
+    body: 'Download the batch, or email a certificate to its recipient after an ownership check.',
+  },
+  {
+    icon: QrCode,
+    title: 'Verify',
+    body: 'Every certificate carries a permanent verification URL and matching QR code.',
+  },
 ];
 
-const comparisonData = [
-  { feature: 'Visual drag-and-drop editor', serenity: true, others: false },
-  { feature: 'QR code verification', serenity: true, others: false },
-  { feature: 'Bulk email delivery', serenity: true, others: 'Premium' },
-  { feature: 'Data stays on device', serenity: true, others: false },
-  { feature: 'Free tier', serenity: 'Unlimited', others: 'Limited' },
-  { feature: 'PDF attachments in emails', serenity: true, others: false },
+const useCases = [
+  {
+    icon: GraduationCap,
+    audience: 'Education and colleges',
+    body: 'Issue course, semester, and programme certificates for a whole cohort from the registrar’s spreadsheet.',
+  },
+  {
+    icon: CalendarCheck,
+    audience: 'Workshops and events',
+    body: 'Turn a participant list into participation and speaker certificates once the event has closed.',
+  },
+  {
+    icon: Building2,
+    audience: 'HR and employee recognition',
+    body: 'Recognise internal training, compliance completion, and long-service milestones from one template.',
+  },
+  {
+    icon: Sparkles,
+    audience: 'Training programmes',
+    body: 'Reuse one branded design across every intake and give learners a link they can share with employers.',
+  },
+  {
+    icon: HeartHandshake,
+    audience: 'Communities and nonprofits',
+    body: 'Thank volunteers and contributors with certificates that carry proof anyone can check.',
+  },
 ];
 
-const testimonials = [
-  { name: 'Sarah Chen', role: 'Training Director', company: 'TechCorp', content: 'Generated 5,000 certificates in under 2 minutes. The QR verification feature saved us hours of manual work.', avatar: 'SC', rating: 5 },
-  { name: 'Michael Rivera', role: 'Event Manager', company: 'Global Events', content: 'The email delivery with PDF attachments is incredible. Our attendees love getting their certificates instantly.', avatar: 'MR', rating: 5 },
-  { name: 'Emily Watson', role: 'HR Lead', company: 'StartupXYZ', content: 'Beautiful templates, intuitive editor, and zero learning curve. We switched from three other tools to Serenity.', avatar: 'EW', rating: 5 },
+const faqs: FaqItem[] = [
+  {
+    question: 'What is Serenity Certificate Generator?',
+    answer:
+      'Serenity is a certificate generator for designing, personalising, generating, emailing, and verifying certificates in bulk. You build one reusable template, connect a spreadsheet of recipients, and generate a personalised certificate for every row — each with a permanent verification URL and QR code.',
+  },
+  {
+    question: 'Can I import recipients from CSV or Excel?',
+    answer:
+      'Yes. Upload a CSV, XLSX, XLS, or ODS file and Serenity lists every column from the header row as a variable. Drop a variable onto the canvas to bind it to a field, then step through the rows to preview the real values before generating.',
+  },
+  {
+    question: 'What output formats are supported?',
+    answer:
+      'Generated certificates can be exported as PDF, as PNG, or as both, packaged into a single ZIP archive for the whole batch.',
+  },
+  {
+    question: 'Can Serenity email certificates to recipients?',
+    answer:
+      'Yes. A generated certificate can be emailed to its recipient after Serenity confirms you own that certificate and your own address is verified. Sending is rate-limited per day, and the bulk email endpoint is disabled by default and returns 501 until an operator enables it.',
+  },
+  {
+    question: 'How does certificate verification work?',
+    answer:
+      'Every certificate can carry a permanent verification URL and a matching QR code. Scanning or opening it loads a public verification page showing the recipient name, certificate title, issuer, issue date, and certificate ID. Recipient email addresses, spreadsheet rows, owner identifiers, and template identifiers are never exposed.',
+  },
+  {
+    question: 'Is Serenity free?',
+    answer: `The free plan includes ${FREE_CERTIFICATE_LIMIT} persisted certificates in total, with no card required, and covers the whole workflow from design to verification. Pro starts at $20 per month and is arranged through a request — there is no self-serve checkout.`,
+  },
+  {
+    question: 'Who owns and can read my data?',
+    answer:
+      'Every private read and write is authenticated server-side and scoped to the signed-in account. Firestore and Storage rules deny client access by default, so certificates, templates, and media stay with the account that created them.',
+  },
 ];
 
-const typingWords = ['Certificates', 'Awards', 'Badges'];
-
-const TypingText = () => {
-  const [currentWord, setCurrentWord] = useState(0);
-  const [displayText, setDisplayText] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-  
-  useEffect(() => {
-    const word = typingWords[currentWord];
-    const timeout = setTimeout(() => {
-      if (!isDeleting) {
-        if (displayText.length < word.length) {
-          setDisplayText(word.slice(0, displayText.length + 1));
-        } else {
-          setTimeout(() => setIsDeleting(true), 1500);
-        }
-      } else {
-        if (displayText.length > 0) {
-          setDisplayText(word.slice(0, displayText.length - 1));
-        } else {
-          setIsDeleting(false);
-          setCurrentWord((prev) => (prev + 1) % typingWords.length);
-        }
-      }
-    }, isDeleting ? 50 : 100);
-    
-    return () => clearTimeout(timeout);
-  }, [displayText, isDeleting, currentWord]);
-  
-  return (
-    <span className="inline">
-      {displayText}
-      <span className="animate-pulse text-primary">|</span>
-    </span>
-  );
-};
-
-export default function HomePage() {
-  const heroRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.4], [1, 0]);
-  const heroScale = useTransform(scrollYProgress, [0, 0.4], [1, 0.95]);
-  const stats = useStats();
+export default async function HomePage() {
+  const showcase = await getTemplateShowcase(6);
 
   return (
-    <div className="min-h-screen text-foreground overflow-x-hidden">
-      <AnimatedBackground />
-      
-      <motion.header
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-4 pt-3"
+    <div className="sr-scope sr-shell">
+      <a
+        href="#main"
+        className="sr-btn sr-btn-primary sr-skip absolute left-4 top-4 z-[60] -translate-y-24 focus:translate-y-0"
       >
-        <nav className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 rounded-xl bg-background/80 backdrop-blur-xl border border-border shadow-lg shadow-black/5">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group">
-              <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-                <Award className="h-4 w-4 text-white" />
-              </div>
-              <span className="font-display text-base sm:text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent group-hover:opacity-80 transition-opacity">Serenity</span>
-            </Link>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <ThemeToggle />
-              <Link href="/login" className="px-2.5 sm:px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
-                Log in
-              </Link>
-              <Link href="/signup" className="px-3 sm:px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity">
-                Get Started
-              </Link>
-            </div>
-          </div>
-        </nav>
-      </motion.header>
+        Skip to content
+      </a>
 
-      <section ref={heroRef} className="min-h-screen flex items-center justify-center pt-24 sm:pt-20 pb-16 sm:pb-24 px-5 sm:px-4">
-        <motion.div style={{ opacity: heroOpacity, scale: heroScale }} className="max-w-5xl mx-auto text-center">
-          {/* Badge */}
-          {/* Animated Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ delay: 0.15, type: "spring", stiffness: 200 }}
-            className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-primary/15 to-accent/15 border border-primary/30 mb-6 sm:mb-8 shadow-lg shadow-primary/10"
-          >
-            <motion.div
-              animate={{ rotate: [0, 15, -15, 0] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-            </motion.div>
-            <span className="text-xs sm:text-sm font-bold text-primary uppercase tracking-wide">Trusted by Thousands</span>
-            <span className="flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-            </span>
-          </motion.div>
+      <MarketingNav />
 
-          {/* Headline with typing animation - inline layout */}
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.8, type: "spring" }}
-            className="font-display text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight mb-6 leading-tight"
-          >
-            <span className="text-foreground drop-shadow-sm">Create Certificates</span>
-            <span className="bg-gradient-to-r from-primary via-purple-500 to-accent bg-clip-text text-transparent">
-              {/* <TypingText /> */}
-              
-            </span>
-            <br />
-            <span className="text-gradient-shift">
-              at Lightning Speed
-            </span>
-          </motion.h1>
+      <main id="main">
+        {/* ------------------------------------------------------------ hero */}
+        <section className="sr-hero pb-12 pt-10 sm:pb-20 sm:pt-20 lg:pb-24">
+          <div className="sr-container grid items-center gap-10 sm:gap-14 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,1fr)] lg:gap-16">
+            <Reveal eager>
+              <p className="sr-pill">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                Batch certificate generation
+              </p>
 
-          {/* Subheadline */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="text-base sm:text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed"
-          >
-            Design stunning certificates, import your data, and generate 
-            <span className="text-foreground font-semibold"> thousands of verifiable documents </span>
-            in seconds.
-          </motion.p>
+              <h1 className="sr-h1 mt-6">
+                Create, send &amp; <span className="sr-accent">verify</span> professional
+                certificates at scale.
+              </h1>
 
-          {/* CTA Buttons with enhanced styling */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
-          >
-            <motion.div 
-              whileHover={{ scale: 1.03, y: -2 }} 
-              whileTap={{ scale: 0.98 }}
-              className="relative group"
-            >
-              <div className="absolute -inset-1 bg-gradient-to-r from-primary via-purple-500 to-accent rounded-xl blur-md opacity-60 group-hover:opacity-100 transition-opacity" />
-              <Link href="/dashboard" className="relative flex items-center gap-2 px-8 py-4 rounded-xl bg-primary text-primary-foreground font-bold shadow-2xl transition-all">
-                Start Creating Free
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.03, y: -2 }} whileTap={{ scale: 0.98 }}>
-              <Link href="/verify" className="flex items-center gap-2 px-8 py-4 rounded-xl bg-white/80 dark:bg-slate-800/80 text-foreground font-bold border-2 border-border hover:border-primary/60 transition-all backdrop-blur-sm shadow-lg">
-                <QrCode className="w-5 h-5 text-primary" />
-                Verify Certificate
-              </Link>
-            </motion.div>
-          </motion.div>
+              <p className="sr-lead mt-6 max-w-xl">
+                Design a reusable template, import recipients from CSV or Excel, generate
+                personalised certificates, and deliver them by email — with built-in QR
+                verification.
+              </p>
 
-          {/* Trust Indicators */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.65 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 text-sm text-muted-foreground mb-16"
-          >
-            {[
-              { icon: Check, text: 'No credit card required' },
-              { icon: Lock, text: '100% private & secure' },
-              { icon: Globe, text: 'Works everywhere' },
-            ].map((item, i) => (
-              <motion.div 
-                key={i} 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 + i * 0.1 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/60 dark:bg-slate-800/60 border border-border shadow-sm backdrop-blur-sm"
-              >
-                <item.icon className="w-4 h-4 text-green-500" />
-                <span className="font-medium">{item.text}</span>
-              </motion.div>
-            ))}
-          </motion.div>
-
-          {/* Product Preview Mockup */}
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8, duration: 0.8 }}
-            className="relative max-w-4xl mx-auto"
-          >
-            <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 via-purple-500/20 to-accent/20 rounded-3xl blur-2xl" />
-            <div className="relative rounded-2xl border-2 border-border bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl shadow-2xl overflow-hidden">
-              {/* Browser Header */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-slate-100/80 dark:bg-slate-800/80">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-400" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                  <div className="w-3 h-3 rounded-full bg-green-400" />
-                </div>
-                <div className="flex-1 mx-4">
-                  <div className="max-w-sm mx-auto px-4 py-1.5 rounded-lg bg-white dark:bg-slate-700 text-xs text-muted-foreground text-center">
-                    serenity.app/editor
-                  </div>
-                </div>
-              </div>
-              {/* Editor Preview */}
-              <div className="p-4 sm:p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-                <div className="flex gap-4">
-                  {/* Sidebar */}
-                  <div className="hidden sm:flex flex-col gap-2 w-12">
-                    {[Paintbrush, FileSpreadsheet, QrCode, Download].map((Icon, i) => (
-                      <motion.div 
-                        key={i}
-                        className="w-10 h-10 rounded-lg bg-white dark:bg-slate-800 border border-border flex items-center justify-center shadow-sm"
-                        whileHover={{ scale: 1.05 }}
-                      >
-                        <Icon className="w-4 h-4 text-muted-foreground" />
-                      </motion.div>
-                    ))}
-                  </div>
-                  {/* Canvas */}
-                  <div className="flex-1 aspect-[16/10] rounded-xl bg-white dark:bg-slate-800 border border-border shadow-inner flex items-center justify-center">
-                    <div className="text-center p-8">
-                      <motion.div 
-                        className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center"
-                        animate={{ rotate: [0, 5, -5, 0] }}
-                        transition={{ duration: 4, repeat: Infinity }}
-                      >
-                        <Award className="w-8 h-8 text-white" />
-                      </motion.div>
-                      <div className="text-lg font-bold text-foreground">Certificate Preview</div>
-                      <div className="text-sm text-muted-foreground mt-1">Your design appears here</div>
-                    </div>
-                  </div>
-                  {/* Properties */}
-                  <div className="hidden md:flex flex-col gap-2 w-40">
-                    <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-border">
-                      <div className="text-xs font-semibold mb-2 text-foreground">Properties</div>
-                      <div className="space-y-2">
-                        <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-full" />
-                        <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
-                        <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-1/2" />
-                      </div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-border">
-                      <div className="text-xs font-semibold mb-2 text-foreground">Data</div>
-                      <div className="space-y-2">
-                        <div className="h-2 bg-primary/30 rounded w-full" />
-                        <div className="h-2 bg-accent/30 rounded w-2/3" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      </section>
-
-      <section className="py-20 border-y border-border/30 bg-muted/30">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6">
-            {[
-              { value: stats.certificatesGenerated, suffix: '+', label: 'Certificates Generated', icon: Award },
-              { value: stats.usersRegistered, suffix: '+', label: 'Happy Users', icon: Users },
-              { value: 99, suffix: '%', label: 'Uptime Guarantee', icon: Clock },
-            ].map((stat, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="text-center p-6 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/50 sm:bg-transparent sm:border-none sm:p-0"
-              >
-                <div className="inline-flex p-3 rounded-xl bg-primary/15 mb-4">
-                  <stat.icon className="w-6 h-6 text-primary" />
-                </div>
-                <div className="text-3xl sm:text-4xl lg:text-5xl font-extrabold mb-2 text-foreground">
-                  <Counter end={stat.value} suffix={stat.suffix} />
-                </div>
-                <div className="text-sm text-muted-foreground font-medium">{stat.label}</div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 sm:py-28">
-        <div className="max-w-5xl mx-auto px-5 sm:px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12 sm:mb-16"
-          >
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/15 text-primary text-xs font-semibold mb-4 uppercase tracking-wide">
-              Features
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold mb-4 text-foreground">Everything you need</h2>
-            <p className="text-muted-foreground max-w-lg mx-auto text-base sm:text-lg">Powerful tools to create and distribute certificates at any scale.</p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {features.map((feature, index) => (
-              <FeatureCard key={index} feature={feature} index={index} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 sm:py-28 bg-muted/30 relative">
-        <div className="max-w-5xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-4 uppercase tracking-wide">
-              How It Works
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold">Three simple steps</h2>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10 relative">
-            <div className="hidden md:block absolute top-14 left-[15%] right-[15%] h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-            
-            {[
-              { num: '01', title: 'Design', desc: 'Create your template visually with our drag-and-drop editor' },
-              { num: '02', title: 'Import', desc: 'Upload your Excel or CSV data with smart column detection' },
-              { num: '03', title: 'Generate', desc: 'Download all certificates as PDF or ZIP in seconds' },
-            ].map((step, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.15 }}
-                className="text-center p-6 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/50 md:bg-transparent md:border-none md:p-0"
-              >
-                <motion.div 
-                  whileHover={{ scale: 1.05 }}
-                  className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-primary to-accent text-white text-xl md:text-2xl font-bold mb-4 md:mb-6 shadow-xl shadow-primary/30"
-                >
-                  {step.num}
-                </motion.div>
-                <h3 className="text-lg md:text-xl font-bold mb-2 text-foreground">{step.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 sm:py-28">
-        <div className="max-w-5xl mx-auto px-5 sm:px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12 sm:mb-16"
-          >
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/15 text-primary text-xs font-semibold mb-4 uppercase tracking-wide">
-              Testimonials
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-foreground">Loved by teams worldwide</h2>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
-            {testimonials.map((t, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                className="p-5 sm:p-6 rounded-2xl bg-card backdrop-blur-sm border border-border hover:border-primary/40 transition-all shadow-sm hover:shadow-md group"
-              >
-                <div className="flex gap-0.5 mb-4">
-                  {[...Array(t.rating)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                  ))}
-                </div>
-                <p className="text-sm sm:text-base mb-5 text-foreground leading-relaxed">&ldquo;{t.content}&rdquo;</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-sm font-bold shadow-md group-hover:scale-105 transition-transform">
-                    {t.avatar}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">{t.name}</div>
-                    <div className="text-xs text-muted-foreground">{t.role} at {t.company}</div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 sm:py-28 bg-muted/30">
-        <div className="max-w-4xl mx-auto px-5 sm:px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <span className="inline-block px-4 py-1.5 rounded-full bg-primary/15 text-primary text-xs font-semibold mb-4 uppercase tracking-wide">
-              Why Serenity
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-foreground mb-4">The smarter choice</h2>
-            <p className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto">See how Serenity compares to traditional certificate tools</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="rounded-2xl border border-border bg-card overflow-hidden shadow-lg"
-          >
-            <div className="grid grid-cols-3 gap-px bg-border">
-              <div className="p-4 sm:p-5 bg-card font-semibold text-foreground">Feature</div>
-              <div className="p-4 sm:p-5 bg-gradient-to-br from-primary/10 to-accent/10 text-center">
-                <span className="font-bold text-primary">Serenity</span>
-              </div>
-              <div className="p-4 sm:p-5 bg-card text-center text-muted-foreground font-medium">Others</div>
-            </div>
-            {comparisonData.map((row, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                className="grid grid-cols-3 gap-px bg-border"
-              >
-                <div className="p-4 sm:p-5 bg-card text-sm text-foreground">{row.feature}</div>
-                <div className="p-4 sm:p-5 bg-gradient-to-br from-primary/5 to-accent/5 text-center">
-                  {row.serenity === true ? (
-                    <BadgeCheck className="w-5 h-5 mx-auto text-green-500" />
-                  ) : (
-                    <span className="text-sm font-semibold text-green-600">{row.serenity}</span>
-                  )}
-                </div>
-                <div className="p-4 sm:p-5 bg-card text-center">
-                  {row.others === false ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">{row.others}</span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Pricing Plans Section */}
-      <section className="py-16 sm:py-28">
-        <div className="max-w-5xl mx-auto px-5 sm:px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <span className="inline-block px-4 py-1.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-semibold mb-4 uppercase tracking-wide">
-              Pricing
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-foreground mb-4">Simple, transparent pricing</h2>
-            <p className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto">Start free, upgrade when you need more. One payment, lifetime access.</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {/* Free Plan */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="relative rounded-2xl border border-border bg-card p-8 shadow-sm"
-            >
-              <h3 className="text-xl font-bold text-foreground">Free</h3>
-              <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-4xl font-black text-foreground">$0</span>
-                <span className="text-muted-foreground">/forever</span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-3 mb-6">Great for getting started</p>
-              <div className="space-y-3 mb-8">
-                {[
-                  { text: '5 Certificate Generations', ok: true },
-                  { text: 'Basic Templates', ok: true },
-                  { text: 'QR Code Verification', ok: true },
-                  { text: 'CSV Data Import', ok: true },
-                  { text: 'PDF Export', ok: true },
-                  { text: 'Unlimited Generations', ok: false },
-                  { text: 'Premium Templates', ok: false },
-                  { text: 'Email Delivery', ok: false },
-                ].map((f, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    {f.ok
-                      ? <Check className="w-4 h-4 text-green-500 shrink-0" />
-                      : <Lock className="w-4 h-4 text-muted-foreground/40 shrink-0" />}
-                    <span className={f.ok ? 'text-sm text-foreground' : 'text-sm text-muted-foreground line-through'}>{f.text}</span>
-                  </div>
-                ))}
-              </div>
-              <Link
-                href="/signup"
-                className="block w-full py-3 px-6 text-center bg-muted hover:bg-muted/80 text-foreground rounded-xl font-medium transition-colors border border-border"
-              >
-                Get Started Free
-              </Link>
-            </motion.div>
-
-            {/* Premium Plan */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              className="relative rounded-2xl border-2 border-amber-400 dark:border-amber-600 bg-gradient-to-b from-amber-50 to-card dark:from-amber-900/10 dark:to-card p-8 shadow-xl shadow-amber-200/20 dark:shadow-amber-900/20"
-            >
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
-                  <Star className="w-3.5 h-3.5 fill-white" />
-                  BEST VALUE
-                </div>
-              </div>
-              <h3 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">Premium</h3>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-sm text-muted-foreground line-through">$99</span>
-                <span className="text-4xl font-black bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">$25</span>
-                <span className="text-amber-600 dark:text-amber-400">/lifetime</span>
-              </div>
-              <p className="text-sm text-amber-700 dark:text-amber-300 mt-3 mb-6 font-medium">Everything unlimited, forever</p>
-              <div className="space-y-3 mb-8">
-                {[
-                  { text: 'Unlimited Generations', highlight: true },
-                  { text: 'All Templates Unlocked', highlight: true },
-                  { text: 'QR Code Verification', highlight: false },
-                  { text: 'CSV Data Import', highlight: false },
-                  { text: 'High-Quality PDF Export', highlight: false },
-                  { text: 'Email Delivery (300/day)', highlight: true },
-                  { text: 'Premium Design Elements', highlight: true },
-                  { text: 'Lifetime Access & Updates', highlight: true },
-                ].map((f, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Check className={`w-4 h-4 shrink-0 ${f.highlight ? 'text-amber-500' : 'text-green-500'}`} />
-                    <span className={`text-sm ${f.highlight ? 'font-semibold text-foreground' : 'text-foreground'}`}>{f.text}</span>
-                  </div>
-                ))}
-              </div>
-              <Link
-                href="/premium"
-                className="block w-full py-3.5 px-6 text-center bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20 hover:shadow-amber-600/25 hover:scale-[1.02] active:scale-[0.98]"
-              >
-                Upgrade to Premium — $25
-              </Link>
-              <p className="text-center text-xs text-muted-foreground mt-3">One-time payment • No subscription</p>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 sm:py-28 bg-muted/30">
-        <div className="max-w-3xl mx-auto px-5 sm:px-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="relative rounded-3xl overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary via-secondary to-accent" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,white/20,transparent_50%)]" />
-            
-            <div className="relative px-6 sm:px-8 py-12 sm:py-16 text-center text-white">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold mb-4">Ready to get started?</h2>
-              <p className="text-white/90 mb-8 max-w-md mx-auto text-sm sm:text-base">Join thousands of creators making professional certificates with Serenity.</p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Link href="/signup" className="flex items-center gap-2 px-7 py-3.5 rounded-xl bg-white text-primary font-semibold shadow-xl">
-                    Get Started Free <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </motion.div>
-                <Link href="/templates" className="px-7 py-3.5 rounded-xl border-2 border-white/30 text-white font-semibold hover:bg-white/10 transition-all">
-                  Browse Templates
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <Link href="/signup" className="sr-btn sr-btn-primary">
+                  Create certificates
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
+                <a href="#templates" className="sr-btn sr-btn-secondary">
+                  Explore templates
+                </a>
               </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
 
-      <footer className="py-8 sm:py-10 border-t border-border/40 bg-muted/20">
-        <div className="max-w-5xl mx-auto px-5 sm:px-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-4">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
-                <Award className="h-4 w-4 text-white" />
+              <p className="sr-body mt-5 flex items-center gap-2 text-sm">
+                <Check
+                  className="h-4 w-4 shrink-0 text-[rgb(var(--sr-teal))]"
+                  aria-hidden="true"
+                />
+                Start free · {FREE_CERTIFICATE_LIMIT} persisted certificates · No card required
+              </p>
+
+              {/*
+                The source design carries a "10K+ certificates / 500+ organizations"
+                strip here. Serenity has no verified usage to cite, so this states
+                what the product does instead of inventing adoption.
+              */}
+              <dl className="mt-10 grid max-w-lg grid-cols-3 gap-6 border-t border-[rgb(var(--sr-line))] pt-7">
+                {[
+                  { value: 'CSV · XLSX', label: 'Recipient import' },
+                  { value: 'PDF · PNG', label: 'Batch export' },
+                  { value: 'QR + URL', label: 'On every certificate' },
+                ].map((stat) => (
+                  <div key={stat.label}>
+                    <dt className="sr-display text-lg sm:text-xl">{stat.value}</dt>
+                    <dd className="sr-hint mt-1.5">{stat.label}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Reveal>
+
+            <Reveal eager delay={120}>
+              <HeroShowcase />
+            </Reveal>
+          </div>
+        </section>
+
+        <CapabilityMarquee />
+
+        {/* --------------------------------------------------- how it works */}
+        <section id="how-it-works" className="sr-section" style={{ scrollMarginTop: '5rem' }}>
+          <div className="sr-container">
+            <SectionHeading
+              eyebrow="How it works"
+              title="Six steps from template to inbox."
+              lead="Every stage below maps to a feature that ships today — nothing here is a roadmap item."
+              align="center"
+            />
+            <WorkflowSteps steps={workflow} />
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------- the editor */}
+        <section id="product" className="sr-section sr-section-deep" style={{ scrollMarginTop: '5rem' }}>
+          <div className="sr-container">
+            <FeatureStory
+              eyebrow="Certificate editor"
+              title="Design once. Personalise for everyone."
+              lead="Compose the layout once with text, imported logos, signatures, and seals. Print boundaries, alignment guides, and an A4 landscape frame keep the design production-ready."
+              points={[
+                'Reusable templates keep layout, variables, and certificate details together',
+                'Upload PNG, JPEG, or WebP media once and reuse it across designs',
+                'The verification field is a locked, mandatory part of every template',
+                'Undo, redo, alignment guides, and a print-boundary overlay',
+              ]}
+              media={
+                <ProductShot
+                  src="/product/editor.webp"
+                  alt="The Serenity certificate editor with an A4 landscape canvas, a media sidebar, a toolbar, and a template containing placeholder variables for name, issuer, date, and the verification URL."
+                  caption="Certificate editor with a template loaded."
+                  width={1440}
+                  height={900}
+                />
+              }
+            />
+          </div>
+        </section>
+
+        {/* ------------------------------------------- data and generation */}
+        <section className="sr-section sr-section-tint">
+          <div className="sr-container">
+            <FeatureStory
+              eyebrow="Bulk personalisation"
+              title="One spreadsheet. A complete certificate batch."
+              lead="Upload CSV, XLSX, XLS, or ODS. Serenity reads the header row, lists every column as a draggable variable, and previews any row against the live design before a single certificate is written."
+              points={[
+                'Every column becomes a variable you can drop onto the canvas',
+                'Step through records to check real values before generating',
+                'Import limits guard row count, column count, and cell length',
+                'One personalised certificate per row, exported as PDF, PNG, or ZIP',
+              ]}
+              reverse
+              media={
+                <ProductShot
+                  src="/product/mapping.webp"
+                  alt="The Data Source panel confirming six records loaded successfully, listing Name, Email, Course, and Date as available variables, and previewing record one of six with sample values."
+                  caption="Column mapping and row preview. Sample data only."
+                  width={1440}
+                  height={900}
+                />
+              }
+              footer={
+                <div className="sr-card p-5">
+                  <p className="sr-h3 flex items-center gap-2">
+                    <Download
+                      className="h-4 w-4 text-[rgb(var(--sr-brand-text))]"
+                      aria-hidden="true"
+                    />
+                    Delivery
+                  </p>
+                  <p className="sr-body mt-2">
+                    Download the whole batch, or email a generated certificate to its recipient.
+                    Serenity checks that you own the certificate and that your own address is
+                    verified first, and sending is rate-limited per day. Bulk email is disabled by
+                    default.
+                  </p>
+                </div>
+              }
+            />
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------ verification */}
+        <section id="verification" className="sr-section" style={{ scrollMarginTop: '5rem' }}>
+          <div className="sr-container">
+            <FeatureStory
+              eyebrow="Verification"
+              title="Every certificate can prove it is genuine."
+              lead="Each generated certificate carries a permanent verification URL and matching QR code. Opening it loads a public page that proves the certificate is genuine without leaking anything about the recipient."
+              points={[
+                'The public page shows recipient name, title, issuer, issue date, and certificate ID',
+                'Recipient email addresses, spreadsheet rows, and owner identifiers are never returned',
+                'Recipient pages are marked noindex, so they stay out of search results',
+                'Recipients can copy the link or add the credential to LinkedIn',
+              ]}
+              media={
+                <ProductShot
+                  src="/product/verification.webp"
+                  alt="A public Serenity verification page showing a verified certificate badge, the certificate title, the issuing organisation, the recipient name, the issue date, the verification count, and the certificate identifier."
+                  caption="Public verification page. Sample certificate only."
+                  width={900}
+                  height={1194}
+                  sizes="(min-width: 1024px) 420px, 100vw"
+                  className="mx-auto max-w-sm"
+                />
+              }
+              footer={
+                <p className="sr-body flex items-start gap-3">
+                  <ShieldCheck
+                    className="mt-0.5 h-5 w-5 shrink-0 text-[rgb(var(--sr-brand-text))]"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    Firestore and Storage rules deny client access by default. Every private read
+                    and write is authenticated server-side and scoped to the account that owns the
+                    record.
+                  </span>
+                </p>
+              }
+            />
+          </div>
+        </section>
+
+        {/* --------------------------------------------------------- templates */}
+        <section
+          id="templates"
+          className="sr-section sr-section-deep"
+          style={{ scrollMarginTop: '5rem' }}
+        >
+          <div className="sr-container">
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div className="max-w-2xl">
+                <p className="sr-eyebrow">Template library</p>
+                <h2 className="sr-h2 mt-4">Start from a polished template.</h2>
+                <p className="sr-lead mt-4">
+                  {showcase.liveCount > 0
+                    ? 'Published templates from the Serenity library, ready to open in the editor and rename for your programme.'
+                    : 'Curated designs that ship with Serenity, ready to open in the editor and rename for your programme.'}
+                </p>
               </div>
-              <span className="font-display font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Serenity</span>
-            </Link>
-            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-muted-foreground">
-              <Link href="/dashboard" className="hover:text-foreground transition-colors">Dashboard</Link>
-              <Link href="/templates" className="hover:text-foreground transition-colors">Templates</Link>
-              <Link href="/premium" className="hover:text-foreground transition-colors">Premium</Link>
-              <Link href="/verify" className="hover:text-foreground transition-colors">Verify</Link>
-              <span className="hidden sm:inline">•</span>
-              <span>© 2026 Serenity</span>
+              <Link href="/templates" className="sr-link inline-flex items-center gap-1.5">
+                View all templates
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+
+            <TemplateGallery templates={showcase.templates} categories={showcase.categories} />
+          </div>
+        </section>
+
+        {/* --------------------------------------------------------- use cases */}
+        <section className="sr-section">
+          <div className="sr-container">
+            <SectionHeading
+              eyebrow="Use cases"
+              title="Built for every team that recognises achievement."
+              lead="If recognition currently means editing the same file once per person, this is the part Serenity replaces."
+              align="center"
+            />
+            <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {useCases.map((useCase, index) => (
+                <Reveal key={useCase.audience} delay={(index % 3) * 70}>
+                  <UseCaseCard {...useCase} />
+                </Reveal>
+              ))}
+
+              <Reveal delay={140}>
+                <div className="sr-section-brand flex h-full flex-col justify-between rounded-[var(--sr-r-lg)] p-7">
+                  <div>
+                    <h3 className="sr-display text-xl leading-tight">
+                      Not sure how it maps to your programme?
+                    </h3>
+                    <p className="sr-body mt-3">
+                      Create a free account and take one certificate all the way from a blank canvas
+                      to a verification page.
+                    </p>
+                  </div>
+                  <Link href="/signup" className="sr-btn sr-btn-primary mt-7 self-start">
+                    Try it free
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              </Reveal>
+            </div>
+
+            {EVENTS_ENABLED && (
+              <Reveal className="mt-8">
+                <p className="sr-body">
+                  Certificates can also link to optional event context — the workshop, course, or
+                  ceremony behind the award.
+                </p>
+              </Reveal>
+            )}
+          </div>
+        </section>
+
+        <PricingSection />
+
+        {/* --------------------------------------------------------------- faq */}
+        <section id="faq" className="sr-section" style={{ scrollMarginTop: '5rem' }}>
+          <script {...jsonLd(faqPageSchema(faqs))} />
+          <div className="sr-container">
+            <div className="mx-auto max-w-3xl">
+              <SectionHeading eyebrow="FAQ" title="Common questions" align="center" />
+              <FaqAccordion items={faqs} />
             </div>
           </div>
-        </div>
-      </footer>
+        </section>
+
+        {/* ---------------------------------------------------------- final CTA */}
+        <section className="sr-section sr-section-brand">
+          <Reveal className="sr-container text-center">
+            <div className="mx-auto max-w-3xl">
+              <h2 className="sr-h2">Your next certificate batch starts with one template.</h2>
+              <p className="sr-lead mt-5">
+                Design, personalise, deliver, and verify — all in one focused workflow.
+              </p>
+              <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
+                <Link href="/signup" className="sr-btn sr-btn-primary">
+                  Start creating
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <a href="#templates" className="sr-btn sr-btn-secondary">
+                  Browse templates
+                </a>
+              </div>
+            </div>
+          </Reveal>
+        </section>
+      </main>
+
+      <MarketingFooter />
     </div>
   );
 }

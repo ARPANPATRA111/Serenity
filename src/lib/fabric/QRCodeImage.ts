@@ -1,5 +1,7 @@
 import { fabric } from 'fabric';
 import { generateQRCodeDataURL as generateQRCode, QRCodeOptions } from '../qrcode';
+import { buildVerificationUrl } from '../verification/url';
+import { QR_LOGICAL_SIZE } from './exportQuality';
 
 // QR Code generation constants
 const QR_SIZE = 200;
@@ -16,8 +18,7 @@ export async function generateQRCodeDataURL(
   color: string = '#000000',
   backgroundColor: string = '#ffffff'
 ): Promise<string> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://serenity.app';
-  const verifyUrl = `${baseUrl}/verify/${verificationId}`;
+  const verifyUrl = buildVerificationUrl(verificationId);
   
   try {
     const dataUrl = await generateQRCode(verifyUrl, {
@@ -32,32 +33,8 @@ export async function generateQRCodeDataURL(
     return dataUrl;
   } catch (error) {
     console.error('Failed to generate QR code:', error);
-    // Return a placeholder on error
-    return createPlaceholderQR(size);
+    throw new Error('Failed to generate a scannable verification QR code', { cause: error });
   }
-}
-
-function createPlaceholderQR(size: number): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  
-  if (!ctx) return '';
-  
-  // Draw placeholder
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, size, size);
-  
-  ctx.fillStyle = '#e5e7eb';
-  ctx.fillRect(16, 16, size - 32, size - 32);
-  
-  ctx.fillStyle = '#9ca3af';
-  ctx.font = '12px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('QR Code', size / 2, size / 2);
-  
-  return canvas.toDataURL('image/png');
 }
 
 export async function createQRCodeImage(
@@ -159,7 +136,45 @@ export function registerQRCodeImageType(): void {
   };
 }
 
-export function isQRCodeImage(obj: fabric.Object): obj is fabric.Image & { 
+/**
+ * Makes the editor show QR codes at the size they print.
+ *
+ * The generator always regenerates the QR at QR_LOGICAL_SIZE (200) pixels, so
+ * a QR prints at 200 x scale. QR codes inserted before this change were
+ * 100px images and showed at half their printed size in the editor. Loading a
+ * template swaps each such image for a 200px one with the same colours and
+ * scale: printed output is unchanged, and the editor now matches it.
+ */
+export async function normalizeQRCodeImages(canvas: fabric.Canvas | fabric.StaticCanvas): Promise<number> {
+  const targets = canvas.getObjects().filter((object) =>
+    isQRCodeImage(object) && Math.round(object.width || 0) !== QR_LOGICAL_SIZE,
+  ) as Array<fabric.Image & { verificationId: string; qrColor?: string; qrBackgroundColor?: string }>;
+
+  for (const qrImage of targets) {
+    try {
+      const dataUrl = await generateQRCodeDataURL(
+        qrImage.verificationId,
+        QR_LOGICAL_SIZE,
+        qrImage.qrColor || '#000000',
+        qrImage.qrBackgroundColor || '#ffffff',
+      );
+      await new Promise<void>((resolve) => {
+        fabric.Image.fromURL(dataUrl, (image) => {
+          const element = image?.getElement() as HTMLImageElement | undefined;
+          if (element) qrImage.setElement(element);
+          resolve();
+        });
+      });
+    } catch {
+      // Leave the original image; generation still prints the correct size.
+    }
+  }
+
+  if (targets.length > 0) canvas.requestRenderAll();
+  return targets.length;
+}
+
+export function isQRCodeImage(obj: fabric.Object): obj is fabric.Image & {
   verificationId: string; 
   qrColor: string;
   qrBackgroundColor: string;
