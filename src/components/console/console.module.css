@@ -1,0 +1,49 @@
+/*
+ * Chart roles for the operator console. The series step for each theme was
+ * checked with the data-viz palette validator against the card surface:
+ * light #1A5CFF on #FFFFFF and dark #5B8CFF on #111726 pass the lightness
+ * band, chroma floor and 3:1 contrast checks. (The brand's dark primary,
+ * #6A98FF, is too light for the dark lightness band, so charts use a step
+ * darker.)
+ */
+.viz {
+  --viz-series: 26 92 255;
+  --viz-grid: var(--color-border);
+  --viz-surface: var(--color-card);
+}
+
+:global(.dark) .viz {
+  --viz-series: 91 140 255;
+}
+
+.bar {
+  background: rgb(var(--viz-series));
+  border-radius: 4px 4px 0 0;
+  transition: filter 120ms ease;
+}
+
+.slot:hover .bar,
+.slot:focus-visible .bar,
+.slotActive .bar {
+  filter: brightness(1.15) saturate(1.05);
+}
+
+.gridline {
+  border-top: 1px solid rgb(var(--viz-grid));
+}
+
+.meterTrack {
+  background: rgb(var(--viz-series) / 0.16);
+}
+
+.meterFill {
+  background: rgb(var(--viz-series));
+}
+
+.meterWarning {
+  background: rgb(var(--color-warning));
+}
+
+.meterDanger {
+  background: rgb(var(--color-error));
+}

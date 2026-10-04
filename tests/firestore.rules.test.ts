@@ -45,6 +45,10 @@ beforeAll(async () => {
         userId: 'user-a',
         name: 'Private planning context',
       }),
+      setDoc(doc(db, '_adminSecrets/console'), { passphraseHash: 'scrypt$32768$8$1$c2FsdA==$aGFzaA==' }),
+      setDoc(doc(db, '_adminUsage/2026-09-30'), { reads: 10, requests: 1 }),
+      setDoc(doc(db, 'adminAuditLog/entry-a'), { action: 'premium.granted', target: 'user-a' }),
+      setDoc(doc(db, 'generationBatches/batch-a'), { userId: 'user-a', certificateCount: 3 }),
     ]);
   });
 });
@@ -98,5 +102,37 @@ describe('Firestore tenant and authority boundaries', () => {
 
     await assertFails(setDoc(doc(ownerDb, 'certificates/new-cert'), { userId: 'user-a' }));
     await assertFails(deleteDoc(doc(ownerDb, 'templates/private-a')));
+  });
+
+  test('users cannot set plan fields that the operator console owns', async () => {
+    const ownerDb = environment.authenticatedContext('user-a').firestore();
+
+    await assertFails(updateDoc(doc(ownerDb, 'users/user-a'), { premiumUntil: '2099-01-01T00:00:00.000Z' }));
+    await assertFails(updateDoc(doc(ownerDb, 'users/user-a'), { premiumSource: 'console' }));
+  });
+
+  test('operator console data is unreachable from browsers, even for operator accounts', async () => {
+    const anonymousDb = environment.unauthenticatedContext().firestore();
+    const ownerDb = environment.authenticatedContext('user-a').firestore();
+    // The console claim grants nothing at the rules layer: console data is
+    // only ever read through the Admin SDK behind the console session checks.
+    const operatorDb = environment.authenticatedContext('ops-admin', { serenityAdmin: true, email_verified: true }).firestore();
+
+    for (const db of [anonymousDb, ownerDb, operatorDb]) {
+      await assertFails(getDoc(doc(db, '_adminSecrets/console')));
+      await assertFails(setDoc(doc(db, '_adminSecrets/console'), { passphraseHash: 'attacker-chosen' }));
+      await assertFails(getDoc(doc(db, '_adminUsage/2026-09-30')));
+      await assertFails(getDoc(doc(db, 'adminAuditLog/entry-a')));
+      await assertFails(setDoc(doc(db, 'adminAuditLog/forged'), { action: 'premium.granted' }));
+    }
+  });
+
+  test('generation batch summaries are server-only', async () => {
+    const ownerDb = environment.authenticatedContext('user-a').firestore();
+    const anonymousDb = environment.unauthenticatedContext().firestore();
+
+    await assertFails(getDoc(doc(ownerDb, 'generationBatches/batch-a')));
+    await assertFails(getDoc(doc(anonymousDb, 'generationBatches/batch-a')));
+    await assertFails(setDoc(doc(ownerDb, 'generationBatches/batch-b'), { userId: 'user-a', certificateCount: 999 }));
   });
 });

@@ -58,5 +58,25 @@ service cloud.firestore {
     match /events/{eventId} {
       allow read, create, update, delete: if false;
     }
+
+    // Generation batch summaries are written by the certificates API and read
+    // only by the operator console, both through the Admin SDK.
+    match /generationBatches/{batchId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Operator console data: the passphrase hash and unlock lockout, the
+    // console read meter, and the audit log. Never readable by browsers.
+    match /_adminSecrets/{documentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /_adminUsage/{documentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /adminAuditLog/{entryId} {
+      allow read, create, update, delete: if false;
+    }
   }
 }
