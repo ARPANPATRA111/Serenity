@@ -43,6 +43,7 @@ import { SkeletonDashboard, Skeleton, SkeletonCard } from '@/components/ui/Skele
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { EVENTS_ENABLED } from '@/lib/featureFlags';
 import { plural } from '@/lib/utils';
+import type { CertificateStats } from '@/lib/certificates/stats';
 
 // Certificate interface for Firebase data
 interface CertificateRecord {
@@ -121,6 +122,8 @@ export default function DashboardPage() {
   const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [templates, setTemplates] = useState<DashboardTemplate[]>([]);
   const [publicTemplates, setPublicTemplates] = useState<DashboardTemplate[]>([]);
+  // Exact account totals from the server; null until loaded (or if unavailable).
+  const [accountStats, setAccountStats] = useState<CertificateStats | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(true);
   const [certificatesLoading, setCertificatesLoading] = useState(true);
   const [publicTemplatesLoading, setPublicTemplatesLoading] = useState(true);
@@ -141,11 +144,13 @@ export default function DashboardPage() {
       type DashboardSummary = {
           recentCertificates: CertificateRecord[];
           recentTemplates: DashboardTemplate[];
+          stats?: CertificateStats | null;
       };
       const cached = readSessionJson<DashboardSummary>(cacheKey, 5 * 60_000);
       if (cached) {
         setCertificates(cached.recentCertificates || []);
         setTemplates(cached.recentTemplates || []);
+        setAccountStats(cached.stats || null);
         setCertificatesLoading(false);
         setTemplatesLoading(false);
       }
@@ -159,6 +164,7 @@ export default function DashboardPage() {
         if (cancelled) return;
         setCertificates(data.recentCertificates || []);
         setTemplates(data.recentTemplates || []);
+        setAccountStats(data.stats || null);
         writeSessionJson(cacheKey, data);
       } catch (error) {
         console.error('[Dashboard] Error fetching summary:', error);
@@ -316,14 +322,15 @@ export default function DashboardPage() {
   // Show skeleton while data is loading
   const isDataLoading = templatesLoading || certificatesLoading;
 
-  // Calculate real statistics
-  const totalTemplates = templates.length;
-  const totalCertificates = certificates.length;
-  const totalViews = certificates.reduce((sum, cert) => sum + cert.viewCount, 0);
+  // Account totals: exact server aggregates, or (if those are unavailable)
+  // what the recent records show.
+  const totalTemplates = accountStats?.totalTemplates ?? templates.length;
+  const totalCertificates = accountStats?.totalCertificates ?? certificates.length;
+  const totalViews = accountStats?.totalViews ?? certificates.reduce((sum, cert) => sum + cert.viewCount, 0);
   
   // Calculate email stats
-  const emailsSent = certificates.filter(c => c.emailStatus === 'sent').length;
-  const emailsFailed = certificates.filter(c => c.emailStatus === 'failed').length;
+  const emailsSent = accountStats?.emailsSent ?? certificates.filter(c => c.emailStatus === 'sent').length;
+  const emailsFailed = accountStats?.emailsFailed ?? certificates.filter(c => c.emailStatus === 'failed').length;
   const emailSuccessRate = emailsSent + emailsFailed > 0 
     ? Math.round((emailsSent / (emailsSent + emailsFailed)) * 100) 
     : 100;
@@ -331,12 +338,12 @@ export default function DashboardPage() {
   // Calculate monthly stats (certificates created in last 30 days)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const thisMonthCerts = certificates.filter(c => new Date(c.createdAt) >= thirtyDaysAgo).length;
+  const thisMonthCerts = accountStats?.certificatesLast30Days ?? certificates.filter(c => new Date(c.createdAt) >= thirtyDaysAgo).length;
   
   // Calculate previous month stats for comparison
   const sixtyDaysAgo = new Date();
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-  const lastMonthCerts = certificates.filter(c => {
+  const lastMonthCerts = accountStats?.certificatesPrevious30Days ?? certificates.filter(c => {
     const date = new Date(c.createdAt);
     return date >= sixtyDaysAgo && date < thirtyDaysAgo;
   }).length;
