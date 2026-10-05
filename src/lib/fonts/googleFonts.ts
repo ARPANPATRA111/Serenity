@@ -63,25 +63,46 @@ export const GOOGLE_FONTS = [
   { name: 'Source Code Pro', weights: [400, 500, 600, 700] },
 ];
 
-// Track loaded fonts
+// Track loaded font weights ("Montserrat:700")
 const loadedFonts = new Set<string>();
 const loadingFonts = new Map<string, Promise<void>>();
 
+/**
+ * Maps requested weights to ones the family actually has (Google Fonts
+ * rejects the whole request for a weight it does not serve), sorted as the
+ * css2 API requires.
+ */
+export function servedWeights(fontName: string, weights: number[]): number[] {
+  const available = GOOGLE_FONTS.find((font) => font.name === fontName)?.weights;
+  const nearest = (weight: number) => available
+    ? available.reduce((best, candidate) => (Math.abs(candidate - weight) < Math.abs(best - weight) ? candidate : best), available[0])
+    : weight;
+  return Array.from(new Set(weights.map(nearest))).sort((a, b) => a - b);
+}
+
+/** CSS font-weight value of a Fabric object ("bold", "600", 600) as a number. */
+export function numericFontWeight(value: unknown): number {
+  if (value === 'bold') return 700;
+  const weight = Number.parseInt(String(value), 10);
+  return Number.isFinite(weight) ? weight : 400;
+}
+
 export async function loadGoogleFont(fontName: string, weights: number[] = [400, 700]): Promise<void> {
-  if (loadedFonts.has(fontName)) {
-    return;
-  }
-  const existingPromise = loadingFonts.get(fontName);
+  const missing = servedWeights(fontName, weights).filter((weight) => !loadedFonts.has(`${fontName}:${weight}`));
+  if (missing.length === 0) return;
+
+  const requestKey = `${fontName}:${missing.join(';')}`;
+  const existingPromise = loadingFonts.get(requestKey);
   if (existingPromise) return existingPromise;
 
-  const fontWeights = weights.join(';');
-  const fontUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@${fontWeights}&display=swap`;
+  const fontUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@${missing.join(';')}&display=swap`;
+  const markLoaded = () => missing.forEach((weight) => loadedFonts.add(`${fontName}:${weight}`));
+  const waitForFaces = () => Promise.all(missing.map((weight) => document.fonts?.load(`${weight} 16px "${fontName}"`)));
 
-  // Check if link already exists
-  const existingLink = document.querySelector(`link[href*="${encodeURIComponent(fontName)}"]`);
-  if (existingLink) {
-    await document.fonts?.load(`16px "${fontName}"`);
-    loadedFonts.add(fontName);
+  // The same stylesheet may already be on the page (e.g. added by the generator)
+  if (document.querySelector(`link[href="${fontUrl}"]`)) {
+    await waitForFaces();
+    markLoaded();
     return;
   }
 
@@ -94,8 +115,8 @@ export async function loadGoogleFont(fontName: string, weights: number[] = [400,
   const promise = new Promise<void>((resolve, reject) => {
     link.onload = async () => {
       try {
-        await Promise.all(weights.map((weight) => document.fonts?.load(`${weight} 16px "${fontName}"`)));
-        loadedFonts.add(fontName);
+        await waitForFaces();
+        markLoaded();
         resolve();
       } catch (error) {
         reject(error);
@@ -106,8 +127,8 @@ export async function loadGoogleFont(fontName: string, weights: number[] = [400,
     };
     document.head.appendChild(link);
   });
-  loadingFonts.set(fontName, promise);
-  return promise.finally(() => loadingFonts.delete(fontName));
+  loadingFonts.set(requestKey, promise);
+  return promise.finally(() => loadingFonts.delete(requestKey));
 }
 
 export async function loadFontsForTemplate(template: string | object): Promise<void> {
@@ -122,14 +143,33 @@ export async function loadFontsForTemplate(template: string | object): Promise<v
   for (const object of Array.isArray(data?.objects) ? data.objects : []) {
     const family = typeof object?.fontFamily === 'string' ? object.fontFamily : '';
     if (!isGoogleFont(family)) continue;
-    const weight = Number.parseInt(String(object.fontWeight), 10);
     const weights = requested.get(family) || new Set<number>();
-    weights.add(Number.isFinite(weight) ? weight : 400);
+    weights.add(numericFontWeight(object.fontWeight));
     requested.set(family, weights);
   }
 
   await Promise.all(Array.from(requested, ([family, weights]) => loadGoogleFont(family, Array.from(weights))));
   await document.fonts?.ready;
+}
+
+/**
+ * Loads a template's fonts but waits at most `timeoutMs`, so a slow or
+ * blocked font service never stalls the editor. Returns true when the fonts
+ * were ready in time; otherwise `onLateLoad` runs once they do arrive, so the
+ * caller can re-measure text.
+ */
+export async function waitForTemplateFonts(
+  template: string | object,
+  timeoutMs: number,
+  onLateLoad?: () => void
+): Promise<boolean> {
+  const loaded = loadFontsForTemplate(template).then(() => true, () => false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); });
+  const ready = await Promise.race([loaded, timedOut]);
+  clearTimeout(timer);
+  if (!ready && onLateLoad) void loaded.then((arrived) => { if (arrived) onLateLoad(); });
+  return ready;
 }
 
 export async function loadAllGoogleFonts(): Promise<void> {

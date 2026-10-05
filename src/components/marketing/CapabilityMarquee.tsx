@@ -12,7 +12,7 @@ import { Check } from 'lucide-react';
  */
 const capabilities = [
   'Bulk personalisation',
-  'PDF, PNG, and ZIP export',
+  'PDF and ZIP export',
   'CSV and Excel import',
   'Email delivery',
   'QR verification',

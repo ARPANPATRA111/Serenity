@@ -53,6 +53,7 @@ export async function generateMetadata({ params }: VerifyPageProps): Promise<Met
 
   // Per-recipient pages stay out of search indexes but remain followable.
   const robots = { index: false, follow: true };
+  const alternates = { canonical: `/verify/${id}` };
 
   if (result.status === 'valid') {
     const { certificate } = result;
@@ -63,13 +64,14 @@ export async function generateMetadata({ params }: VerifyPageProps): Promise<Met
       title,
       description,
       robots,
+      alternates,
       openGraph: { title, description, type: 'article', ...(images ? { images } : {}) },
       twitter: { card: images ? 'summary_large_image' : 'summary', title, description, ...(images ? { images } : {}) },
     };
   }
 
   if (result.status === 'revoked') {
-    return { title: 'Certificate revoked', robots };
+    return { title: 'Certificate revoked', robots, alternates };
   }
 
   return {

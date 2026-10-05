@@ -317,6 +317,7 @@ export function ColorPicker({
         <input
           ref={colorInputRef}
           type="color"
+          aria-label="Custom color"
           value={normalizedValue}
           onChange={(e) => handleColorChange(e.target.value)}
           className="sr-only"

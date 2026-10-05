@@ -59,6 +59,60 @@ function validateWorksheetShape(rowCount: number, columnCount: number): void {
   }
 }
 
+const CSV_EXTENSIONS = ['.csv'];
+
+function fileExtension(fileName: string): string {
+  return '.' + (fileName.split('.').pop() || '').toLowerCase();
+}
+
+/**
+ * Decodes CSV bytes to text. UTF-8 is tried first (with or without a byte
+ * order mark, the default for Google Sheets, Numbers, LibreOffice and most
+ * scripts); bytes that are not valid UTF-8 fall back to Windows-1252, which
+ * is what Excel's legacy "CSV (Comma delimited)" export writes.
+ */
+export function decodeCsvBytes(bytes: Uint8Array): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
+}
+
+/** True when the bytes are a zip (xlsx/ods) or OLE (xls) container rather than text. */
+function isBinaryWorkbook(bytes: Uint8Array): boolean {
+  const zip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  const ole = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+  return zip || ole;
+}
+
+/**
+ * Excel's built-in short date (format 14) follows the viewer's locale, which
+ * SheetJS cannot know and renders as "m/d/yy". Certificates use an unambiguous
+ * long form instead; custom date formats in the workbook are kept as written.
+ */
+export function shortDateFormat(locale?: string): string {
+  return /^en-US\b/i.test(locale || '') ? 'mmmm d, yyyy' : 'd mmmm yyyy';
+}
+
+function browserLocale(): string | undefined {
+  return typeof navigator !== 'undefined' ? navigator.language : undefined;
+}
+
+/**
+ * Reads a workbook from file bytes. CSV text keeps every value exactly as
+ * written: no re-encoding of accented names and no conversion of dates or
+ * numbers ("2026-10-05" and "0042" stay as typed).
+ */
+export function readWorkbook(bytes: Uint8Array, fileName: string, locale = browserLocale()): XLSX.WorkBook {
+  if (CSV_EXTENSIONS.includes(fileExtension(fileName)) && !isBinaryWorkbook(bytes)) {
+    return XLSX.read(decodeCsvBytes(bytes), { type: 'string', raw: true });
+  }
+  return XLSX.read(bytes, { type: 'array', dateNF: shortDateFormat(locale) });
+}
+
 function normalizeRows(jsonData: Record<string, unknown>[]): { headers: string[]; rows: DataRow[] } {
   const headers = Object.keys(jsonData[0] || {}).filter((key) => key !== '__rowNum__');
   validateWorksheetShape(jsonData.length, headers.length);
@@ -100,8 +154,8 @@ export async function getSheetNames(file: File): Promise<SheetInfo[]> {
           return;
         }
 
-        const workbook = XLSX.read(data, { type: 'array' });
-        
+        const workbook = readWorkbook(new Uint8Array(data as ArrayBuffer), file.name);
+
         const sheets: SheetInfo[] = workbook.SheetNames.map(name => {
           const worksheet = workbook.Sheets[name];
           const { rowCount, columnCount } = getWorksheetShape(worksheet);
@@ -123,6 +177,47 @@ export async function getSheetNames(file: File): Promise<SheetInfo[]> {
   });
 }
 
+/** Parses one sheet of a spreadsheet file's bytes into rows of text values. */
+export function parseSpreadsheetBytes(
+  bytes: Uint8Array,
+  fileName: string,
+  sheetName?: string,
+  locale = browserLocale()
+): ParsedDataSource {
+  const workbook = readWorkbook(bytes, fileName, locale);
+
+  // Get specified sheet or first sheet
+  const targetSheetName = sheetName || workbook.SheetNames[0];
+  if (!targetSheetName || !workbook.SheetNames.includes(targetSheetName)) {
+    throw new Error('Sheet not found in workbook');
+  }
+
+  const worksheet = workbook.Sheets[targetSheetName];
+  const { rowCount, columnCount } = getWorksheetShape(worksheet);
+  validateWorksheetShape(rowCount, columnCount);
+
+  // Convert to JSON with header row
+  const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+    defval: '', // Default value for empty cells
+    raw: false, // Convert all values to strings
+  });
+
+  if (jsonData.length === 0) {
+    throw new Error('No data found in spreadsheet');
+  }
+
+  const { headers, rows } = normalizeRows(jsonData);
+
+  return {
+    headers,
+    rows,
+    fileName,
+    totalRows: rows.length,
+    sheetName: targetSheetName,
+    availableSheets: workbook.SheetNames,
+  };
+}
+
 export async function parseSpreadsheet(file: File, sheetName?: string): Promise<ParsedDataSource> {
   return new Promise((resolve, reject) => {
     try {
@@ -142,43 +237,7 @@ export async function parseSpreadsheet(file: File, sheetName?: string): Promise<
           return;
         }
 
-        // Parse workbook
-        const workbook = XLSX.read(data, { type: 'array' });
-
-        // Get specified sheet or first sheet
-        const targetSheetName = sheetName || workbook.SheetNames[0];
-        if (!targetSheetName || !workbook.SheetNames.includes(targetSheetName)) {
-          reject(new Error('Sheet not found in workbook'));
-          return;
-        }
-
-        const worksheet = workbook.Sheets[targetSheetName];
-        const { rowCount, columnCount } = getWorksheetShape(worksheet);
-        validateWorksheetShape(rowCount, columnCount);
-
-        // Convert to JSON with header row
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
-          defval: '', // Default value for empty cells
-          raw: false, // Convert all values to strings
-        });
-
-        if (jsonData.length === 0) {
-          reject(new Error('No data found in spreadsheet'));
-          return;
-        }
-
-        const { headers, rows } = normalizeRows(jsonData);
-
-        const result: ParsedDataSource = {
-          headers,
-          rows,
-          fileName: file.name,
-          totalRows: rows.length,
-          sheetName: targetSheetName,
-          availableSheets: workbook.SheetNames,
-        };
-
-        resolve(result);
+        resolve(parseSpreadsheetBytes(new Uint8Array(data as ArrayBuffer), file.name, sheetName));
       } catch (error) {
         reject(new Error(`Failed to parse spreadsheet: ${error instanceof Error ? error.message : 'Unknown error'}`));
       }
@@ -200,7 +259,7 @@ export function parseCSVString(csvString: string): ParsedDataSource {
     );
   }
 
-  const workbook = XLSX.read(csvString, { type: 'string' });
+  const workbook = XLSX.read(csvString.replace(/^﻿/, ''), { type: 'string', raw: true });
   const firstSheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheetName];
   const { rowCount, columnCount } = getWorksheetShape(worksheet);

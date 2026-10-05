@@ -162,6 +162,7 @@ export function StyleSidebar({ mode, onClose, colorProperty = 'fill' }: StyleSid
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search fonts..."
+              aria-label="Search fonts"
               className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>

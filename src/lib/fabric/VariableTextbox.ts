@@ -1,9 +1,16 @@
 import { fabric } from 'fabric';
+import type { EditorChromeCanvas } from './exportQuality';
+import { applyFabricPatches } from './patches';
+import { isEditorChromeStroke, NO_TEXT_STROKE } from './templateNormalization';
 
 // Custom property names to include in serialization
 const CUSTOM_PROPERTIES = ['dynamicKey', 'isPlaceholder'];
 
+const CHROME_COLOR = '#001eff';
+const CHROME_PADDING = 5;
+
 export function registerVariableTextbox(): void {
+  applyFabricPatches();
   if ((fabric as unknown as Record<string, unknown>).VariableTextbox) {
     // Already registered
     return;
@@ -28,28 +35,25 @@ export function registerVariableTextbox(): void {
       // Fix browser compatibility for textBaseline
       this.textBaseline = 'alphabetic';
 
+      // Earlier releases stored the placeholder marker as a glyph stroke.
+      if (isEditorChromeStroke(this)) this.set({ ...NO_TEXT_STROKE });
+
       // Apply placeholder styling if dynamicKey is set
       if (this.dynamicKey) {
         this._applyPlaceholderStyle();
       }
     },
 
+    // The placeholder marker (dashed frame and name badge) is editor chrome
+    // drawn in `render`; it is never part of the text, so it never prints.
     _applyPlaceholderStyle: function () {
-      this.set({
-        strokeWidth: 2,
-        stroke: '#001eff', // Primary color
-        strokeDashArray: [5, 5],
-        padding: 5,
-      });
+      if (isEditorChromeStroke(this)) this.set({ ...NO_TEXT_STROKE });
+      this.set({ padding: CHROME_PADDING });
     },
 
     _removePlaceholderStyle: function () {
-      this.set({
-        strokeWidth: 0,
-        stroke: undefined,
-        strokeDashArray: undefined,
-        padding: 0,
-      });
+      if (isEditorChromeStroke(this)) this.set({ ...NO_TEXT_STROKE });
+      this.set({ padding: 0 });
     },
 
     setDynamicKey: function (key: string) {
@@ -78,38 +82,46 @@ export function registerVariableTextbox(): void {
       ]);
     },
 
-    _render: function (ctx: CanvasRenderingContext2D) {
-      this.callSuper('_render', ctx);
+    render: function (ctx: CanvasRenderingContext2D) {
+      this.callSuper('render', ctx);
+      const canvas = this.canvas as (fabric.StaticCanvas & EditorChromeCanvas) | undefined;
+      if (!this.isPlaceholder || !this.dynamicKey || !canvas || canvas.hideEditorChrome || this.isNotVisible()) return;
 
-      // Draw dynamic indicator badge if this is a placeholder
-      if (this.isPlaceholder && this.dynamicKey) {
-        ctx.save();
+      // Drawn on the canvas context, outside the object cache, so the badge
+      // above the box is never clipped.
+      ctx.save();
+      this.transform(ctx);
+      const width = this.width || 0;
+      const height = this.height || 0;
+      const scale = Math.max(Math.abs(this.scaleX || 1), Math.abs(this.scaleY || 1)) * (canvas.getZoom?.() || 1);
 
-        // Calculate badge position (top-right corner)
-        const width = this.width || 0;
-        const height = this.height || 0;
+      // Dashed frame around the field
+      ctx.strokeStyle = CHROME_COLOR;
+      ctx.globalAlpha = 0.6;
+      ctx.lineWidth = 1 / scale;
+      ctx.setLineDash([4 / scale, 3 / scale]);
+      ctx.strokeRect(-width / 2 - CHROME_PADDING, -height / 2 - CHROME_PADDING, width + CHROME_PADDING * 2, height + CHROME_PADDING * 2);
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
 
-        // Badge background
-        const badgeText = this.dynamicKey;
-        ctx.font = '10px sans-serif';
-        const textMetrics = ctx.measureText(badgeText);
-        const badgeWidth = textMetrics.width + 8;
-        const badgeHeight = 16;
-        const badgeX = width / 2 - badgeWidth + 4;
-        const badgeY = -height / 2 - badgeHeight - 4;
+      // Name badge (top-right corner)
+      const badgeText = this.dynamicKey;
+      ctx.font = '10px sans-serif';
+      const textMetrics = ctx.measureText(badgeText);
+      const badgeWidth = textMetrics.width + 8;
+      const badgeHeight = 16;
+      const badgeX = width / 2 - badgeWidth + 4;
+      const badgeY = -height / 2 - badgeHeight - 4;
 
-        // Draw badge
-        ctx.fillStyle = '#001eff';
-        ctx.beginPath();
-        ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
-        ctx.fill();
+      ctx.fillStyle = CHROME_COLOR;
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
+      ctx.fill();
 
-        // Draw badge text
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(badgeText, badgeX + 4, badgeY + 12);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(badgeText, badgeX + 4, badgeY + 12);
 
-        ctx.restore();
-      }
+      ctx.restore();
     },
   });
 

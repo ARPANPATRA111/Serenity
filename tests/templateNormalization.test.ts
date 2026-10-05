@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { normalizeTemplateJSON, substituteInlineTokens } from '../src/lib/fabric/templateNormalization';
+import { isEditorChromeStroke, normalizeTemplateJSON, substituteInlineTokens } from '../src/lib/fabric/templateNormalization';
 import { curatedPublicTemplates } from '../src/lib/templates/curatedPublicTemplates';
 
 describe('normalizeTemplateJSON', () => {
@@ -46,6 +46,47 @@ describe('normalizeTemplateJSON', () => {
       expect(placeholders.length, template.name).toBeGreaterThan(0);
       expect(placeholders.every((object) => object.type === 'variableTextbox')).toBe(true);
     }
+  });
+});
+
+describe('editor chrome strokes saved into templates', () => {
+  test('removes the placeholder outline and the old Exit Preview stroke from text', () => {
+    const normalized = normalizeTemplateJSON({
+      objects: [
+        // Saved by earlier editor releases for every {{Name}} field.
+        { type: 'variableTextbox', text: '{{Name}}', dynamicKey: 'Name', stroke: '#001eff', strokeWidth: 2, strokeDashArray: [5, 5], styles: [] },
+        // Left on inline-token text by the old Exit Preview.
+        { type: 'textbox', text: 'Presented by {{Issuer}}', stroke: '#3B82F6', strokeWidth: 1, strokeDashArray: [4, 2], styles: [] },
+      ],
+    });
+    for (const object of normalized.objects as Array<Record<string, unknown>>) {
+      expect(object).toMatchObject({ stroke: null, strokeWidth: 0, strokeDashArray: null });
+    }
+  });
+
+  test('keeps strokes a designer chose', () => {
+    const designed = [
+      { type: 'textbox', text: 'Outlined', stroke: '#3b82f6', strokeWidth: 1, strokeDashArray: null, styles: [] },
+      { type: 'textbox', text: 'Dashed red', stroke: '#dc2626', strokeWidth: 1, strokeDashArray: [4, 2], styles: [] },
+      { type: 'textbox', text: 'Other dash', stroke: '#001eff', strokeWidth: 2, strokeDashArray: [6, 3], styles: [] },
+      // Shapes are never touched, whatever their stroke.
+      { type: 'rect', stroke: '#3b82f6', strokeWidth: 1, strokeDashArray: [4, 2] },
+    ];
+    const normalized = normalizeTemplateJSON({ objects: designed });
+    expect(normalized.objects).toEqual(designed);
+  });
+
+  test('is idempotent', () => {
+    const once = normalizeTemplateJSON({ objects: [{ type: 'textbox', text: '{{A}}', stroke: '#3b82f6', strokeDashArray: [4, 2] }] });
+    expect(normalizeTemplateJSON(once)).toEqual(once);
+  });
+
+  test('recognises only the two editor signatures', () => {
+    expect(isEditorChromeStroke({ stroke: '#001eff', strokeDashArray: [5, 5] })).toBe(true);
+    expect(isEditorChromeStroke({ stroke: '#3b82f6', strokeDashArray: [4, 2] })).toBe(true);
+    expect(isEditorChromeStroke({ stroke: '#3b82f6', strokeDashArray: [5, 5] })).toBe(false);
+    expect(isEditorChromeStroke({ stroke: null, strokeDashArray: [4, 2] })).toBe(false);
+    expect(isEditorChromeStroke({})).toBe(false);
   });
 });
 

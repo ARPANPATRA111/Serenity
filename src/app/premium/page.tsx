@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import { ArrowLeft, Check, MessageCircle } from 'lucide-react';
+import type { Metadata } from 'next';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
+
+export const metadata: Metadata = {
+  title: 'Pro access',
+  alternates: { canonical: '/premium' },
+};
 
 export default function PremiumPage() {
   return (

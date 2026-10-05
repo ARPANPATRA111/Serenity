@@ -13,6 +13,7 @@ import { generateBatch, downloadZip, retryCertificatePersistence, type BatchGene
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { getIdToken } from '@/lib/firebase/client';
 import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Lock, RefreshCw } from 'lucide-react';
+import { plural } from '@/lib/utils';
 
 /** Keeps each email request under the 4.5 MB body limit of Vercel functions. */
 const MAX_ATTACHMENT_BASE64_CHARS = 4_200_000;
@@ -508,7 +509,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               <div className="flex items-center gap-3">
                 <FileText className="h-8 w-8 text-primary" />
                 <div>
-                  <p className="font-medium">{rows.length} Certificates</p>
+                  <p className="font-medium">{rows.length} {plural(rows.length, 'Certificate')}</p>
                   <p className="text-sm text-muted-foreground">
                     From {dataSource?.fileName}
                   </p>
@@ -519,10 +520,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
 
           {/* Configuration */}
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label htmlFor="generation-name-field" className="mb-2 block text-sm font-medium">
               Name Field (for file naming)
             </label>
             <select
+              id="generation-name-field"
               value={nameField}
               onChange={(e) => setNameField(e.target.value)}
               className="input"
@@ -563,10 +565,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             {sendEmails && (
               <>
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
+                  <label htmlFor="generation-email-field" className="mb-2 block text-sm font-medium">
                     Email Field
                   </label>
                   <select
+                    id="generation-email-field"
                     value={emailField}
                     onChange={(e) => setEmailField(e.target.value)}
                     className="input"
@@ -585,10 +588,10 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                     <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
                     <div className="text-xs">
                       <p className="font-medium text-warning">
-                        {emailValidation.missing.length} recipient(s) have missing or invalid emails
+                        {emailValidation.missing.length} {plural(emailValidation.missing.length, 'recipient has', 'recipients have')} missing or invalid emails
                       </p>
                       <p className="text-muted-foreground mt-1">
-                        Emails will only be sent to {emailValidation.withEmail} of {emailValidation.total} recipients.
+                        Emails will only be sent to {emailValidation.withEmail} of {emailValidation.total} {plural(emailValidation.total, 'recipient')}.
                         Certificates for all recipients will still be generated and included in the ZIP download.
                       </p>
                     </div>
@@ -598,7 +601,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 {emailField && emailValidation.valid && (
                   <div className="flex items-center gap-2 text-sm text-success">
                     <CheckCircle className="h-4 w-4" />
-                    <span>All {rows.length} recipients have valid email addresses</span>
+                    <span>{rows.length === 1 ? 'The recipient has a valid email address' : `All ${rows.length} recipients have valid email addresses`}</span>
                   </div>
                 )}
               </>
@@ -748,7 +751,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             </div>
             <h3 className="text-xl font-semibold">Sending Emails...</h3>
             <p className="mt-2 text-muted-foreground">
-              {emailProgress.current} of {emailProgress.total} emails sent
+              {emailProgress.current} of {emailProgress.total} {plural(emailProgress.total, 'email')} sent
             </p>
           </div>
           
@@ -789,7 +792,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                   {outcome.cancelled ? 'Generation Cancelled' : 'Completed with Issues'}
                 </h3>
                 <p className="mt-1 sm:mt-2 text-sm text-muted-foreground">
-                  Generated {outcome.generatedCount} of {total} certificates
+                  Generated {outcome.generatedCount} of {total} {plural(total, 'certificate')}
                 </p>
                 {outcome.renderFailures > 0 && (
                   <p className="text-xs sm:text-sm text-error">
@@ -858,7 +861,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 <details className="group">
                   <summary className="text-xs font-medium text-success cursor-pointer hover:underline flex items-center gap-1">
                     <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-                    View {emailResults.filter(r => r.success).length} successful emails
+                    View {emailResults.filter(r => r.success).length} successful {plural(emailResults.filter(r => r.success).length, 'email')}
                   </summary>
                   <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
                     {emailResults.filter(r => r.success).map((result, i) => (
@@ -877,7 +880,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 <details className="group" open>
                   <summary className="text-xs font-medium text-error cursor-pointer hover:underline flex items-center gap-1">
                     <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-                    View {emailResults.filter(r => !r.success).length} failed emails
+                    View {emailResults.filter(r => !r.success).length} failed {plural(emailResults.filter(r => !r.success).length, 'email')}
                   </summary>
                   <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
                     {emailResults.filter(r => !r.success).map((result, i) => (

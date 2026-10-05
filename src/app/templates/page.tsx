@@ -6,6 +6,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArrowLeft, Bookmark, Library, Search, X } from 'lucide-react';
 import { TemplateCard } from '@/components/templates/TemplateCard';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
+import { plural } from '@/lib/utils';
 
 interface Template {
   id: string;
@@ -152,7 +153,7 @@ export default function TemplatesPage() {
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Library className="h-4 w-4 text-primary" />
-              <span>{templates.length} templates</span>
+              <span>{templates.length} {plural(templates.length, 'template')}</span>
             </div>
           </div>
         </div>
@@ -167,11 +168,14 @@ export default function TemplatesPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search templates"
                 placeholder="Search templates by name, creator, or tag..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm"
               />
               {searchQuery && (
                 <button
+                  type="button"
+                  aria-label="Clear search"
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
@@ -182,6 +186,7 @@ export default function TemplatesPage() {
 
             {/* Sort */}
             <select
+              aria-label="Sort templates"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
               className="px-4 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -235,7 +240,7 @@ export default function TemplatesPage() {
         ) : (
           <>
             <p className="text-sm text-muted-foreground mb-4">
-              Showing {filteredTemplates.length} of {templates.length} templates
+              Showing {filteredTemplates.length} of {templates.length} {plural(templates.length, 'template')}
               {selectedCategory !== 'All' && ` in ${selectedCategory}`}
               {searchQuery && ` matching "${searchQuery}"`}
             </p>

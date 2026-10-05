@@ -9,6 +9,7 @@ import { isSafeCertificateMediaUrl } from '@/lib/security/mediaUrl';
 import nodemailer from 'nodemailer';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { certificateFileStem, imageExtension } from '@/lib/certificates/fileName';
 
 const logger = createLogger('Email.Send');
 const MAX_ATTACHMENT_BASE64_LENGTH = 8_000_000;
@@ -395,7 +396,8 @@ export async function POST(request: NextRequest) {
     const senderEmail = process.env.BREVO_SENDER_EMAIL || 'thispc119@gmail.com';
 
     try {
-      const sanitizedName = recipientName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      const sanitizedName = certificateFileStem(recipientName);
+      let imageType = 'image/png';
       
       const brevoPayload: BrevoEmailPayload = {
         sender: { name: senderName, email: senderEmail },
@@ -428,6 +430,7 @@ export async function POST(request: NextRequest) {
           
           if (certificateImageUrl.startsWith('data:')) {
             // Handle data URL (base64)
+            imageType = certificateImageUrl.slice('data:'.length, certificateImageUrl.indexOf(';')) || imageType;
             base64Content = certificateImageUrl.split(',')[1];
           } else {
             // Fetch image from URL and convert to base64
@@ -437,6 +440,7 @@ export async function POST(request: NextRequest) {
               if (!['image/png', 'image/jpeg', 'image/webp'].some(type => contentType.startsWith(type))) {
                 throw new Error('Certificate image response has an unsupported content type');
               }
+              imageType = contentType;
               const arrayBuffer = await imageResponse.arrayBuffer();
               if (arrayBuffer.byteLength > 6_000_000) {
                 throw new Error('Certificate image response is too large');
@@ -451,7 +455,7 @@ export async function POST(request: NextRequest) {
           if (base64Content) {
             brevoPayload.attachment = [
               {
-                name: `certificate_${sanitizedName}.png`,
+                name: `certificate_${sanitizedName}.${imageExtension(imageType)}`,
                 content: base64Content,
               },
             ];

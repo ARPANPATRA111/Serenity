@@ -13,7 +13,7 @@ const benefits = [
   'Design reusable certificate templates',
   'Import recipients from CSV or Excel',
   'Generate a personalised certificate per row',
-  'Export as PDF, PNG, or a ZIP archive',
+  'Download every certificate as a PDF, together in one ZIP',
   'Give every certificate a verification URL and QR code',
 ];
 
