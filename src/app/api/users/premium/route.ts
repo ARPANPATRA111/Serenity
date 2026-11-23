@@ -35,19 +35,11 @@ export async function GET(request: NextRequest) {
       ? userData.certificatesGenerated
       : 0;
 
-    // Legacy profiles without a counter are reconciled once. Normal modal
-    // opens use the server-owned counter; certificate persistence performs the
-    // authoritative count reconciliation before every write transaction.
-    if (typeof userData?.certificatesGenerated !== 'number') {
-      try {
-        const certsSnapshot = await db.collection('certificates')
-          .where('userId', '==', userId)
-          .count()
-          .get();
-        actualCertCount = certsSnapshot.data().count;
-      } catch {
-        actualCertCount = 0;
-      }
+    // A legacy numeric counter may also undercount. Match the save transaction
+    // whenever that discrepancy could let a free user start an unusable batch.
+    if (typeof userData?.certificatesGenerated !== 'number' || (!isPremium && actualCertCount < FREE_CERTIFICATE_LIMIT)) {
+      const owned = await db.collection('certificates').where('userId', '==', userId).count().get();
+      actualCertCount = Math.max(actualCertCount, owned.data().count);
     }
 
     const allowance = getCertificateAllowance(isPremium, actualCertCount);

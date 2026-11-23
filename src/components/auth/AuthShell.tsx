@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
+import { GuillocheSeal } from '@/components/brand/GuillocheSeal';
 import '@/styles/marketing.css';
 
 /**
@@ -31,7 +32,7 @@ export function AuthShell({
 
   return (
     <div className="sr-scope sr-shell flex min-h-screen flex-col">
-      <header className="border-b border-[rgb(var(--sr-line))]">
+      <header className="relative z-10">
         <div className="sr-container flex h-16 items-center justify-between">
           <Link href="/" className="rounded-lg" aria-label="Serenity Certificate Generator — home">
             <SerenityBrand stacked />
@@ -46,6 +47,7 @@ export function AuthShell({
           split ? '' : 'sr-auth-center'
         }`}
       >
+        <GuillocheSeal id="auth-seal" className="sr-auth-rosette" />
         <div className="sr-container">
           <div className={split ? 'mx-auto max-w-4xl' : 'mx-auto max-w-md'}>
             <h1 className="sr-h1 sr-h1-compact">{title}</h1>
@@ -87,7 +89,7 @@ export function AuthShell({
         </div>
       </main>
 
-      <footer className="border-t border-[rgb(var(--sr-line))] bg-[rgb(var(--sr-canvas-sunken))]">
+      <footer>
         <div className="sr-container flex flex-col gap-2 py-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="sr-hint">© 2026 Serenity Certificate Generator</p>
           <p className="sr-hint">

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PremiumPage() {
   return (
-    <main className="app-shell min-h-screen bg-background px-5 py-10 text-foreground">
+    <main className="app-shell min-h-screen px-5 py-10 text-foreground">
       <div className="mx-auto max-w-3xl">
         <div className="flex items-center justify-between">
           <Link href="/"><SerenityBrand /></Link>

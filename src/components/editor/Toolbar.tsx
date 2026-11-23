@@ -52,7 +52,6 @@ import {
   Heart,
   Plus,
   Pencil,
-  Check,
   QrCode,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -62,10 +61,25 @@ import { ToolPanel, ToolPanelItem, ToolPanelDivider, ToolPanelSection } from './
 import { useAuth } from '@/contexts/AuthContext';
 import { createQRCodeImage, findQRCodeImage, A4_LANDSCAPE } from '@/lib/fabric';
 import { exportCanvasImage, QR_LOGICAL_SIZE, type EditorChromeCanvas } from '@/lib/fabric/exportQuality';
+import {
+  MAX_TEMPLATE_FILE_BYTES,
+  TEMPLATE_OBJECT_PROPS,
+  isProtectedTemplateObject,
+  parseTemplateFile,
+} from '@/lib/fabric/templateSerialization';
+import { fabric } from 'fabric';
+import { X } from 'lucide-react';
 
 /** Everything Preview may change on an object, so Exit Preview restores it exactly. */
 const PREVIEW_SNAPSHOT_KEYS = ['text', 'width', 'stroke', 'strokeWidth', 'strokeDashArray', 'selectable', 'evented', 'hoverCursor'] as const;
 type PreviewSnapshot = Partial<Record<(typeof PREVIEW_SNAPSHOT_KEYS)[number], unknown>>;
+
+type GenerateBlocker = 'loading' | 'preview' | 'no-data';
+const GENERATE_HINTS: Record<GenerateBlocker, { message: string }> = {
+  loading: { message: 'The template is still loading. Generate becomes available when it is on the canvas.' },
+  preview: { message: 'Preview is on. Exit Preview to generate certificates.' },
+  'no-data': { message: 'Import a spreadsheet (CSV, Excel or ODS) with one row per recipient to generate certificates.' },
+};
 
 interface ToolbarProps {
   onSave?: () => Promise<{ success: boolean; error?: string } | void>;
@@ -73,11 +87,17 @@ interface ToolbarProps {
   /** True until a requested template is fully on the canvas. */
   isTemplateLoading?: boolean;
   onGenerate?: () => void;
+  /** Opens the panel where a spreadsheet is imported and fields are mapped. */
+  onOpenData?: () => void;
+  /** When the design on the canvas was last saved (ISO), if it has been. */
+  lastSavedAt?: string | null;
+  /** True after changes that have not been saved yet. */
+  isDirty?: boolean;
   onPreview?: () => void;
   onOpenCertificateInfo?: () => void;
 }
 
-export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false, onGenerate, onPreview, onOpenCertificateInfo }: ToolbarProps) {
+export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false, onGenerate, onOpenData, lastSavedAt = null, isDirty = false, onPreview, onOpenCertificateInfo }: ToolbarProps) {
   const { fabricInstance } = useFabricContext();
   const { user } = useAuth();
   const isPremiumUser = user?.isPremium === true;
@@ -100,6 +120,12 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
   const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#ffffff');
   const [borderColor, setBorderColor] = useState('#d4af37');
   const { rows, getPreviewRow, previewRowIndex } = useDataSourceStore();
+  const generateBlocker: GenerateBlocker | null = isTemplateLoading ? 'loading' : isPreviewMode ? 'preview' : rows.length === 0 ? 'no-data' : null;
+  const [generateHint, setGenerateHint] = useState<GenerateBlocker | null>(null);
+  // The hint goes away once its reason does.
+  useEffect(() => {
+    if (generateHint && generateHint !== generateBlocker) setGenerateHint(null);
+  }, [generateHint, generateBlocker]);
 
   // Sync canvas background color with fabric instance (including after undo/redo)
   useEffect(() => {
@@ -153,6 +179,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
   }, [fabricInstance]);
 
   const toggleRightSidebar = () => {
+    if (window.matchMedia('(max-width: 1023px)').matches && onOpenData) {
+      onOpenData();
+      return;
+    }
     const currentState = useEditorStore.getState().rightSidebarOpen;
     useEditorStore.getState().setRightSidebarOpen(!currentState);
   };
@@ -187,7 +217,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
         e.preventDefault();
         if (e.shiftKey) {
           if (!isPreviewMode && canRedo) handleRedoRef.current?.();
-        } else if (!isPreviewMode && canUndo) {
+        } else if (!isPreviewMode) {
+          // Not gated on canUndo: a change made a moment ago is recorded
+          // when undo runs (see useFabric's history flush).
           handleUndoRef.current?.();
         }
       }
@@ -209,6 +241,31 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
         if (!isPreviewMode && selectedObject) {
           handleCloneRef.current?.();
         }
+      }
+
+      // Arrow keys move the selection by 1 unit (Shift: 10), so placement
+      // never depends on dragging. Locked objects stay put.
+      if (!hasCommandModifier && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        const selection = canvas?.getActiveObject();
+        if (!isPreviewMode && canvas && selection && !selection.lockMovementX && !selection.lockMovementY
+          && !useEditorStore.getState().isEditingText) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+          const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+          selection.set({ left: (selection.left || 0) + dx, top: (selection.top || 0) + dy });
+          selection.setCoords();
+          canvas.requestRenderAll();
+          canvas.fire('object:modified', { target: selection } as any);
+        }
+        return;
+      }
+
+      // Escape releases the selection.
+      if (e.key === 'Escape' && canvas?.getActiveObject() && !useEditorStore.getState().isEditingText) {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        return;
       }
 
       // Del/Backspace for Delete
@@ -392,15 +449,32 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
   handleRedoRef.current = handleRedo;
 
   const handleClone = useCallback(() => {
+    if (isPreviewMode) return;
     const canvas = fabricInstance?.getCanvas();
     const activeObject = canvas?.getActiveObject();
-    
+
     if (activeObject) {
+      // A certificate has exactly one verification link and at most one QR
+      // code; copies of either would break saving and printing.
+      const members = activeObject.type === 'activeSelection'
+        ? (activeObject as fabric.ActiveSelection).getObjects()
+        : [activeObject];
+      if (members.every(isProtectedTemplateObject)) {
+        alert('The verification link and QR code cannot be duplicated. A certificate has only one of each.');
+        return;
+      }
+
+      // The full property list keeps links clickable, locks, and variable fields.
       activeObject.clone((cloned: any) => {
+        if (cloned.type === 'activeSelection') {
+          cloned.getObjects()
+            .filter(isProtectedTemplateObject)
+            .forEach((member: fabric.Object) => cloned.removeWithUpdate(member));
+        }
         canvas?.discardActiveObject();
         cloned.set({
-          left: activeObject.left! + 20,
-          top: activeObject.top! + 20,
+          left: (cloned.left ?? 0) + 20,
+          top: (cloned.top ?? 0) + 20,
           evented: true,
         });
         
@@ -418,9 +492,9 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
         canvas?.setActiveObject(cloned);
         canvas?.requestRenderAll();
         fabricInstance?.recordHistory();
-      });
+      }, [...TEMPLATE_OBJECT_PROPS]);
     }
-  }, [fabricInstance]);
+  }, [fabricInstance, isPreviewMode]);
 
   const handleDelete = useCallback(() => {
     if (isPreviewMode) return;
@@ -697,40 +771,72 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
     }
   }, [fabricInstance]);
 
-  // Export as JSON
+  // Export as JSON. Uses the same serializer as Save, so the file keeps the
+  // protected verification link, clickable links, locks, and variable fields.
+  // Disabled in Preview, where the canvas shows a recipient's values.
   const handleExport = useCallback(() => {
-    const canvas = fabricInstance?.getCanvas();
-    if (!canvas) return;
-    
-    const json = JSON.stringify(canvas.toJSON());
-    const blob = new Blob([json], { type: 'application/json' });
+    if (isPreviewMode) return;
+    const json = fabricInstance?.toJSON();
+    if (!json) return;
+
+    const blob = new Blob([JSON.stringify(json)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${templateName || 'template'}.json`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
     closePanels();
-  }, [fabricInstance, templateName]);
+  }, [fabricInstance, templateName, isPreviewMode]);
 
-  // Import JSON
+  // Import JSON. The file is checked before the canvas changes, so a broken
+  // or unsupported file never replaces the design on screen.
   const handleImport = useCallback(() => {
+    if (isPreviewMode || isTemplateLoading || !fabricInstance) return;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'application/json';
-    input.onchange = (e) => {
+    input.accept = 'application/json,.json';
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
+      if (file.size > MAX_TEMPLATE_FILE_BYTES) {
+        alert('This file is larger than 10 MB, so it cannot be imported as a template.');
+        return;
+      }
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const json = event.target?.result as string;
-        fabricInstance?.loadFromJSON(JSON.parse(json));
-      };
-      reader.readAsText(file);
+      let text: string;
+      try {
+        text = await file.text();
+      } catch {
+        alert('This file could not be read.');
+        return;
+      }
+
+      const result = parseTemplateFile(text, {
+        isKnownType: (type) => !!(fabric.util as unknown as { getKlass: (type: string) => unknown }).getKlass(type),
+      });
+      if (!result.ok) {
+        alert(`${result.error} Your current design was not changed.`);
+        return;
+      }
+
+      if (!window.confirm(`Replace the current design with "${file.name}"? Undo cannot bring back the current design.`)) {
+        return;
+      }
+
+      try {
+        await fabricInstance.loadFromJSON(result.template);
+      } catch (error) {
+        console.error('[Toolbar] Template import failed', error);
+        alert('This template could not be opened.');
+        return;
+      }
+      useEditorStore.getState().setIsDirty(true);
+      if (result.repairs.length > 0) alert(`Template imported. ${result.repairs.join(' ')}`);
     };
     input.click();
     closePanels();
-  }, [fabricInstance]);
+  }, [fabricInstance, isPreviewMode, isTemplateLoading]);
 
   // Export as image
   const handleExportImage = useCallback(() => {
@@ -758,7 +864,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
   return (
     <div className={`flex flex-col ${isPreviewMode ? 'bg-warning/10' : ''}`}>
       {/* Primary Toolbar Row - Always visible */}
-      <div className="toolbar border-b border-border">
+      <div className="toolbar studio-documentbar border-b border-border" role="group" aria-label="Document actions">
         {/* Preview Mode Indicator */}
         {isPreviewMode && (
           <div className="flex items-center gap-1 mr-2 px-2 py-0.5 bg-warning/20 rounded-full flex-shrink-0">
@@ -794,6 +900,105 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
 
         <div className="toolbar-divider" />
 
+        {/* Spacer */}
+        <div className="flex-1 min-w-2" />
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+           <button
+             onClick={handleTogglePreview}
+             title={isPreviewMode ? "Exit Preview" : "Preview"}
+             aria-label={isPreviewMode ? "Exit Preview" : "Preview"}
+             className={`toolbar-button studio-command ${isPreviewMode ? 'bg-muted text-primary' : ''}`}
+           >
+              {isPreviewMode ? <EyeOff /> : <Eye />}<span>{isPreviewMode ? "Exit Preview" : "Preview"}</span>
+           </button>
+
+           <button onClick={toggleRightSidebar} className="toolbar-button studio-command" aria-label="Data Source" title="Data Source">
+              <Database /><span>Data</span>
+           </button>
+
+           <button
+             onClick={onOpenCertificateInfo}
+             className="toolbar-button studio-command relative"
+             aria-label="Certificate Info" title="Certificate Info"
+           >
+              <Info /><span>Certificate Info</span>
+              {!isCertificateInfoComplete && (
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-warning border border-background" />
+              )}
+           </button>
+
+           <span className="hidden md:inline whitespace-nowrap text-[11px] text-muted-foreground" aria-live="polite">
+             {isDirty ? 'Unsaved changes' : lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : ''}
+           </span>
+           <button
+             onClick={() => onSave?.()}
+             aria-label="Save"
+             title={isPreviewMode ? 'Turn off Preview to save' : isTemplateLoading ? 'Waiting for the template to load' : 'Save (Ctrl+S)'}
+             disabled={saveStatus === 'saving' || isPreviewMode || isTemplateLoading}
+             className="flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50 flex-shrink-0"
+           >
+             {saveStatus === 'saving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+             <span className="hidden sm:inline">Save</span>
+           </button>
+
+           {/* Not natively disabled: a disabled button cannot be focused or
+               pressed, so keyboard and touch users never learned why. Pressing
+               it while blocked says why and offers the fix. */}
+           <button
+             onClick={() => {
+               if (!generateBlocker) {
+                 setGenerateHint(null);
+                 onGenerate?.();
+               } else {
+                 setGenerateHint(generateBlocker);
+               }
+             }}
+             aria-disabled={generateBlocker ? true : undefined}
+             aria-label="Generate"
+             aria-describedby={generateHint ? 'generate-hint' : undefined}
+             title={isTemplateLoading ? "Loading template…" : rows.length === 0 ? "Connect data source" : isPreviewMode ? "Turn off Preview to generate" : "Generate"}
+             className={`flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 flex-shrink-0 ${generateBlocker ? 'opacity-50' : ''}`}
+           >
+             <Wand2 className="h-3.5 w-3.5" />
+             <span className="studio-generate-label">Generate</span>
+           </button>
+           {generateHint && (
+             <div
+               id="generate-hint"
+               role="status"
+               className="fixed right-3 top-14 z-50 flex max-w-xs items-start gap-3 rounded-lg border border-border bg-card p-3 text-xs shadow-lg"
+             >
+               <span className="flex-1">{GENERATE_HINTS[generateHint].message}</span>
+               {generateHint === 'no-data' && onOpenData && (
+                 <button type="button" onClick={() => { setGenerateHint(null); onOpenData(); }} className="shrink-0 font-semibold text-primary hover:underline">
+                   Import spreadsheet
+                 </button>
+               )}
+               {generateHint === 'preview' && (
+                 <button type="button" onClick={() => { setGenerateHint(null); handleTogglePreviewRef.current?.(); }} className="shrink-0 font-semibold text-primary hover:underline">
+                   Exit Preview
+                 </button>
+               )}
+               <button type="button" aria-label="Dismiss" onClick={() => setGenerateHint(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+                 <X className="h-3.5 w-3.5" />
+               </button>
+             </div>
+           )}
+
+           <button
+             onClick={() => togglePanel('export')}
+             className={`toolbar-button ${openDropdown === 'export' ? 'bg-primary/10 text-primary' : ''}`}
+             title="Export / Import"
+           >
+             <Download />
+           </button>
+        </div>
+      </div>
+
+      {/* Secondary Toolbar Row - Additional tools */}
+      <div className="toolbar studio-toolrail border-b border-border" role="group" aria-label="Design tools">
         {/* Core Tools - Always visible */}
         <button
           onClick={() => togglePanel('text')}
@@ -863,72 +1068,7 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
           {isLocked ? <Unlock /> : <Lock />}
         </button>
 
-        {/* Spacer */}
-        <div className="flex-1 min-w-2" />
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-           {saveStatus === 'saved' && (
-             <span className="text-xs text-success hidden sm:flex items-center gap-1">
-               <Check className="h-3.5 w-3.5" />
-               Saved
-             </span>
-           )}
-           
-           <button
-             onClick={handleTogglePreview}
-             title={isPreviewMode ? "Exit Preview" : "Preview"}
-             className={`toolbar-button ${isPreviewMode ? 'bg-warning text-white' : ''}`}
-           >
-              {isPreviewMode ? <EyeOff /> : <Eye />}
-           </button>
-           
-           <button onClick={toggleRightSidebar} className="toolbar-button" title="Data Source">
-              <Database />
-           </button>
-
-           <button
-             onClick={onOpenCertificateInfo}
-             className="toolbar-button relative"
-             title="Certificate Info"
-           >
-              <Info />
-              {!isCertificateInfoComplete && (
-                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-warning border border-background" />
-              )}
-           </button>
-
-           <button
-             onClick={() => onSave?.()}
-             disabled={saveStatus === 'saving' || isPreviewMode || isTemplateLoading}
-             className="flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 flex-shrink-0"
-           >
-             {saveStatus === 'saving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-             <span className="hidden sm:inline">Save</span>
-           </button>
-
-           <button
-             onClick={onGenerate}
-             disabled={rows.length === 0 || isPreviewMode || isTemplateLoading}
-             title={isTemplateLoading ? "Loading template…" : rows.length === 0 ? "Connect data source" : "Generate"}
-             className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex-shrink-0"
-           >
-             <Wand2 className="h-3.5 w-3.5" />
-             <span className="hidden sm:inline">Generate</span>
-           </button>
-
-           <button
-             onClick={() => togglePanel('export')}
-             className={`toolbar-button ${openDropdown === 'export' ? 'bg-primary/10 text-primary' : ''}`}
-             title="Export / Import"
-           >
-             <Download />
-           </button>
-        </div>
-      </div>
-
-      {/* Secondary Toolbar Row - Additional tools */}
-      <div className="toolbar border-b border-border bg-muted/30">
+        <div className="toolbar-divider" />
         {/* Link */}
         <button onClick={handleAddLink} className="toolbar-button" title="Add Link" disabled={isPreviewMode}>
           <Link2 />
@@ -1060,10 +1200,10 @@ export function Toolbar({ onSave, saveStatus = 'idle', isTemplateLoading = false
       </ToolPanel>
 
       <ToolPanel title="Export / Import" isOpen={openDropdown === 'export'} onClose={closePanels}>
-        <ToolPanelItem icon={Download} label="Export JSON" onClick={handleExport} />
+        <ToolPanelItem icon={Download} label="Export JSON" onClick={handleExport} disabled={isPreviewMode} />
         <ToolPanelItem icon={ImageIcon} label="Export PNG" onClick={handleExportImage} />
         <ToolPanelDivider />
-        <ToolPanelItem icon={Upload} label="Import JSON" onClick={handleImport} disabled={isPreviewMode} />
+        <ToolPanelItem icon={Upload} label="Import JSON" onClick={handleImport} disabled={isPreviewMode || isTemplateLoading} />
       </ToolPanel>
 
       {/* Drawing mode floating controls */}

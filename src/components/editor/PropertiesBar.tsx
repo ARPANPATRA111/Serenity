@@ -5,6 +5,7 @@ import { useEditorStore } from '@/store/editorStore';
 import { useFabricContext } from './FabricContext';
 import { loadGoogleFont, isGoogleFont } from '@/lib/fonts/googleFonts';
 import { generateQRCodeDataURL } from '@/lib/fabric';
+import { replaceImageSource } from '@/lib/fabric/replaceImage';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { StyleSidebar } from './StyleSidebar';
 import { fabric } from 'fabric';
@@ -54,6 +55,8 @@ type FabricObject = Record<string, unknown> & {
 
 export function PropertiesBar() {
   const { selectedObject, selectedObjectType, isPreviewMode } = useEditorStore();
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
   const { fabricInstance } = useFabricContext();
   const fontsLoaded = true;
   const [, setForceUpdate] = useState(0);
@@ -206,6 +209,50 @@ export function PropertiesBar() {
             max="50"
             title="Stroke Width"
           />
+        </div>
+      )}
+
+      {/* Ordinary images: swap the picture in place (QR codes are generated). */}
+      {isImage && !isQRCode && (
+        <div className="flex items-center gap-2 shrink-0">
+          <input
+            ref={replaceInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            className="hidden"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              const canvas = fabricInstance?.getCanvas();
+              if (!file || !canvas) return;
+              if (file.size > 5 * 1024 * 1024) {
+                setReplaceError('Images up to 5 MB can be used.');
+                return;
+              }
+              try {
+                setReplaceError(null);
+                const source = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(String(reader.result));
+                  reader.onerror = () => reject(reader.error);
+                  reader.readAsDataURL(file);
+                });
+                await replaceImageSource(canvas, object as unknown as fabric.Image, source);
+              } catch (error) {
+                setReplaceError(error instanceof Error ? error.message : 'The image could not be replaced.');
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => replaceInputRef.current?.click()}
+            disabled={!!object.lockMovementX}
+            className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+            title={object.lockMovementX ? 'Unlock the image to replace it' : 'Replace this image, keeping its size and position'}
+          >
+            Replace image
+          </button>
+          {replaceError && <span role="alert" className="text-xs text-destructive">{replaceError}</span>}
         </div>
       )}
 

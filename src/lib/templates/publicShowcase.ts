@@ -1,4 +1,5 @@
-import { getPublicTemplates, type Template } from '@/lib/firebase/templates';
+import type { Template } from '@/lib/firebase/templates';
+import { getCachedPublicTemplates, PUBLIC_TEMPLATES_MAX } from '@/lib/templates/publicTemplateCache';
 import { curatedPublicTemplates } from '@/lib/templates/curatedPublicTemplates';
 
 /**
@@ -76,7 +77,9 @@ export async function getTemplateShowcase(limit = 6): Promise<TemplateShowcase> 
   let live: ShowcaseTemplate[] = [];
 
   try {
-    const fetched = await getPublicTemplates(Math.max(limit * 3, 24));
+    // Shares the gallery's cache; curated designs are added below.
+    const curatedIds = new Set(curatedPublicTemplates.map((template) => template.id));
+    const fetched = (await getCachedPublicTemplates(PUBLIC_TEMPLATES_MAX)).filter((template) => !curatedIds.has(template.id));
     live = fetched
       .slice()
       .sort((a, b) => reviewRank(a) - reviewRank(b))

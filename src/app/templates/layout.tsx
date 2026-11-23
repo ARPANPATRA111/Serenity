@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Public Templates',
+  title: 'Template library',
   alternates: { canonical: '/templates' },
 };
 

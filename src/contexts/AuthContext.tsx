@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode, type MutableRefObject } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   onIdTokenChanged,
@@ -17,7 +17,8 @@ import {
 } from 'firebase/auth';
 import { auth, initializeFirebase } from '@/lib/firebase/client';
 import { authenticatedFetch } from '@/lib/api/authFetch';
-import { sanitizeAuthRedirect } from '@/lib/navigation/safeRedirect';
+import { authPageHref, sanitizeAuthRedirect } from '@/lib/navigation/safeRedirect';
+import { clearPrivateSessionState } from '@/lib/session/privateSessionState';
 
 interface User {
   id: string;
@@ -47,8 +48,35 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const PROTECTED_ROUTES = ['/dashboard', '/editor', '/events', '/history', '/templates', '/settings'];
+// `/templates` is the public gallery: it reads only the public template API,
+// and opening a design goes through the protected editor.
+const PROTECTED_ROUTES = ['/dashboard', '/editor', '/events', '/history', '/settings'];
 const AUTH_ROUTES = ['/login', '/signup'];
+
+/**
+ * Called for every auth state. When the signed-in account changes (sign-out
+ * here or in another tab, or a different account signing in elsewhere) the
+ * previous account's spreadsheet, generation results, editor details, cached
+ * responses, and draft are cleared. Token refreshes keep the same UID and
+ * change nothing.
+ */
+function applySessionOwner(ownerRef: MutableRefObject<string | null | undefined>, nextUid: string | null) {
+  const previousUid = ownerRef.current;
+  ownerRef.current = nextUid;
+  if (previousUid === nextUid) return;
+  // The first state in a tab has nothing in memory to clear, but a signed-out
+  // browser should not keep someone's unscoped editor draft.
+  if (previousUid === undefined && nextUid !== null) return;
+
+  clearPrivateSessionState();
+
+  // Pages already on screen still hold the previous account's records in
+  // component state. A full load of the dashboard discards all of it.
+  if (previousUid && nextUid && typeof window !== 'undefined'
+    && PROTECTED_ROUTES.some((route) => window.location.pathname.startsWith(route))) {
+    window.location.assign('/dashboard');
+  }
+}
 
 async function saveUserViaAPI(user: {
   id: string;
@@ -134,6 +162,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const authRefreshSequence = useRef(0);
+  // UID whose private state this tab currently holds; undefined until the
+  // first auth state arrives.
+  const sessionOwnerRef = useRef<string | null | undefined>(undefined);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -153,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleAuthState = (fbUser: FirebaseUser | null) => {
       initialStateResolved = true;
       const refreshSequence = ++authRefreshSequence.current;
+      applySessionOwner(sessionOwnerRef, fbUser?.emailVerified ? fbUser.uid : null);
 
       if (fbUser) {
         setFirebaseUser(fbUser);
@@ -222,17 +254,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isAuthRoute = AUTH_ROUTES.includes(pathname);
 
     if (isProtectedRoute && !user) {
-      router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+      router.replace(`/login?redirect=${encodeURIComponent(pathname + window.location.search)}`);
     } else if (isAuthRoute && user) {
-      router.push('/dashboard');
+      router.replace(sanitizeAuthRedirect(new URLSearchParams(window.location.search).get('redirect')));
     }
   }, [pathname, user, isLoading, router]);
 
-  const getActionCodeSettings = (): ActionCodeSettings => {
+  const getActionCodeSettings = (continuePath = '/auth/action'): ActionCodeSettings => {
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 
       (typeof window !== 'undefined' ? window.location.origin : '');
     return {
-      url: `${baseUrl}/auth/action`,
+      url: `${baseUrl}${continuePath}`,
       handleCodeInApp: true,
     };
   };
@@ -267,12 +299,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signup = async (name: string, email: string, password: string) => {
+    const redirect = new URLSearchParams(window.location.search).get('redirect');
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
       try {
-        await sendEmailVerification(userCredential.user, getActionCodeSettings());
+        await sendEmailVerification(userCredential.user, getActionCodeSettings(authPageHref('/login', redirect)));
       } catch (verificationError: any) {
         if (verificationError.code === 'auth/unauthorized-continue-uri') {
           await sendEmailVerification(userCredential.user);
@@ -291,7 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       await signOut(auth);
       
-      router.push('/login?message=verification-sent');
+      router.push(authPageHref('/login', redirect, true));
     } catch (error: any) {
       console.error('Signup error:', error);
       if (error.code === 'auth/email-already-in-use') {
@@ -312,6 +345,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await signOut(auth);
+      // The auth listener clears this too; doing it here means nothing from
+      // the session survives even if the listener is slow.
+      clearPrivateSessionState();
       setUser(null);
       setFirebaseUser(null);
       router.push('/');

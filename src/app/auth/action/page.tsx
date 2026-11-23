@@ -1,17 +1,28 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { applyActionCode, verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
 import { auth, initializeFirebase } from '@/lib/firebase/client';
 import Link from 'next/link';
+import { authPageHref } from '@/lib/navigation/safeRedirect';
 import { CheckCircle2, XCircle, Loader2, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SerenityBrand } from '@/components/brand/SerenityBrand';
 
 function AuthActionContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+  let loginHref = '/login?message=password-reset';
+  if (searchParams.get('mode') === 'verifyEmail') {
+    loginHref = '/login';
+    const continuation = searchParams.get('continueUrl');
+    if (continuation) {
+      try {
+        const destination = new URL(continuation);
+        loginHref = authPageHref('/login', destination.searchParams.get('redirect'));
+      } catch { /* Older verification links may omit a valid continuation. */ }
+    }
+  }
   const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'resetPassword'>('loading');
   const [message, setMessage] = useState('');
   const [oobCode, setOobCode] = useState<string | null>(null);
@@ -107,7 +118,7 @@ function AuthActionContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md text-center">
         <Link href="/" className="mb-8 inline-flex"><SerenityBrand /></Link>
 
@@ -217,7 +228,7 @@ function AuthActionContent() {
               <h1 className="text-2xl font-bold">Success!</h1>
               <p className="text-muted-foreground">{message}</p>
               <Link
-                href="/login?message=password-reset"
+                href={loginHref}
                 className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-6 py-3 font-medium text-white hover:bg-primary/90 transition-colors"
               >
                 Sign In
@@ -249,7 +260,7 @@ function AuthActionContent() {
 export default function AuthActionPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     }>

@@ -11,7 +11,7 @@ import {
   HIGH_DPI_MULTIPLIER,
   generateQRCodeDataURL,
 } from '@/lib/fabric';
-import { disableObjectCaching, qrPixelSize, QR_LOGICAL_SIZE, type EditorChromeCanvas } from '@/lib/fabric/exportQuality';
+import { canvasToDataURL, disableObjectCaching, qrPixelSize, QR_LOGICAL_SIZE, type EditorChromeCanvas } from '@/lib/fabric/exportQuality';
 import { normalizeTemplateJSON, substituteInlineTokens } from '@/lib/fabric/templateNormalization';
 import { yieldToMain } from '@/lib/utils';
 import { buildVerificationUrl } from '@/lib/verification/url';
@@ -44,7 +44,15 @@ export interface BatchGenerationOptions {
   onError?: (index: number, message: string) => void;
   onCertificateGenerated?: (id: string, record: Partial<FirebaseCertificateRecord>) => void;
   isCancelled?: () => boolean;
+  /**
+   * An allowance the caller fetched moments ago. Used instead of fetching it
+   * again when no older than ALLOWANCE_FRESH_MS. The server still enforces the
+   * allowance when records are saved, whatever this says.
+   */
+  allowance?: { canGenerate: boolean; isPremium: boolean; remaining: number; checkedAt: number };
 }
+
+const ALLOWANCE_FRESH_MS = 30_000;
 
 export interface GeneratedCertificateResult {
   rowIndex: number;
@@ -69,6 +77,7 @@ export interface BatchGenerationResult {
   certificateImageUrls: Map<string, string>;
   certificatePdfBlobs: Map<string, Blob>;
   zipBlob?: Blob;
+  allowanceUnavailable?: boolean;
   limitReached?: boolean;
   remaining?: number;
 }
@@ -76,6 +85,28 @@ export interface BatchGenerationResult {
 const YIELD_INTERVAL = 10;
 const UPLOAD_CONCURRENCY = 4;
 const THUMBNAIL_MULTIPLIER = 2;
+/**
+ * Preview encodings, tried in order until one fits the budget. Typical
+ * certificates are 50-120 KB at the first step; only photo-heavy designs step
+ * down. The budget keeps every preview well inside a Firestore document.
+ */
+const PREVIEW_ENCODINGS = [
+  { quality: 0.85, multiplier: THUMBNAIL_MULTIPLIER },
+  { quality: 0.7, multiplier: THUMBNAIL_MULTIPLIER },
+  { quality: 0.7, multiplier: 1.5 },
+  { quality: 0.6, multiplier: 1.25 },
+] as const;
+/** Base64 length of a ~700 KB image. */
+const PREVIEW_BUDGET_CHARACTERS = Math.ceil((700 * 1024 * 4) / 3);
+
+function capturePreview(canvas: fabric.StaticCanvas): string {
+  let dataURL = '';
+  for (const encoding of PREVIEW_ENCODINGS) {
+    dataURL = canvasToDataURL(canvas, { format: 'jpeg', ...encoding });
+    if (dataURL.length <= PREVIEW_BUDGET_CHARACTERS) break;
+  }
+  return dataURL;
+}
 
 function authHeaders(authToken?: string): Record<string, string> {
   return authToken ? { Authorization: `Bearer ${authToken}` } : {};
@@ -138,6 +169,7 @@ export async function generateBatch(
     onError,
     onCertificateGenerated,
     isCancelled,
+    allowance,
   } = options;
 
   const generationBatchId = nanoid(12);
@@ -157,46 +189,47 @@ export async function generateBatch(
     certificatePdfBlobs: new Map(),
   };
 
-  await loadFontsForTemplate(templateJSON);
-
   // Check user's certificate generation limit before starting
   if (userId) {
     try {
-      const premiumResponse = await fetch('/api/users/premium', {
-        headers: authHeaders(authToken),
-      });
-      const premiumData = await premiumResponse.json();
+      const fresh = allowance && Date.now() - allowance.checkedAt <= ALLOWANCE_FRESH_MS;
+      const premiumData = fresh
+        ? { success: true, canGenerate: allowance.canGenerate, remainingFree: allowance.remaining, isPremium: allowance.isPremium }
+        : await (await fetch('/api/users/premium', { headers: authHeaders(authToken) })).json();
 
-      if (premiumData.success) {
-        const canGenerate = premiumData.canGenerate;
-        const remainingFree = premiumData.remainingFree ?? 5;
-        const isPremium = premiumData.isPremium;
+      if (!premiumData.success) throw new Error('Allowance check failed');
+      const canGenerate = premiumData.canGenerate;
+      const remainingFree = premiumData.remainingFree;
+      const isPremium = premiumData.isPremium;
 
-        if (!isPremium && !canGenerate) {
-          result.errors.push({
-            index: -1,
-            message: 'Free tier limit reached. Paid upgrades are not currently available.'
-          });
-          result.limitReached = true;
-          result.remaining = 0;
-          return result;
-        }
+      if (!isPremium && !canGenerate) {
+        result.errors.push({
+          index: -1,
+          message: 'The free certificate limit has been reached.'
+        });
+        result.limitReached = true;
+        result.remaining = 0;
+        return result;
+      }
 
-        if (!isPremium && dataRows.length > remainingFree) {
-          result.errors.push({
-            index: -1,
-            message: `You can only generate ${remainingFree} more certificate(s) on the free tier.`
-          });
-          result.limitReached = true;
-          result.remaining = remainingFree;
-          return result;
-        }
+      if (!isPremium && dataRows.length > remainingFree) {
+        result.errors.push({
+          index: -1,
+          message: `You can only generate ${remainingFree} more certificate(s) on the free tier.`
+        });
+        result.limitReached = true;
+        result.remaining = remainingFree;
+        return result;
       }
     } catch (e) {
       console.warn('[BatchGenerator] Failed to check premium status:', e);
-      // Continue anyway if the check fails - the API will still enforce limits
+      result.allowanceUnavailable = true;
+      result.errors.push({ index: -1, message: 'Your generation allowance could not be loaded.' });
+      return result;
     }
   }
+
+  await loadFontsForTemplate(templateJSON);
 
   // Register custom Fabric classes
   registerVariableTextbox();
@@ -286,7 +319,7 @@ export async function generateBatch(
         updateVerificationUrlPlaceholder(staticCanvas, certificateId);
         const clickableLinks = collectClickableLinks(staticCanvas, certificateId);
 
-        const dataURL = staticCanvas.toDataURL({
+        const dataURL = canvasToDataURL(staticCanvas, {
           format: 'jpeg',
           quality: 0.92,
           multiplier: HIGH_DPI_MULTIPLIER,
@@ -304,7 +337,7 @@ export async function generateBatch(
         }
 
         if (outputFormat === 'png' || outputFormat === 'both') {
-          const pngDataURL = staticCanvas.toDataURL({
+          const pngDataURL = canvasToDataURL(staticCanvas, {
             format: 'png',
             quality: 1,
             multiplier: HIGH_DPI_MULTIPLIER,
@@ -316,11 +349,7 @@ export async function generateBatch(
         // Preview image for the verification page and history, captured while
         // the canvas holds this certificate. JPEG keeps photographic
         // backgrounds under the 2 MB upload limit that PNG could exceed.
-        const thumbnailDataURL = staticCanvas.toDataURL({
-          format: 'jpeg',
-          quality: 0.9,
-          multiplier: THUMBNAIL_MULTIPLIER,
-        });
+        const thumbnailDataURL = capturePreview(staticCanvas);
         uploads.push(() => uploadThumbnail(certificateId, thumbnailDataURL));
 
         const record: Partial<FirebaseCertificateRecord> = {

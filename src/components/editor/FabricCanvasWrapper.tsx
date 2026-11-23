@@ -6,6 +6,8 @@ import { useFabricContext } from './FabricContext';
 import { useEditorStore } from '@/store/editorStore';
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
+const markDesignDirty = () => useEditorStore.getState().setIsDirty(true);
+
 export function FabricCanvasWrapper() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,6 +30,8 @@ export function FabricCanvasWrapper() {
     width: A4_LANDSCAPE.width,
     height: A4_LANDSCAPE.height,
     backgroundColor: '#ffffff',
+    // Any recorded change to the design leaves it unsaved until the next save.
+    onModified: markDesignDirty,
   });
 
   // Set fabric instance when hook is ready
@@ -185,9 +189,10 @@ export function FabricCanvasWrapper() {
   }, [fabricHook, effectiveScale]);
 
   return (
+    <div className="flex h-full min-h-0 flex-col">
     <div
       ref={containerRef}
-      className={`canvas-container flex h-full w-full items-center justify-center overflow-auto ${isMobile ? 'p-4' : 'p-12'} ${
+      className={`studio-mat canvas-container flex min-h-0 flex-1 w-full items-center justify-center overflow-auto ${isMobile ? 'p-4' : 'p-12'} ${
         isPreviewMode ? 'bg-success/5' : 'bg-muted/30'
       }`}
       onDragOver={handleDragOver}
@@ -261,36 +266,13 @@ export function FabricCanvasWrapper() {
           )}
         </div>
         
-        {/* Canvas info indicator - Simplified on mobile */}
-        <div className={`absolute ${isMobile ? '-bottom-6' : '-bottom-10'} left-0 right-0 text-center`}>
-          <span className={`${isMobile ? 'text-[10px]' : 'text-xs'} text-muted-foreground bg-background px-2 py-1 rounded`}>
-            {isMobile ? (
-              <>A4 Landscape | Zoom: {Math.round(manualZoom * 100)}%</>
-            ) : (
-              <>
-                A4 Landscape ({A4_LANDSCAPE.width} × {A4_LANDSCAPE.height}px) | 
-                <span className="text-error ml-1">Red dashed line = Print boundary</span> |
-                Zoom: {Math.round(zoomLevel * 100)}%
-              </>
-            )}
-          </span>
-        </div>
-        
-        {/* Keyboard shortcuts hint - Hidden on mobile */}
-        {!isMobile && (
-          <div className="absolute -bottom-20 left-0 right-0 text-center">
-            <span className="text-[10px] text-muted-foreground/70 bg-background/50 px-2 py-1 rounded">
-              <span className="font-medium">Shortcuts:</span>{' '}
-              <span className="text-primary">Ctrl+S</span> Save |{' '}
-              <span className="text-primary">Ctrl+Z</span> Undo |{' '}
-              <span className="text-primary">Ctrl+Y</span> Redo |{' '}
-              <span className="text-primary">Ctrl+Q</span> Preview |{' '}
-              <span className="text-primary">Alt+Drag</span> Pan |{' '}
-              <span className="text-primary">Del</span> Delete
-            </span>
-          </div>
-        )}
       </div>
+    </div>
+    <div className="studio-status">
+      <span>A4 landscape · {isPreviewMode ? 'Preview' : 'Editing'} · {Math.round((isMobile ? manualZoom : zoomLevel) * 100)}%</span>
+      <span className="hidden xl:inline">Red dashed line marks the print boundary</span>
+      <span className="hidden md:inline"><kbd>Ctrl+S</kbd> Save &nbsp; <kbd>Ctrl+Z</kbd> Undo &nbsp; <kbd>Ctrl+Q</kbd> Preview</span>
+    </div>
     </div>
   );
 }

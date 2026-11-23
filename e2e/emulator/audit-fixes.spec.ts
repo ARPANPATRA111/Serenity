@@ -270,13 +270,13 @@ test.describe('audit fixes', () => {
     await expect(page.getByLabel('Filter by email status')).toBeVisible();
     await expect(page).toHaveTitle('Certificate History | Serenity Certificate Generator');
 
-    // The hero badge reads light-on-dark.
+    // The intro now sits on the light paper, so its badge must read dark-on-light.
     await page.goto('/dashboard');
     const badge = page.getByText(/^\d+ sent$/).first();
     await expect(badge).toBeVisible();
     const color = await badge.evaluate((element) => getComputedStyle(element).color);
     const [r, g, b] = color.match(/\d+/g)!.map(Number);
-    expect((r + g + b) / 3, `badge text ${color}`).toBeGreaterThan(150);
+    expect((r + g + b) / 3, `badge text ${color}`).toBeLessThan(130);
 
     // The name field never sits under the tools on a phone.
     await page.setViewportSize({ width: 390, height: 844 });
@@ -284,14 +284,22 @@ test.describe('audit fixes', () => {
     await expect(page.locator(UPLOAD)).toBeAttached({ timeout: 60_000 });
     const name = await page.getByLabel('Template name').boundingBox();
     const text = await page.getByTitle('Add Text').boundingBox();
-    expect(name && text && name.x + name.width <= text.x + 0.5, `name ${JSON.stringify(name)} overlaps ${JSON.stringify(text)}`).toBe(true);
+    expect(name && text && (name.y + name.height <= text.y + 0.5 || name.x + name.width <= text.x + 0.5), `name ${JSON.stringify(name)} overlaps ${JSON.stringify(text)}`).toBe(true);
     await page.setViewportSize({ width: 1280, height: 720 });
 
     // Public copy matches what generation produces.
     await page.goto('/');
     const landing = await page.locator('body').innerText();
     expect(landing).not.toMatch(/PDF · PNG|PDF, PNG|as PNG, or as both/);
-    expect(landing).toMatch(/\/verify\/Xk3Lq9TbR2mP/);
+    // The hero is a slideshow of real designs; the top sheet names its recipient.
+    const proof = page.getByRole('figure', { name: 'Certificates made with Serenity' });
+    await proof.getByRole('button', { name: 'Pause slideshow' }).click();
+    const topSheet = proof.locator('.proof-card[data-depth="0"]').getByRole('img');
+    const before = await topSheet.getAttribute('aria-label');
+    expect(before).toMatch(/certificate awarded to /);
+    await proof.getByRole('button', { name: 'Next design' }).click();
+    await expect(proof.locator('.proof-card[data-depth="0"]').getByRole('img')).not.toHaveAttribute('aria-label', before!);
+    await expect(proof.locator('.proof-template')).toHaveAttribute('href', /^\/editor\?template=bundled-/);
     // Signed-in visitors are sent to the dashboard, so sign-up is checked signed out.
     const signedOut = await browser.newContext();
     const signup = await signedOut.newPage();

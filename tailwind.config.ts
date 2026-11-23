@@ -38,14 +38,37 @@ const config: Config = {
         success: 'rgb(var(--color-success) / <alpha-value>)',
         warning: 'rgb(var(--color-warning) / <alpha-value>)',
         error: 'rgb(var(--color-error) / <alpha-value>)',
+        // `text-destructive` / `bg-destructive/10` were used across the app
+        // without a definition, so sign-out and error states rendered uncoloured.
+        destructive: 'rgb(var(--color-error) / <alpha-value>)',
+        ink: {
+          DEFAULT: 'rgb(var(--color-ink) / <alpha-value>)',
+          foreground: 'rgb(var(--color-ink-foreground) / <alpha-value>)',
+        },
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
-        // Bricolage Grotesque leads so headings across the signed-in app match
-        // the public pages; Space Grotesk stays as the fallback.
-        display: ['var(--font-marketing)', 'var(--font-display)', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        // Headlines across the public pages and the signed-in app share the
+        // Bodoni display cut; body copy and controls stay in Instrument Sans.
+        display: ['var(--font-serif)', 'Georgia', 'serif'],
+        serif: ['var(--font-serif)', 'Georgia', 'serif'],
       },
+      // A tighter radius scale: controls 10px, cards 14px, sheets 20px. The
+      // previous 12/16/24 steps read soft and toy-like next to the Didone type.
+      borderRadius: {
+        xl: '0.625rem',
+        '2xl': '0.875rem',
+        '3xl': '1.25rem',
+      },
+      // Shadows are tinted with the ink colour and kept low; elevation is
+      // mostly carried by hairline borders.
       boxShadow: {
+        sm: '0 1px 2px rgb(var(--shadow-ink) / 0.06)',
+        DEFAULT: '0 1px 2px rgb(var(--shadow-ink) / 0.06), 0 2px 6px rgb(var(--shadow-ink) / 0.04)',
+        md: '0 1px 2px rgb(var(--shadow-ink) / 0.05), 0 6px 16px -4px rgb(var(--shadow-ink) / 0.10)',
+        lg: '0 2px 4px rgb(var(--shadow-ink) / 0.05), 0 14px 32px -8px rgb(var(--shadow-ink) / 0.16)',
+        xl: '0 2px 6px rgb(var(--shadow-ink) / 0.05), 0 24px 48px -12px rgb(var(--shadow-ink) / 0.20)',
+        '2xl': '0 4px 10px rgb(var(--shadow-ink) / 0.06), 0 36px 72px -16px rgb(var(--shadow-ink) / 0.28)',
         'glow-sm': '0 0 10px rgba(var(--color-primary), 0.3)',
         'glow-md': '0 0 20px rgba(var(--color-primary), 0.4)',
         'glow-lg': '0 0 40px rgba(var(--color-primary), 0.5)',

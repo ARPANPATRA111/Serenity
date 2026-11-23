@@ -2,26 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   createTemplate,
   getUserTemplates,
-  getPublicTemplates,
   searchTemplates,
   findTemplateByNormalizedName,
   updateTemplate,
+  TEMPLATE_CARD_FIELDS,
   type Template,
 } from '@/lib/firebase/templates';
+import { getAdminFirestore } from '@/lib/firebase/admin';
+import { getOwnerPage, isMissingIndexError } from '@/lib/firebase/ownerPaging';
+import { toIsoDate } from '@/lib/dates';
+import { createServerTimer } from '@/lib/api/serverTiming';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
 import { getEvent } from '@/lib/firebase/events';
+import { searchCuratedTemplates } from '@/lib/templates/curatedPublicTemplates';
 import {
-  mergeWithCuratedTemplates,
-  searchCuratedTemplates,
-} from '@/lib/templates/curatedPublicTemplates';
+  affectsPublicGallery,
+  getCachedPublicTemplates,
+  invalidatePublicTemplates,
+  sanitizePublicTemplate,
+} from '@/lib/templates/publicTemplateCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// In-memory cache for public templates (refreshes every 60 seconds)
-let publicTemplatesCache: { templates: Template[]; timestamp: number } | null = null;
-const CACHE_TTL = 60 * 1000; // 60 seconds
 
 function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
   if (clientUserId && typeof clientUserId === 'string' && clientUserId !== uid) {
@@ -29,14 +32,6 @@ function rejectMismatchedUserId(clientUserId: unknown, uid: string) {
   }
 
   return null;
-}
-
-function sanitizePublicTemplate(template: Template, includeCanvasJSON = false): Template {
-  const { creatorEmail, userId, canvasJSON, ...safeTemplate } = template;
-  return {
-    ...safeTemplate,
-    canvasJSON: includeCanvasJSON ? canvasJSON : '',
-  } as Template;
 }
 
 function filterOwnedTemplates(templates: Template[], query: string): Template[] {
@@ -79,18 +74,8 @@ export async function GET(request: NextRequest) {
             ...searchCuratedTemplates(searchQuery).filter(template => !existingIds.has(template.id)),
           ].slice(0, limit);
         } else {
-          const now = Date.now();
-          if (publicTemplatesCache && (now - publicTemplatesCache.timestamp) < CACHE_TTL) {
-            templates = publicTemplatesCache.templates.slice(0, limit);
-          } else {
-            templates = await getPublicTemplates(limit);
-            templates = mergeWithCuratedTemplates(
-              templates.map(template => sanitizePublicTemplate(template)),
-              limit,
-            ).map(template => sanitizePublicTemplate(template));
-            publicTemplatesCache = { templates, timestamp: now };
-          }
-          headers['Cache-Control'] = 'public, s-maxage=60, stale-while-revalidate=120';
+          templates = await getCachedPublicTemplates(limit);
+          headers['Cache-Control'] = 'public, s-maxage=300, stale-while-revalidate=3600';
         }
       } else {
         const authUser = await verifyAuth(request);
@@ -100,6 +85,12 @@ export async function GET(request: NextRequest) {
 
         const mismatch = rejectMismatchedUserId(userId, authUser.uid);
         if (mismatch) return mismatch;
+
+        // page=1 (current clients): one bounded page of card fields, newest
+        // first. Searching still covers every template, as before.
+        if (searchParams.get('page') === '1' && !searchQuery) {
+          return await ownedTemplatePage(authUser.uid, searchParams);
+        }
 
         templates = await getUserTemplates(authUser.uid);
         if (searchQuery) {
@@ -130,6 +121,60 @@ export async function GET(request: NextRequest) {
       { success: false, error: 'Failed to fetch templates', templates: [] },
       { status: 500 }
     );
+  }
+}
+
+async function ownedTemplatePage(uid: string, searchParams: URLSearchParams) {
+  const timer = createServerTimer();
+  const limit = Math.min(Math.max(Number(searchParams.get('limit')) || 24, 1), 48);
+  const db = getAdminFirestore();
+  const toCard = (id: string, data: FirebaseFirestore.DocumentData) => ({
+    id: data.id || id,
+    name: data.name || 'Untitled template',
+    thumbnail: data.thumbnail || null,
+    createdAt: toIsoDate(data.createdAt),
+    updatedAt: toIsoDate(data.updatedAt),
+    certificateCount: data.certificateCount || 0,
+    isPublic: data.isPublic === true,
+    stars: data.stars || 0,
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    category: data.category || null,
+    publicationStatus: data.publicationStatus || (data.isPublic ? 'public' : 'private'),
+    canvasJSON: '',
+  });
+
+  try {
+    const page = await timer.measure('list', getOwnerPage(db, 'templates', uid, {
+      field: 'updatedAt',
+      limit,
+      cursor: searchParams.get('cursor'),
+      select: TEMPLATE_CARD_FIELDS,
+    }));
+    // The last page carries the exact count. Records without an updatedAt
+    // never appear in an ordered query; a client that loaded fewer than this
+    // asks for the complete list instead.
+    const totalCount = page.nextCursor
+      ? undefined
+      : await timer.measure('count', db.collection('templates').where('userId', '==', uid).count().get()).then((snapshot) => snapshot.data().count);
+    const templates = page.docs.map((document) => toCard(document.id, document.data()));
+    return NextResponse.json({
+      success: true,
+      templates,
+      count: templates.length,
+      nextCursor: page.nextCursor,
+      hasMore: !!page.nextCursor,
+      ...(totalCount !== undefined ? { totalCount } : {}),
+    }, { headers: { 'Cache-Control': 'private, no-store', 'Server-Timing': timer.header() } });
+  } catch (error) {
+    if ((error as { code?: unknown })?.code === 'INVALID_CURSOR') {
+      return NextResponse.json({ success: false, error: 'Invalid cursor', code: 'INVALID_CURSOR' }, { status: 400 });
+    }
+    if (!isMissingIndexError(error)) throw error;
+    // Index not ready: the complete list, exactly as older releases read it.
+    const templates = (await getUserTemplates(uid)).map((template) => toCard(template.id, template));
+    return NextResponse.json({
+      success: true, templates, count: templates.length, nextCursor: null, hasMore: false, totalCount: templates.length,
+    }, { headers: { 'Cache-Control': 'private, no-store', 'Server-Timing': timer.header() } });
   }
 }
 
@@ -216,6 +261,8 @@ export async function POST(request: NextRequest) {
         publicationRequestedAt: template.publicationRequestedAt,
       });
     }
+
+    if (affectsPublicGallery(template)) invalidatePublicTemplates();
 
     return NextResponse.json({
       success: true,

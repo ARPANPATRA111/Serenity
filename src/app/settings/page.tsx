@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   ArrowLeft, 
@@ -14,7 +13,7 @@ import {
   Loader2,
   Camera
 } from 'lucide-react';
-import { SerenityBrand } from '@/components/brand/SerenityBrand';
+import { SiteNav } from '@/components/marketing/MarketingNav';
 
 interface UserSettings {
   name: string;
@@ -81,7 +80,7 @@ export default function SettingsPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -92,19 +91,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="app-shell min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
-        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
-          <Link href="/"><SerenityBrand /></Link>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Link href="/dashboard" className="btn-primary">
-              Dashboard
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="app-shell min-h-screen">
+      <SiteNav />
 
       <main className="mx-auto max-w-3xl px-4 py-8">
         {/* Header */}
@@ -138,7 +126,7 @@ export default function SettingsPage() {
             {/* Avatar */}
             <div className="mb-6 flex items-center gap-4">
               <div className="relative">
-                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-2xl font-bold">
+                <div className="h-20 w-20 rounded-full bg-ink flex items-center justify-center text-ink-foreground text-2xl font-bold">
                   {settings.name.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <button 

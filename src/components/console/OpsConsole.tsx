@@ -108,12 +108,12 @@ export function OpsConsole() {
   };
 
   if (checking) {
-    return <div className="app-shell min-h-screen bg-background"><Spinner label="Checking console session" /></div>;
+    return <div className="app-shell min-h-screen"><Spinner label="Checking console session" /></div>;
   }
 
   if (!session) {
     return (
-      <div className="app-shell flex min-h-screen items-center bg-background px-4 py-10">
+      <div className="app-shell flex min-h-screen items-center px-4 py-10">
         <UnlockPanel onUnlocked={(next) => setSession(next)} />
       </div>
     );
@@ -121,7 +121,7 @@ export function OpsConsole() {
 
   return (
     <ConsoleContext.Provider value={contextValue}>
-      <div className="app-shell min-h-screen bg-background">
+      <div className="app-shell min-h-screen">
         <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
             <div className="flex min-w-0 items-center gap-2.5">

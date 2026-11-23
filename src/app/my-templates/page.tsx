@@ -5,16 +5,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { 
   ArrowLeft, Plus, Search, Filter, Bookmark, Globe, Lock,
-  MoreVertical, Edit3, Trash2, Eye, Clock, FileText, Crown,
-  X, Tag, Library
+  MoreVertical, Edit3, Trash2, Eye, Clock, FileText, X, Tag, Library
 } from 'lucide-react';
-import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { plural } from '@/lib/utils';
+import { SiteNav } from '@/components/marketing/MarketingNav';
 
 interface UserTemplate {
   id: string;
@@ -28,6 +26,8 @@ interface UserTemplate {
   tags?: string[];
   category?: string;
 }
+
+const PAGE_SIZE = 24;
 
 const CATEGORIES = [
   'All',
@@ -51,6 +51,9 @@ export default function MyTemplatesPage() {
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name' | 'stars'>('updated');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -58,21 +61,57 @@ export default function MyTemplatesPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  const fetchTemplates = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
+  // Templates arrive a page at a time (newest first). "Load all" fetches the
+  // complete list in one request, as earlier releases always did; it is also
+  // used automatically if a page listing misses records.
+  const loadAllTemplates = useCallback(async () => {
+    setLoadingMore(true);
     try {
       const res = await authenticatedFetch('/api/templates');
-      const data = await res.json();
-      if (data.success && data.templates) {
-        setTemplates(data.templates);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Templates are temporarily unavailable.');
+      setTemplates(data.templates || []);
+      setNextCursor(null);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Templates are temporarily unavailable.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, []);
+
+  const fetchTemplates = useCallback(async (cursor?: string) => {
+    if (!user?.id) return;
+    if (cursor) setLoadingMore(true);
+    else setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: '1', limit: String(PAGE_SIZE) });
+      if (cursor) params.set('cursor', cursor);
+      const res = await authenticatedFetch(`/api/templates?${params}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Templates are temporarily unavailable.');
+      const page: UserTemplate[] = data.templates || [];
+      let loadedCount = 0;
+      setTemplates((current) => {
+        const byId = new Map((cursor ? current : []).map((template) => [template.id, template]));
+        page.forEach((template) => byId.set(template.id, template));
+        loadedCount = byId.size;
+        return Array.from(byId.values());
+      });
+      setNextCursor(data.nextCursor || null);
+      setLoadError(null);
+      // Records saved without a date are not in a dated listing.
+      if (!data.nextCursor && typeof data.totalCount === 'number' && data.totalCount > loadedCount) {
+        await loadAllTemplates();
       }
     } catch (error) {
       console.error('Failed to fetch templates:', error);
+      setLoadError(error instanceof Error ? error.message : 'Templates are temporarily unavailable.');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [user?.id]);
+  }, [user?.id, loadAllTemplates]);
 
   useEffect(() => {
     if (user?.id) {
@@ -155,21 +194,8 @@ export default function MyTemplatesPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="app-shell min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
-        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <SerenityBrand />
-          </Link>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Link href="/editor" className="btn-primary">
-              Open Editor
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="app-shell min-h-screen">
+      <SiteNav />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
         {/* Header */}
@@ -190,7 +216,7 @@ export default function MyTemplatesPage() {
             </div>
             <Link
               href="/editor"
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary to-accent text-white rounded-xl font-medium hover:opacity-90 transition-opacity shadow-md"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-ink text-ink-foreground rounded-xl font-medium hover:opacity-90 transition-opacity shadow-md"
             >
               <Plus className="w-4 h-4" />
               New Template
@@ -256,6 +282,28 @@ export default function MyTemplatesPage() {
           </div>
         </div>
 
+        {loadError && (
+          <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+            <span>Your templates could not be loaded. {loadError}</span>
+            <button
+              type="button"
+              onClick={() => void (templates.length > 0 && nextCursor ? fetchTemplates(nextCursor) : fetchTemplates())}
+              className="rounded-lg border border-border bg-card px-3 py-1.5 font-medium hover:bg-muted"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {nextCursor && !loading && (searchQuery.trim() || selectedCategory !== 'All' || sortBy !== 'updated') && (
+          <p role="status" className="mb-4 text-sm text-muted-foreground">
+            Search, category and sorting apply to the {templates.length} templates loaded so far.{' '}
+            <button type="button" onClick={() => void loadAllTemplates()} disabled={loadingMore} className="font-medium text-primary underline-offset-2 hover:underline disabled:opacity-50">
+              Load all templates
+            </button>
+          </p>
+        )}
+
         {/* Templates Grid */}
         {loading ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -267,7 +315,7 @@ export default function MyTemplatesPage() {
               </div>
             ))}
           </div>
-        ) : filteredTemplates.length === 0 ? (
+        ) : loadError && templates.length === 0 ? null : filteredTemplates.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border p-12 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
               <FileText className="h-8 w-8 text-muted-foreground" />
@@ -416,18 +464,31 @@ export default function MyTemplatesPage() {
         {/* Stats summary */}
         {!loading && templates.length > 0 && (
           <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-            <span>{templates.length} total templates</span>
+            <span>{nextCursor ? `${templates.length} templates loaded` : `${templates.length} total templates`}</span>
             <span className="hidden sm:inline">•</span>
             <span>{templates.filter(t => t.isPublic).length} public</span>
             <span className="hidden sm:inline">•</span>
             <span>{templates.filter(t => !t.isPublic).length} private</span>
             <span className="hidden sm:inline">•</span>
-            <span>{templates.reduce((sum, t) => sum + t.stars, 0)} total saves</span>
+            <span>{templates.reduce((sum, t) => sum + t.stars, 0)} {nextCursor ? "saves on loaded templates" : "total saves"}</span>
+          </div>
+        )}
+
+        {nextCursor && !loading && (
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={() => void fetchTemplates(nextCursor)}
+              disabled={loadingMore}
+              className="rounded-xl border border-border bg-card px-5 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : 'Load more templates'}
+            </button>
           </div>
         )}
 
         {/* Browse Public Templates CTA */}
-        <div className="mt-12 rounded-2xl bg-gradient-to-r from-primary/10 to-accent/10 p-8 text-center">
+        <div className="mt-12 rounded-2xl bg-muted/60 p-8 text-center">
           <h2 className="font-display text-2xl font-bold">
             Discover More Templates
           </h2>

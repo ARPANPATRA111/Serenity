@@ -33,6 +33,8 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
   const {
     rows,
     headers,
+    dataSource,
+    sourceFile,
     setDataSource,
     previewRowIndex,
     setPreviewRowIndex,
@@ -68,10 +70,12 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
       setError(null);
       setLoading(true);
       const { parseSpreadsheet } = await import('@/lib/excel');
-      // For now, assume single sheet or take the first one
+      // The first worksheet; a workbook with several offers a chooser below.
       const data = await parseSpreadsheet(file);
       if (data.rows && data.rows.length > 0) {
-        setDataSource(data);
+        setDataSource(data, file);
+      } else {
+        setError('This sheet has a header row but no recipients. Add one row per recipient below the headers.');
       }
     } catch (error) {
       console.error('Failed to parse file:', error);
@@ -85,6 +89,22 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  const chooseSheet = async (sheetName: string) => {
+    if (!sourceFile || sheetName === dataSource?.sheetName) return;
+    try {
+      setError(null);
+      setLoading(true);
+      const { parseSpreadsheet } = await import('@/lib/excel');
+      const data = await parseSpreadsheet(sourceFile, sheetName);
+      if (data.rows.length === 0) throw new Error(`The sheet "${sheetName}" has no recipient rows.`);
+      setDataSource(data, sourceFile);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'That worksheet could not be read.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,6 +176,7 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
               onChange={handleFileUpload}
             />
             <button
+              data-roster-upload
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
@@ -163,10 +184,11 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
               {isLoading ? 'Loading...' : 'Select File'}
             </button>
             <p className="text-xs text-muted-foreground">
-              Supports up to {SPREADSHEET_LIMITS.maxRows} rows and {SPREADSHEET_LIMITS.maxColumns} columns.
+              Import limit: up to {SPREADSHEET_LIMITS.maxRows.toLocaleString()} rows and {SPREADSHEET_LIMITS.maxColumns} columns per file.
+              How many certificates you can save depends on your plan, shown when you generate.
             </p>
             {error && (
-              <p className="text-xs text-destructive">
+              <p className="text-xs text-destructive" role="alert">
                 {error}
               </p>
             )}
@@ -176,9 +198,11 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
             <div className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-success" />
-                <div className="text-sm">
+                <div className="min-w-0 text-sm">
                   <p className="font-medium">{rows.length} {plural(rows.length, 'record')}</p>
-                  <p className="text-xs text-muted-foreground">Loaded successfully</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {dataSource?.fileName ? `${dataSource.fileName}, ` : ''}{headers.length} {plural(headers.length, 'column')}
+                  </p>
                 </div>
               </div>
               <button
@@ -187,10 +211,27 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
                 }}
                 className="rounded p-1 hover:bg-muted text-muted-foreground hover:text-destructive"
                 title="Remove Data Link in sidebar"
+                aria-label="Unlink spreadsheet"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
+
+            {(dataSource?.availableSheets?.length ?? 0) > 1 && (
+              <div className="space-y-1">
+                <label htmlFor="roster-sheet" className="text-sm font-medium text-foreground">Worksheet</label>
+                <select
+                  id="roster-sheet"
+                  value={dataSource?.sheetName}
+                  onChange={(event) => void chooseSheet(event.target.value)}
+                  disabled={isLoading || !sourceFile}
+                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                >
+                  {dataSource?.availableSheets?.map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
+                </select>
+                {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
+              </div>
+            )}
 
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-foreground">Available Variables</h3>
@@ -200,16 +241,18 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
               
               <div className="grid gap-2">
                 {headers.map((header) => (
-                  <div
+                  <button
+                    type="button"
                     key={header}
                     draggable
                     onDragStart={(e) => handleDragStart(e, header)}
                     onClick={() => addVariableToCanvas(header)}
-                    className="group flex cursor-grab items-center gap-2 rounded-md border border-border bg-background p-2 transition-colors hover:border-primary hover:bg-primary/5 active:cursor-grabbing"
+                    aria-label={`Insert ${header} field`}
+                    className="group flex cursor-grab items-center gap-2 rounded-md border border-border bg-background p-2 text-left transition-colors hover:border-primary hover:bg-primary/5 active:cursor-grabbing"
                   >
                     <Variable className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
                     <span className="text-sm">{header}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -220,14 +263,16 @@ export function RightSidebar({ onToggle, onUpsell }: RightSidebarProps = {}) {
                   <div className="flex justify-between items-center mb-2 pb-2 border-b border-border">
                      <button 
                        disabled={previewRowIndex === 0}
+                       aria-label="Previous record"
                        onClick={() => setPreviewRowIndex(Math.max(0, previewRowIndex - 1))}
                        className="p-1 hover:bg-background rounded disabled:opacity-20"
                      >
                        <ChevronLeft className="h-3 w-3" />
                      </button>
-                     <span>Record {previewRowIndex + 1} of {rows.length}</span>
+                     <span aria-live="polite">Record {previewRowIndex + 1} of {rows.length}</span>
                      <button
                         disabled={previewRowIndex >= rows.length - 1}
+                        aria-label="Next record"
                         onClick={() => setPreviewRowIndex(Math.min(rows.length - 1, previewRowIndex + 1))}
                         className="p-1 hover:bg-background rounded disabled:opacity-20"
                      >

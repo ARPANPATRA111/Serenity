@@ -1,9 +1,11 @@
 'use client';
 
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode, useEffect, useId, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 import { Button } from './Button';
+
+const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 interface ModalProps {
   isOpen: boolean;
@@ -25,11 +27,56 @@ export function Modal({
   showCloseButton = true,
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Focus moves into the dialog when it opens, Tab stays inside it, and focus
+  // returns to whatever opened it when it closes.
+  useEffect(() => {
+    if (!isOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () => Array.from(contentRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
+      .filter((element) => !element.hasAttribute('disabled') && element.offsetParent !== null);
+
+    const first = focusable().find((element) => element.getAttribute('aria-label') !== 'Close modal') ?? focusable()[0];
+    (first ?? contentRef.current)?.focus({ preventScroll: true });
+
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const elements = focusable();
+      if (elements.length === 0) {
+        event.preventDefault();
+        contentRef.current?.focus();
+        return;
+      }
+      const firstElement = elements[0];
+      const lastElement = elements[elements.length - 1];
+      const active = document.activeElement;
+      if (!contentRef.current?.contains(active)) {
+        event.preventDefault();
+        firstElement.focus();
+      } else if (event.shiftKey && active === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && active === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+    document.addEventListener('keydown', trapTab);
+    return () => {
+      document.removeEventListener('keydown', trapTab);
+      if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
+    };
+  }, [isOpen]);
 
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
 
     if (isOpen) {
@@ -41,7 +88,7 @@ export function Modal({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   // Close when clicking overlay
   const handleOverlayClick = (e: React.MouseEvent) => {
@@ -57,20 +104,20 @@ export function Modal({
       className="modal-overlay"
       role="dialog"
       aria-modal="true"
-      aria-labelledby={title ? 'modal-title' : undefined}
-      aria-describedby={description ? 'modal-description' : undefined}
+      aria-labelledby={title ? titleId : undefined}
+      aria-describedby={description ? descriptionId : undefined}
     >
-      <div className={cn('modal-content', className)}>
+      <div ref={contentRef} tabIndex={-1} className={cn('modal-content focus:outline-none', className)}>
         {(title || showCloseButton) && (
           <div className="mb-4 flex items-start justify-between">
             <div>
               {title && (
-                <h2 id="modal-title" className="font-display text-lg font-semibold">
+                <h2 id={titleId} className="font-display text-lg font-semibold">
                   {title}
                 </h2>
               )}
               {description && (
-                <p id="modal-description" className="mt-1 text-sm text-muted-foreground">
+                <p id={descriptionId} className="mt-1 text-sm text-muted-foreground">
                   {description}
                 </p>
               )}
@@ -116,9 +163,9 @@ export function ComingSoonModal({
       className="max-w-md text-center"
     >
       <div className="py-4">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <svg
-            className="h-8 w-8 text-white"
+            className="h-8 w-8 text-primary"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

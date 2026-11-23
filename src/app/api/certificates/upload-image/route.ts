@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
-import { putPublicObject, requestOrigin } from '@/lib/storage/objectStore';
+import { isLocalObjectStore, putPublicObject, requestOrigin } from '@/lib/storage/objectStore';
+import {
+  MAX_FIRESTORE_PREVIEW_BYTES,
+  PreviewOwnershipError,
+  previewStore,
+  previewUrl,
+  savePreview,
+} from '@/lib/storage/certificatePreviews';
+import { getAdminFirestore } from '@/lib/firebase/admin';
 import { isValidCertificateId } from '@/lib/verification/certificateId';
 
 export const runtime = 'nodejs';
@@ -72,6 +80,32 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Image data does not match its declared type' },
         { status: 400 }
       );
+    }
+
+    // Previews go to Firestore unless the deployment opts into Blob, or the
+    // image is too large for a document (generator budgets keep it far below).
+    if (previewStore() === 'firestore' && imageBuffer.length <= MAX_FIRESTORE_PREVIEW_BYTES) {
+      try {
+        const preview = await savePreview(getAdminFirestore(), {
+          certificateId,
+          userId: authUser.uid,
+          contentType,
+          data: imageBuffer,
+        });
+        // Links use the canonical site address so they outlive preview deployments.
+        const baseUrl = isLocalObjectStore() ? requestOrigin(request) : (process.env.NEXT_PUBLIC_SITE_URL || requestOrigin(request));
+        return NextResponse.json({
+          success: true,
+          url: previewUrl(baseUrl, certificateId, preview.sha256),
+          certificateId,
+        });
+      } catch (error) {
+        if (error instanceof PreviewOwnershipError) {
+          return forbiddenResponse(error.message);
+        }
+        // e.g. the daily write quota is used up: Blob below is an independent quota.
+        console.warn('[API/certificates/upload-image] Firestore preview store unavailable; using object storage:', error);
+      }
     }
 
     // The path is deterministic per certificate, so a retried upload for the

@@ -34,6 +34,9 @@ export function emulatorEnv({ port = 3000, siteUrl } = {}) {
     SEND_IN_BLUE_API_KEY: 'emulator-only-disabled',
     RESEND_API_KEY: 'emulator-only-disabled',
     BREVO_SENDER_EMAIL: 'certificates@example.test',
+    EMAIL_REPLY_TO: 'support@example.test',
+    // Test-only secret for the provider-event endpoint (/api/email/events).
+    EMAIL_WEBHOOK_SECRET: process.env.EMAIL_WEBHOOK_SECRET || 'local-webhook-secret',
 
     // Operator console: enabled locally with a fixed, test-only path key.
     ADMIN_CONSOLE_ENABLED: process.env.ADMIN_CONSOLE_ENABLED || 'true',

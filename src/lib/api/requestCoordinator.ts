@@ -35,6 +35,32 @@ export function invalidateCoordinatedRequests(prefix: string) {
   }
 }
 
+/**
+ * Forgets every cached and in-flight response. Called when the signed-in
+ * account changes, so the next account never receives the previous one's
+ * data from memory (pending requests still settle for their own callers).
+ */
+export function clearCoordinatedRequests() {
+  cache.clear();
+  inFlight.clear();
+}
+
+/** Removes responses cached in this tab's sessionStorage (all, or those whose key starts with `prefix`). */
+export function clearSessionJson(prefix = '') {
+  if (typeof window === 'undefined') return;
+  try {
+    const storage = window.sessionStorage;
+    const keys: string[] = [];
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+      if (key?.startsWith(`serenity-cache:${prefix}`)) keys.push(key);
+    }
+    keys.forEach((key) => storage.removeItem(key));
+  } catch {
+    // Storage can be unavailable in private browsing.
+  }
+}
+
 export function readSessionJson<T>(key: string, maxAgeMs: number): T | null {
   if (typeof window === 'undefined') return null;
   try {

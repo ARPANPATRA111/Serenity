@@ -12,6 +12,7 @@ import { forbiddenResponse, unauthorizedResponse, verifyAuth } from '@/lib/fireb
 import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
 import { getEvent } from '@/lib/firebase/events';
 import { getCuratedPublicTemplate } from '@/lib/templates/curatedPublicTemplates';
+import { affectsPublicGallery, invalidatePublicTemplates } from '@/lib/templates/publicTemplateCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -153,6 +154,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         certificateMetadata,
       });
 
+      if (affectsPublicGallery(existing, template)) invalidatePublicTemplates();
+
       return NextResponse.json({
         success: true,
         template,
@@ -196,6 +199,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const template = await updateTemplate(id, updates);
+    if (affectsPublicGallery(existing, template)) invalidatePublicTemplates();
 
     return NextResponse.json({
       success: true,
@@ -233,6 +237,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const success = await deleteTemplate(id);
+    if (success && affectsPublicGallery(template)) invalidatePublicTemplates();
 
     if (!success) {
       return NextResponse.json(

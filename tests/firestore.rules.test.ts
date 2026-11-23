@@ -49,6 +49,7 @@ beforeAll(async () => {
       setDoc(doc(db, '_adminUsage/2026-09-30'), { reads: 10, requests: 1 }),
       setDoc(doc(db, 'adminAuditLog/entry-a'), { action: 'premium.granted', target: 'user-a' }),
       setDoc(doc(db, 'generationBatches/batch-a'), { userId: 'user-a', certificateCount: 3 }),
+      setDoc(doc(db, 'certificatePreviews/cert-a'), { userId: 'user-a', contentType: 'image/jpeg', bytes: 3 }),
     ]);
   });
 });
@@ -127,6 +128,17 @@ describe('Firestore tenant and authority boundaries', () => {
     }
   });
 
+  test('certificate preview images are only served by the preview route', async () => {
+    const ownerDb = environment.authenticatedContext('user-a').firestore();
+    const anonymousDb = environment.unauthenticatedContext().firestore();
+
+    for (const db of [ownerDb, anonymousDb]) {
+      await assertFails(getDoc(doc(db, 'certificatePreviews/cert-a')));
+      await assertFails(setDoc(doc(db, 'certificatePreviews/cert-a'), { userId: 'user-a', contentType: 'image/png' }));
+      await assertFails(setDoc(doc(db, 'certificatePreviews/new-cert'), { userId: 'user-a' }));
+    }
+  });
+
   test('generation batch summaries are server-only', async () => {
     const ownerDb = environment.authenticatedContext('user-a').firestore();
     const anonymousDb = environment.unauthenticatedContext().firestore();
@@ -134,5 +146,17 @@ describe('Firestore tenant and authority boundaries', () => {
     await assertFails(getDoc(doc(ownerDb, 'generationBatches/batch-a')));
     await assertFails(getDoc(doc(anonymousDb, 'generationBatches/batch-a')));
     await assertFails(setDoc(doc(ownerDb, 'generationBatches/batch-b'), { userId: 'user-a', certificateCount: 999 }));
+  });
+
+  test('email delivery records, suppressions, provider events and send budgets are server-only', async () => {
+    const ownerDb = environment.authenticatedContext('user-a').firestore();
+    const anonymousDb = environment.unauthenticatedContext().firestore();
+
+    for (const db of [ownerDb, anonymousDb]) {
+      for (const path of ['emailDeliveries/delivery-a', 'emailSuppressions/hash-a', 'emailDeliveryEvents/event-a', 'rateLimits/email_provider_2026-11-23']) {
+        await assertFails(getDoc(doc(db, path)));
+        await assertFails(setDoc(doc(db, path), { userId: 'user-a', status: 'delivered', count: 0 }));
+      }
+    }
   });
 });

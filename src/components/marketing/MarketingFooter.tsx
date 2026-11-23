@@ -17,78 +17,53 @@ const accountLinks = [
 ];
 
 const learnLinks = [
-  { href: '/#how-it-works', label: 'How it works' },
-  { href: '/#pricing', label: 'Pricing' },
-  { href: '/#faq', label: 'FAQ' },
+  { href: '/features', label: 'Product' },
+  { href: '/how-it-works', label: 'How it works' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/faq', label: 'FAQ' },
   { href: '/llms.txt', label: 'llms.txt' },
 ];
 
+const columns = [
+  { id: 'footer-product', title: 'Product', links: productLinks },
+  { id: 'footer-learn', title: 'Learn', links: learnLinks },
+  { id: 'footer-account', title: 'Account', links: accountLinks },
+];
+
 /**
- * Footer sits on the inverted band in both themes, closing the page against
- * the same deep surface the template gallery uses.
+ * Footer: open, on the same paper as the page rather than a dark slab; the
+ * generous top space keeps it clear of the last section.
  */
 export function MarketingFooter() {
   return (
-    <footer className="sr-footer sr-section-deep">
-      <div className="sr-container grid gap-10 py-16 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr]">
-        <div>
-          <SerenityBrand stacked />
-          <p className="sr-body mt-5 max-w-xs">
-            Design one certificate, personalise it from a spreadsheet, deliver the batch, and give
-            every recipient a link anyone can verify.
-          </p>
+    <footer className="sr-footer">
+      <div className="sr-container">
+        <div className="footer-grid">
+          <div className="footer-brand">
+            <SerenityBrand stacked />
+            <p className="sr-body mt-5 max-w-xs">
+              Design once, personalise from a spreadsheet and give every recipient a certificate anyone can verify.
+            </p>
+            <Link href="/signup" className="sr-btn sr-btn-primary mt-7">Create certificates</Link>
+          </div>
+
+          {columns.map((column) => (
+            <nav key={column.id} aria-labelledby={column.id}>
+              <h2 id={column.id} className="sr-footer-head">{column.title}</h2>
+              <ul className="mt-4 space-y-2.5">
+                {column.links.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="footer-link">{link.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
         </div>
 
-        <nav aria-labelledby="footer-product">
-          <h2 id="footer-product" className="sr-footer-head">
-            Product
-          </h2>
-          <ul className="mt-4 space-y-3">
-            {productLinks.map((link) => (
-              <li key={link.href}>
-                <Link href={link.href} className="inline-flex min-h-6 items-center text-[0.9375rem]">
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <nav aria-labelledby="footer-account">
-          <h2 id="footer-account" className="sr-footer-head">
-            Account
-          </h2>
-          <ul className="mt-4 space-y-3">
-            {accountLinks.map((link) => (
-              <li key={link.href}>
-                <Link href={link.href} className="inline-flex min-h-6 items-center text-[0.9375rem]">
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <nav aria-labelledby="footer-learn">
-          <h2 id="footer-learn" className="sr-footer-head">
-            Learn
-          </h2>
-          <ul className="mt-4 space-y-3">
-            {learnLinks.map((link) => (
-              <li key={link.href}>
-                <Link href={link.href} className="inline-flex min-h-6 items-center text-[0.9375rem]">
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </div>
-
-      <div className="border-t border-[rgb(var(--sr-deep-line))]">
-        <div className="sr-container flex flex-col gap-2 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="footer-base mt-14">
           <p className="sr-hint">© 2026 Serenity Certificate Generator</p>
-          <p className="sr-hint">Recipient verification pages show only public-safe fields.</p>
+          <p className="sr-hint">Verification pages show only public-safe fields.</p>
         </div>
       </div>
     </footer>

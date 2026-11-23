@@ -38,6 +38,39 @@ export function disableObjectCaching(objects: fabric.Object[]): void {
 }
 
 /** Runs an export on a live canvas with caching off, then restores each object. */
+export interface DataURLOptions {
+  format: 'png' | 'jpeg';
+  quality?: number;
+  multiplier?: number;
+  left?: number;
+  top?: number;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Same output as Fabric's canvas.toDataURL, but frees the full-size export
+ * canvas as soon as it is encoded. Fabric allocates a new one per export
+ * (35 MB at 300 DPI) and leaves it to garbage collection, which barely runs
+ * while the JS heap stays small, so a 200-certificate batch grew the tab by
+ * about 2.5 GB. Shrinking the canvas releases its pixel buffer immediately.
+ */
+export function canvasToDataURL(canvas: fabric.StaticCanvas, options: DataURLOptions): string {
+  const multiplier = options.multiplier ?? 1;
+  const element = canvas.toCanvasElement(multiplier, {
+    left: options.left,
+    top: options.top,
+    width: options.width,
+    height: options.height,
+  } as Parameters<fabric.StaticCanvas['toCanvasElement']>[1]);
+  try {
+    return element.toDataURL(`image/${options.format}`, options.quality ?? 1);
+  } finally {
+    element.width = 0;
+    element.height = 0;
+  }
+}
+
 /** Set on a canvas while it renders for export or preview: no placeholder chrome. */
 export interface EditorChromeCanvas {
   hideEditorChrome?: boolean;
@@ -98,7 +131,7 @@ export function exportCanvasImage(canvas: fabric.StaticCanvas, options: ExportOp
   helpers.forEach((object) => { object.visible = false; });
   canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
   try {
-    return withEditorChromeHidden(canvas, () => withObjectCachingDisabled(canvas, () => canvas.toDataURL({
+    return withEditorChromeHidden(canvas, () => withObjectCachingDisabled(canvas, () => canvasToDataURL(canvas, {
       format: options.format,
       quality: options.quality ?? 1,
       multiplier: options.multiplier,

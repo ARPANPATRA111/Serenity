@@ -54,13 +54,13 @@ export function TemplateCard({ template }: TemplateCardProps) {
   return (
     <div className="card group overflow-hidden transition-all hover:shadow-lg">
       {/* Preview Thumbnail */}
-      <div className="relative mb-4 h-40 rounded-lg overflow-hidden bg-muted">
+      <div className="template-mount relative mb-4 overflow-hidden">
         {template.thumbnail ? (
           <Image
             src={template.thumbnail}
             alt={template.name}
             fill
-            className="object-cover transition-transform group-hover:scale-105"
+            className="object-contain p-4"
             unoptimized // Data URLs don't need optimization
           />
         ) : (
@@ -72,7 +72,7 @@ export function TemplateCard({ template }: TemplateCardProps) {
         )}
         
         {/* Save count and action */}
-        <button
+        {!isCurated && <button
           onClick={handleStar}
           disabled={isStarring || !user || isCurated}
           className={`absolute right-2 top-2 flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium backdrop-blur-sm transition-colors ${
@@ -84,7 +84,7 @@ export function TemplateCard({ template }: TemplateCardProps) {
         >
           <Bookmark className={`h-3.5 w-3.5 ${isStarred ? 'fill-current' : ''}`} />
           <span>{stars}</span>
-        </button>
+        </button>}
       </div>
 
       {/* Info */}

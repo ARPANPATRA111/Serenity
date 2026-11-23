@@ -26,7 +26,7 @@ const proFeatures = [
   'Everything included in Free',
 ];
 
-export function PricingSection() {
+export function PricingSection({ showHeading = true }: { showHeading?: boolean } = {}) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [requirements, setRequirements] = useState('');
@@ -55,8 +55,9 @@ export function PricingSection() {
   };
 
   return (
-    <section id="pricing" className="sr-section sr-section-sunken" style={{ scrollMarginTop: '5rem' }}>
+    <section id="pricing" className="sr-section sr-section-tight" style={{ scrollMarginTop: '5rem' }}>
       <div className="sr-container">
+        {showHeading && (
         <div className="mx-auto max-w-2xl text-center">
           <p className="sr-eyebrow">Pricing</p>
           <h2 className="sr-h2 mt-4">
@@ -69,6 +70,7 @@ export function PricingSection() {
             request — there is no self-serve checkout yet.
           </p>
         </div>
+        )}
 
         <div className="mx-auto mt-14 grid max-w-4xl items-start gap-6 md:grid-cols-2">
           {/* ------------------------------------------------------- free */}

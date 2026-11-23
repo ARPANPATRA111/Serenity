@@ -186,7 +186,7 @@ function ValidCertificate({ certificate }: { certificate: PublicCertificate }) {
 
           <div className="mb-6 rounded-xl border border-border bg-card p-4 sm:p-5">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-lg font-bold text-white sm:h-14 sm:w-14 sm:text-xl" aria-hidden="true">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink text-lg font-bold text-ink-foreground sm:h-14 sm:w-14 sm:text-xl" aria-hidden="true">
                 {certificate.recipientName.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">

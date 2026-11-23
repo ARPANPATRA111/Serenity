@@ -1,77 +1,31 @@
 'use client';
 
-import { flushSync } from 'react-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 
-type TransitionDocument = Document & {
-  startViewTransition?: (update: () => void) => {
-    ready: Promise<void>;
-    finished: Promise<void>;
-  };
-};
-
+/**
+ * Light/dark switch.
+ *
+ * The theme changes on the same frame as the click. The previous version ran
+ * a full-page View Transition (snapshot the page, swap, then a 560 ms circular
+ * reveal), so the new theme only finished arriving about a second later on a
+ * page with a fixed backdrop and blurred bars. The knob still slides; the page
+ * itself swaps instantly.
+ */
 export function ThemeToggle({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => setMounted(true), []);
-
-  const toggleTheme = async () => {
-    const button = buttonRef.current;
-    if (!button || !mounted) return;
-
-    const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark';
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const transitionDocument = document as TransitionDocument;
-
-    if (!transitionDocument.startViewTransition || reduceMotion) {
-      setTheme(nextTheme);
-      return;
-    }
-
-    const bounds = button.getBoundingClientRect();
-    const x = bounds.left + bounds.width / 2;
-    const y = bounds.top + bounds.height / 2;
-    const radius = Math.hypot(
-      Math.max(x, window.innerWidth - x),
-      Math.max(y, window.innerHeight - y),
-    );
-
-    document.documentElement.style.setProperty('--theme-transition-x', `${x}px`);
-    document.documentElement.style.setProperty('--theme-transition-y', `${y}px`);
-
-    const transition = transitionDocument.startViewTransition(() => {
-      flushSync(() => setTheme(nextTheme));
-    });
-
-    await transition.ready;
-
-    document.documentElement.animate(
-      {
-        clipPath: [
-          `circle(0 at ${x}px ${y}px)`,
-          `circle(${radius}px at ${x}px ${y}px)`,
-        ],
-      },
-      {
-        duration: 560,
-        easing: 'cubic-bezier(.2,.78,.2,1)',
-        pseudoElement: '::view-transition-new(root)',
-      } as KeyframeAnimationOptions,
-    );
-  };
 
   const isDark = mounted && resolvedTheme === 'dark';
 
   return (
     <button
-      ref={buttonRef}
       type="button"
-      onClick={toggleTheme}
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
       disabled={!mounted}
       className={cn('theme-toggle-button', className)}
       aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
