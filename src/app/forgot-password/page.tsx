@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen flex">
       {/* Left Panel - Form */}
       <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
         <motion.div
@@ -164,7 +164,7 @@ export default function ForgotPasswordPage() {
       </div>
 
       {/* Right Panel - Decorative */}
-      <div className="hidden lg:flex lg:flex-1 relative bg-gradient-to-br from-primary to-accent overflow-hidden">
+      <div className="hidden lg:flex lg:flex-1 relative bg-[#1a1f36] overflow-hidden">
         {/* Background pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0" style={{

@@ -7,29 +7,27 @@ import { registerVariableTextbox, createVariableTextbox, isVariableTextbox } fro
 import { normalizeQRCodeImages, registerQRCodeImageType } from './QRCodeImage';
 import { exportCanvasImage } from './exportQuality';
 import { normalizeTemplateJSON } from './templateNormalization';
+import {
+  TEMPLATE_EXPORT_PROPS,
+  TEMPLATE_OBJECT_PROPS,
+  cleanSerializedTemplate,
+  isProtectedTemplateObject,
+} from './templateSerialization';
 import { debounce } from '@/lib/utils';
 import { installAlignmentGuides } from './alignmentGuides';
 import { waitForTemplateFonts } from '@/lib/fonts/googleFonts';
+// Legacy unscoped draft key, removed on start; drafts are now per account and design.
+import { CANVAS_AUTOSAVE_KEY } from '@/lib/session/privateSessionState';
+import { writeDraft } from '@/lib/editor/drafts';
 
-// Auto-save key for localStorage
-const CANVAS_AUTOSAVE_KEY = 'serenity_canvas_autosave';
 const HISTORY_LIMIT = 50;
 const AUTOSAVE_DEBOUNCE_MS = 300;
 // Longest the editor waits for a template's web fonts before drawing it.
 const TEMPLATE_FONT_WAIT_MS = 4000;
-// Fabric 5 never serialises `editable`, but the template invariants (checked
-// before every save, in the editor and by the templates API) require the
-// verification URL to be stored as non-editable. Without it every save failed.
-const HISTORY_JSON_PROPS = [
-  'dynamicKey',
-  'isPlaceholder',
-  'verificationId',
-  'isVerificationUrl',
-  'isClickableLink',
-  'isLocked',
-  'editable',
-] as const;
-const EXPORT_JSON_PROPS = [...HISTORY_JSON_PROPS, 'isBoundary'] as const;
+// Shared with Export JSON and Duplicate, so every path keeps the same
+// custom properties (see templateSerialization.ts).
+const HISTORY_JSON_PROPS = TEMPLATE_OBJECT_PROPS;
+const EXPORT_JSON_PROPS = TEMPLATE_EXPORT_PROPS;
 
 type AutoSaveWindow = Window & typeof globalThis & {
   requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
@@ -106,6 +104,7 @@ export function useFabric(
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const isHistoryActionRef = useRef<boolean>(false);
+  const flushHistoryRef = useRef<(() => void) | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveIdleCallbackRef = useRef<number | null>(null);
 
@@ -117,17 +116,12 @@ export function useFabric(
     setHistoryState,
   } = useEditorStore();
 
+  // Where drafts of this design are written: set by the editor once the
+  // design on the canvas is known (see drafts.ts). Null writes nothing.
+  const draftKeyRef = useRef<string | null>(null);
+
   const writeAutoSave = useCallback((json: string) => {
-    if (typeof window === 'undefined') return;
-    try {
-      const saveData = {
-        canvasJSON: json,
-        savedAt: new Date().toISOString(),
-      };
-      localStorage.setItem(CANVAS_AUTOSAVE_KEY, JSON.stringify(saveData));
-    } catch (e) {
-      console.warn('Failed to auto-save canvas:', e);
-    }
+    if (draftKeyRef.current) writeDraft(draftKeyRef.current, json);
   }, []);
 
   const clearPendingAutoSave = useCallback(() => {
@@ -323,38 +317,50 @@ export function useFabric(
     });
 
     // Modification events - debounced to prevent spam
-    const debouncedOnModified = debounce(() => {
+    let historyPending = false;
+    const recordModified = () => {
+      historyPending = false;
       if (!isHistoryActionRef.current && fabricRef.current) {
         const json = serializeCanvas(fabricRef.current);
         
         const lastState = historyRef.current[historyIndexRef.current];
-        if (lastState === json) {
-          onModified?.();
-          return;
-        }
-        
+        if (lastState === json) return;
+
         historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-        
+
         historyRef.current.push(json);
         historyIndexRef.current = historyRef.current.length - 1;
-        
+
         if (historyRef.current.length > HISTORY_LIMIT) {
           historyRef.current.shift();
           historyIndexRef.current--;
         }
-        
+
         const canUndoNow = historyIndexRef.current > 0;
         const canRedoNow = false; // After a new action, no redo available
         setHistoryState(canUndoNow, canRedoNow, historyIndexRef.current, historyRef.current.length);
-        autoSaveToLocalStorage(json);
+        // A real change to a design the editor is tracking: keep a draft and
+        // report it, so the design counts as unsaved.
+        if (draftKeyRef.current) {
+          autoSaveToLocalStorage(json);
+          onModified?.();
+        }
       }
-      onModified?.();
-    }, 500);
+    };
+    const debouncedOnModified = debounce(recordModified, 500);
+    // Undo/redo first record a change still waiting for the debounce, so an
+    // undo pressed straight after a change reverses exactly that change.
+    flushHistoryRef.current = () => {
+      if (historyPending) recordModified();
+    };
 
     const queueModified = () => {
       // Ignore events synchronously emitted while a history snapshot is being
       // restored. This avoids relying on a timer that can race slow images.
-      if (!isHistoryActionRef.current) debouncedOnModified();
+      if (!isHistoryActionRef.current) {
+        historyPending = true;
+        debouncedOnModified();
+      }
     };
 
     canvas.on('object:modified', queueModified);
@@ -485,10 +491,7 @@ export function useFabric(
 
     const json = serializeCanvas(fabricRef.current);
     const lastState = historyRef.current[historyIndexRef.current];
-    if (lastState === json) {
-      autoSaveToLocalStorage(json);
-      return;
-    }
+    if (lastState === json) return;
     
     // Remove any redo states
     historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
@@ -508,9 +511,12 @@ export function useFabric(
     const canRedoNow = false; // After a new action, no redo available
     setHistoryState(canUndoNow, canRedoNow, historyIndexRef.current, historyRef.current.length);
     
-    // Auto-save to localStorage
-    autoSaveToLocalStorage(json);
-  }, [autoSaveToLocalStorage, setHistoryState]);
+    // Draft for recovery, and the design is now unsaved.
+    if (draftKeyRef.current) {
+      autoSaveToLocalStorage(json);
+      onModified?.();
+    }
+  }, [autoSaveToLocalStorage, setHistoryState, onModified]);
 
   const restoreFromAutoSave = useCallback((canvas: fabric.Canvas) => {
     if (typeof window === 'undefined') return;
@@ -533,8 +539,20 @@ export function useFabric(
 
   const clearAutoSave = useCallback(() => {
     if (typeof window === 'undefined') return;
+    clearPendingAutoSave();
     localStorage.removeItem(CANVAS_AUTOSAVE_KEY);
-  }, []);
+  }, [clearPendingAutoSave]);
+
+  /** Starts (key) or stops (null) keeping drafts of the design on the canvas. */
+  const setDraftKey = useCallback((key: string | null) => {
+    clearPendingAutoSave();
+    draftKeyRef.current = key;
+  }, [clearPendingAutoSave]);
+
+  /** The canvas as a draft stores it, for comparing with a saved draft. */
+  const serializeForDraft = useCallback(() => (
+    fabricRef.current ? serializeCanvas(fabricRef.current) : ''
+  ), []);
 
   const bringVerificationUrlToFront = useCallback(() => {
     if (!fabricRef.current) return;
@@ -546,6 +564,7 @@ export function useFabric(
   }, []);
 
   const undo = useCallback(() => {
+    flushHistoryRef.current?.();
     if (!fabricRef.current || historyIndexRef.current <= 0) {
       console.log('[Undo] Cannot undo: no history or at start');
       return;
@@ -646,6 +665,7 @@ export function useFabric(
   }, [width, height, backgroundColor, setHistoryState, bringVerificationUrlToFront]);
 
   const redo = useCallback(() => {
+    flushHistoryRef.current?.();
     if (!fabricRef.current || historyIndexRef.current >= historyRef.current.length - 1) {
       console.log('[Redo] Cannot redo: no future states');
       return;
@@ -1283,7 +1303,7 @@ export function useFabric(
     if (!fabricRef.current) return;
 
     const activeObject = fabricRef.current.getActiveObject();
-    if (!activeObject || (activeObject as any).isVerificationUrl || (activeObject as any).isLocked) return;
+    if (!activeObject || isProtectedTemplateObject(activeObject) || (activeObject as any).isLocked) return;
 
     activeObject.clone((cloned: fabric.Object) => {
       cloned.set({
@@ -1293,7 +1313,7 @@ export function useFabric(
       fabricRef.current?.add(cloned);
       fabricRef.current?.setActiveObject(cloned);
       fabricRef.current?.requestRenderAll();
-    }, ['dynamicKey', 'isPlaceholder', 'verificationId']);
+    }, [...TEMPLATE_OBJECT_PROPS]);
   }, []);
 
   const bringToFront = useCallback(() => {
@@ -1316,19 +1336,8 @@ export function useFabric(
 
   const toJSON = useCallback(() => {
     if (!fabricRef.current) return null;
-    const json = fabricRef.current.toJSON([...EXPORT_JSON_PROPS]);
-    // Filter out boundary objects and fix invalid textBaseline values
-    if (json.objects) {
-      json.objects = json.objects.filter((obj: any) => !obj.isBoundary);
-      // Fix Fabric.js 'alphabetic' vs 'alphabetical' textBaseline issue
-      json.objects = json.objects.map((obj: any) => {
-        if (obj.textBaseline === 'alphabetical') {
-          obj.textBaseline = 'alphabetic';
-        }
-        return obj;
-      });
-    }
-    return json;
+    // Filters boundary objects and fixes Fabric's textBaseline typo.
+    return cleanSerializedTemplate(fabricRef.current.toJSON([...EXPORT_JSON_PROPS]));
   }, []);
 
   const loadFromJSON = useCallback(async (json: string | object): Promise<void> => {
@@ -1345,13 +1354,14 @@ export function useFabric(
     });
     fabric.util.clearFabricFontCache();
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (!fabricRef.current) {
         resolve();
         return;
       }
-      
+
       isHistoryActionRef.current = true;
+      try {
       fabricRef.current.loadFromJSON(data, () => {
         if (fabricRef.current) {
           // Re-apply verification URL properties to ensure they persist
@@ -1483,7 +1493,6 @@ export function useFabric(
             historyRef.current = [baseline];
             historyIndexRef.current = 0;
             setHistoryState(false, false, 0, 1);
-            autoSaveToLocalStorage(baseline);
           }
           isHistoryActionRef.current = false;
           resolve();
@@ -1497,8 +1506,15 @@ export function useFabric(
           finishLoad();
         }
       });
+      } catch (error) {
+        // Fabric throws before clearing the canvas (for example on an object
+        // type it cannot build). Leave the design as it was and keep undo
+        // history recording, which the flag above would otherwise disable.
+        isHistoryActionRef.current = false;
+        reject(error);
+      }
     });
-  }, [width, height, backgroundColor, setHistoryState, autoSaveToLocalStorage]);
+  }, [width, height, backgroundColor, setHistoryState]);
 
   const toHighDPIDataURL = useCallback((multiplier: number = HIGH_DPI_MULTIPLIER): string => {
     if (!fabricRef.current) return '';
@@ -1671,7 +1687,9 @@ export function useFabric(
     setBackgroundColor,
     getBackgroundColor,
     clearAutoSave,
-    
+    setDraftKey,
+    serializeForDraft,
+
     // Utilities
     isVariable,
     
@@ -1701,6 +1719,8 @@ export function useFabric(
     setBackgroundColor,
     getBackgroundColor,
     clearAutoSave,
+    setDraftKey,
+    serializeForDraft,
     isVariable,
     setDrawingMode,
     setDrawingBrush,

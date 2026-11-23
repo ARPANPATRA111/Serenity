@@ -5,6 +5,7 @@ import { useFabricContext } from './FabricContext';
 import { useEditorStore, MediaAsset, LeftSidebarTab } from '@/store/editorStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
+import { coordinatedJson, invalidateCoordinatedRequests } from '@/lib/api/requestCoordinator';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { fabric } from 'fabric';
 import {
@@ -35,6 +36,9 @@ import Image from 'next/image';
 
 // Maximum file size: 5MB (before compression)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+// One media request per owner, reused briefly across panel instances.
+const MEDIA_CACHE_MS = 30_000;
+const mediaCacheKey = (uid: string) => `media:${uid}`;
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 // Compression options
@@ -106,29 +110,39 @@ export function LeftSidebarTabs() {
     }
   }, [selectedObject, isImage]);
 
-  // Fetch user media on mount
+  // Fetch user media on mount. The editor can mount this panel twice (the
+  // desktop sidebar and the phone drawer); both share one request per owner.
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [mediaAttempt, setMediaAttempt] = useState(0);
   useEffect(() => {
-    const fetchMedia = async () => {
-      if (!user?.id) return;
-      
-      setIsLoadingMedia(true);
-      try {
-        const res = await authenticatedFetch('/api/media');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            setMediaAssets(data.assets || []);
-          }
-        }
-      } catch (e) {
+    if (!user?.id) return;
+    let cancelled = false;
+    setIsLoadingMedia(true);
+    coordinatedJson<{ success?: boolean; assets?: MediaAsset[] }>(
+      mediaCacheKey(user.id),
+      () => authenticatedFetch('/api/media'),
+      MEDIA_CACHE_MS,
+    )
+      .then((data) => {
+        if (cancelled) return;
+        setMediaAssets(data.assets || []);
+        setMediaError(null);
+      })
+      .catch((e) => {
         console.error('Failed to fetch media:', e);
-      } finally {
-        setIsLoadingMedia(false);
-      }
-    };
+        if (!cancelled) setMediaError('Your uploads could not be loaded.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingMedia(false);
+      });
+    return () => { cancelled = true; };
+  }, [user?.id, mediaAttempt, setMediaAssets, setIsLoadingMedia]);
 
-    fetchMedia();
-  }, [user?.id, setMediaAssets, setIsLoadingMedia]);
+  const retryMedia = useCallback(() => {
+    if (user?.id) invalidateCoordinatedRequests(mediaCacheKey(user.id));
+    setMediaError(null);
+    setMediaAttempt((attempt) => attempt + 1);
+  }, [user?.id]);
 
   // Validate file
   const validateFile = (file: File): string | null => {
@@ -191,6 +205,7 @@ export function LeftSidebarTabs() {
           const data = await res.json();
           if (data.success && data.asset) {
             addMediaAsset(data.asset);
+            invalidateCoordinatedRequests(mediaCacheKey(user.id));
           }
         } else {
           const data = await res.json();
@@ -216,6 +231,7 @@ export function LeftSidebarTabs() {
 
       if (res.ok) {
         removeMediaAsset(assetId);
+        invalidateCoordinatedRequests(mediaCacheKey(user.id));
       }
     } catch (e) {
       console.error('Delete failed:', e);
@@ -347,6 +363,8 @@ export function LeftSidebarTabs() {
           <MediaTabContent
             mediaAssets={mediaAssets}
             isLoadingMedia={isLoadingMedia}
+            mediaError={mediaError}
+            onRetryMedia={retryMedia}
             isUploadingMedia={isUploadingMedia}
             isPreviewMode={isPreviewMode}
             dragOver={dragOver}
@@ -408,6 +426,8 @@ export function LeftSidebarTabs() {
 interface MediaTabContentProps {
   mediaAssets: MediaAsset[];
   isLoadingMedia: boolean;
+  mediaError: string | null;
+  onRetryMedia: () => void;
   isUploadingMedia: boolean;
   isPreviewMode: boolean;
   dragOver: boolean;
@@ -429,6 +449,8 @@ interface MediaTabContentProps {
 function MediaTabContent({
   mediaAssets,
   isLoadingMedia,
+  mediaError,
+  onRetryMedia,
   isUploadingMedia,
   isPreviewMode,
   dragOver,
@@ -517,6 +539,13 @@ function MediaTabContent({
       {isLoadingMedia ? (
         <div className="flex items-center justify-center py-6">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : mediaError && mediaAssets.length === 0 ? (
+        <div role="alert" className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+          <p className="text-xs text-destructive">{mediaError}</p>
+          <button type="button" onClick={onRetryMedia} className="rounded-md border border-border px-3 py-1 text-xs font-medium hover:bg-muted">
+            Retry
+          </button>
         </div>
       ) : mediaAssets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-6 text-center">

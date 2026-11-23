@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { ShieldCheck, Search, ArrowRight, Loader2, QrCode, FileSearch, AlertCircle } from 'lucide-react';
+import { ShieldCheck, ArrowRight, Loader2, QrCode, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { SerenityBrand, SerenityMark } from '@/components/brand/SerenityBrand';
 import { extractCertificateId } from '@/lib/verification/certificateId';
+import { GuillocheSeal } from '@/components/brand/GuillocheSeal';
 
 export default function VerifyPage() {
   const [query, setQuery] = useState('');
@@ -32,108 +32,28 @@ export default function VerifyPage() {
     router.push(`/verify/${id}`);
   };
 
-  const features = [
-    {
-      icon: ShieldCheck,
-      title: 'Verify Authenticity',
-      description: 'Confirm the certificate is genuine and has not been tampered with',
-      tile: 'tile-accent',
-    },
-    {
-      icon: FileSearch,
-      title: 'View Details',
-      description: 'See issuer information, recipient, and issuance date',
-      tile: 'tile-primary',
-    },
-    {
-      icon: QrCode,
-      title: 'QR Code Support',
-      description: 'Paste verification URLs from scanned QR codes',
-      tile: 'tile-secondary',
-    },
-  ];
-
   return (
-    <div className="app-shell flex min-h-screen flex-col bg-background">
+    <div className="app-shell flex min-h-screen flex-col">
       {/* Navbar */}
-      <header className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
-        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6 lg:px-8">
-          <Link href="/"><SerenityBrand /></Link>
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Home
-            </Link>
-            <ThemeToggle />
-          </div>
-        </div>
+      <header className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <Link href="/" aria-label="Serenity home"><SerenityBrand /></Link>
+        <ThemeToggle />
       </header>
 
-      {/* Main Content */}
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-12 sm:py-16">
-        <div className="w-full max-w-xl space-y-8 text-center">
-          {/* Icon */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
-            className="flex justify-center"
-          >
-            <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
-              <div className="relative h-20 w-20 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl shadow-primary/30">
-                <ShieldCheck className="h-10 w-10 text-white" />
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Title */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-3"
-          >
-            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
-              Verify Certificate
-            </h1>
-            <p className="text-lg text-muted-foreground max-w-md mx-auto">
-              Enter a certificate ID or paste the verification URL to check its authenticity.
-            </p>
-          </motion.div>
-
-          {/* Search Form */}
-          <motion.form 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            onSubmit={handleSearch} 
-            className="space-y-4"
-          >
-            <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-primary/50 to-accent/50 rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-              <div className="relative flex items-center">
-                <div className="absolute left-4 text-muted-foreground">
-                  <Search className="h-5 w-5" />
-                </div>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    if (inputError) setInputError(null);
-                  }}
-                  placeholder="Certificate ID or verification URL"
-                  aria-label="Certificate ID or verification URL"
-                  aria-invalid={inputError ? true : undefined}
-                  aria-describedby={inputError ? 'verify-input-error' : undefined}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  className="h-14 w-full rounded-xl border border-border bg-card pl-12 pr-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all"
-                  required
-                />
-              </div>
-            </div>
+      <main className="verify-desk flex flex-1 items-center justify-center px-4 py-12">
+        <section className="verify-document">
+          <GuillocheSeal id="verify-seal" className="verify-watermark" />
+          <div className="verify-emblem"><ShieldCheck size={32} strokeWidth={1.4} aria-hidden="true" /></div>
+          <h1>Verify a certificate</h1>
+          <p className="mt-3 text-muted-foreground">Look up the original record to check the recipient, issuer and date on a certificate.</p>
+          <form onSubmit={handleSearch} className="mt-7 space-y-3">
+            <label htmlFor="certificate-search" className="block text-sm font-semibold">Certificate ID or verification URL</label>
+            <input id="certificate-search" value={query} onChange={(event) => {
+              setQuery(event.target.value);
+              if (inputError) setInputError(null);
+            }} placeholder="Paste an ID or link" aria-invalid={Boolean(inputError)}
+              aria-describedby={inputError ? 'verify-input-error' : undefined} autoCapitalize="none" autoCorrect="off"
+              spellCheck={false} className="input w-full" required />
             {inputError && (
               <p id="verify-input-error" role="alert" className="flex items-start gap-2 text-left text-sm text-error">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -141,13 +61,7 @@ export default function VerifyPage() {
               </p>
             )}
 
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              type="submit"
-              disabled={isSearching || !query.trim()}
-              className="group flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-accent px-8 text-base font-semibold text-white shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:shadow-primary/30 disabled:pointer-events-none disabled:opacity-50"
-            >
+            <button type="submit" disabled={isSearching || !query.trim()} className="btn-primary w-full">
               {isSearching ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -159,33 +73,13 @@ export default function VerifyPage() {
                   <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </>
               )}
-            </motion.button>
-          </motion.form>
-
-          {/* Features */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-8"
-          >
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 + index * 0.1 }}
-                className="rounded-xl border border-border bg-card p-5 text-left hover:border-primary/30 hover:bg-card/80 transition-all"
-              >
-                <div className={`${feature.tile} mb-3 h-10 w-10`}>
-                  <feature.icon className="h-5 w-5" />
-                </div>
-                <h3 className="font-semibold text-sm mb-1">{feature.title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">{feature.description}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
+            </button>
+          </form>
+          <p className="mt-6 flex items-start gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
+            <QrCode size={18} className="shrink-0" aria-hidden="true" />
+            You can also scan the QR code on a printed certificate.
+          </p>
+        </section>
       </main>
       
       {/* Footer */}

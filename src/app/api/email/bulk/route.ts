@@ -116,16 +116,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const results = {
-      queued: emails.length,
-      estimatedDelivery: '5-10 minutes',
-    };
-    
-    return NextResponse.json({
-      success: true,
-      ...results,
-      message: `${emails.length} emails queued for delivery`,
-    });
+    // There is no delivery queue behind this endpoint. It used to answer
+    // "queued" here although nothing was ever sent; say so instead. Send per
+    // certificate through /api/email/send, which is idempotent and budgeted.
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Bulk delivery is not available',
+        code: 'BULK_QUEUE_NOT_IMPLEMENTED',
+        message: 'No delivery queue exists. Send each certificate through /api/email/send.',
+        queued: 0,
+      },
+      { status: 501 },
+    );
 
   } catch (error) {
     console.error('Bulk email API error:', error);

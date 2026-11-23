@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
+import { authPageHref } from '@/lib/navigation/safeRedirect';
 import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -65,7 +66,7 @@ export default function LoginPage() {
       footer={
         <p className="sr-body text-center text-sm">
           New to Serenity?{' '}
-          <Link href="/signup" className="sr-link">
+          <Link href={authPageHref('/signup', searchParams.get('redirect'))} className="sr-link">
             Create a free account
           </Link>
         </p>

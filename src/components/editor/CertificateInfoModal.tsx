@@ -9,6 +9,7 @@ import { Building, FileText, Info, AlertCircle, CheckCircle, Award, Eye, Externa
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import type { SerenityEvent } from '@/types/events';
 import { EVENTS_ENABLED } from '@/lib/featureFlags';
+import { coordinatedJson } from '@/lib/api/requestCoordinator';
 
 const CATEGORIES = [
   'Education',
@@ -51,14 +52,19 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
     }
   }, [isOpen, certificateMetadata]);
 
+  // Event choices are only fetched where the Events feature is on (the
+  // chooser is hidden otherwise, and a linked event is kept as it is), and
+  // reused for a minute rather than fetched on every opening.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !EVENTS_ENABLED) return;
     let cancelled = false;
     setEventsLoading(true);
-    authenticatedFetch('/api/events?limit=100')
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Unable to load events');
+    coordinatedJson<{ events?: SerenityEvent[] }>(
+      'certificate-info-events',
+      () => authenticatedFetch('/api/events?limit=100'),
+      60_000,
+    )
+      .then((data) => {
         if (!cancelled) setEvents(data.events || []);
       })
       .catch((error) => console.error('[Certificate Info] Failed to load events:', error))
@@ -189,7 +195,7 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
                   {/* Recipient Card */}
                   <div className="rounded-lg border border-border bg-card p-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-white text-sm font-bold shrink-0">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-ink-foreground text-sm font-bold shrink-0">
                         J
                       </div>
                       <div className="min-w-0">
@@ -372,6 +378,9 @@ export function CertificateInfoModal({ isOpen, onClose }: CertificateInfoModalPr
                 className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
               >
                 <option value="">No linked event</option>
+                {eventId && !events.some((event) => event.id === eventId) && (
+                  <option value={eventId}>Currently linked event</option>
+                )}
                 {events.map((event) => (
                   <option key={event.id} value={event.id}>{event.name} · {event.type}</option>
                 ))}

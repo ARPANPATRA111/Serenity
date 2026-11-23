@@ -240,7 +240,8 @@ test.describe('certificate generation', () => {
     // A spreadsheet without the Name column triggers the placeholder warning.
     await upload.setInputFiles({ name: 'missing.csv', mimeType: 'text/csv', buffer: Buffer.from('Full Name,Email\nAda,ada@example.test\n') });
     await page.getByTitle('Generate').click();
-    await expect(page.getByText('{{Name}} will print as written', { exact: false })).toBeVisible();
+    // Typed {{tokens}} without a column (Issuer, Date) are listed too.
+    await expect(page.getByText(/\{\{Name\}\}.* will print as written/)).toBeVisible();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByTitle('Remove Data Link in sidebar').click();
 
@@ -348,6 +349,24 @@ test.describe('certificate generation', () => {
     await page.getByRole('button', { name: 'Start Generation' }).click();
     await downloadPromise;
     await expect(page.getByText('All Done!')).toBeVisible({ timeout: 120_000 });
+  });
+
+  test('legacy undercounts and temporary allowance errors are resolved before rendering', async ({ page }) => {
+    await ensureUser(USER.uid, USER.email, { certificatesGenerated: 1 });
+    const { db } = admin();
+    const batch = db.batch();
+    for (let i = 0; i < 5; i++) {
+      batch.set(db.collection('certificates').doc(), { userId: USER.uid, recipientName: 'Demo recipient' });
+    }
+    await batch.commit();
+    await signIn(page, USER.email);
+    await openEditorWithData(page, 'bundled-honours', csv([['Test Recipient', 'test@example.test']]));
+    await page.route('**/api/users/premium', route => route.fulfill({ status: 503, body: '{}' }), { times: 1 });
+    await page.getByTitle('Generate').click();
+    await expect(page.getByRole('button', { name: 'Allowance unavailable' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await expect(page.getByText('Free limit reached', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Limit Reached' })).toBeDisabled();
   });
 
   test('the free allowance is enforced before rendering', async ({ page }) => {

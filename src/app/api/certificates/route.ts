@@ -8,6 +8,7 @@ import { getEvent } from '@/lib/firebase/events';
 import { FREE_CERTIFICATE_LIMIT } from '@/lib/plans/certificateLimits';
 import { isPremiumActive } from '@/lib/plans/premium';
 import { getCertificateStats } from '@/lib/certificates/stats';
+import { createServerTimer } from '@/lib/api/serverTiming';
 import {
   MAX_CERTIFICATES_PER_REQUEST,
   sanitizeCertificateInput,
@@ -24,6 +25,15 @@ type HistoryCursor = {
   kind: 'timestamp' | 'string' | 'number';
   value: string | number;
 };
+
+// Fields History shows, uses for paging, and needs to resend email. Records
+// also hold the whole imported spreadsheet row (`metadata`), which History
+// never displays, so it is not transferred.
+const HISTORY_FIELDS = [
+  'createdAt', 'issuedAt', 'generationBatchId', 'batchId', 'recipientName', 'recipientEmail',
+  'title', 'issuerName', 'templateId', 'templateName', 'isActive', 'viewCount',
+  'emailStatus', 'emailSentAt', 'emailError', 'certificateImage', 'thumbnailUrl', 'deliveryStatus',
+];
 
 function encodeCursor(document: FirebaseFirestore.QueryDocumentSnapshot): string {
   const rawCreatedAt = document.get('createdAt');
@@ -62,8 +72,9 @@ function decodeCursor(value: string): { id: string; createdAt: unknown } | null 
 }
 
 export async function GET(request: NextRequest) {
+  const timer = createServerTimer();
   try {
-    const authUser = await verifyAuth(request);
+    const authUser = await timer.measure('auth', verifyAuth(request));
     if (!authUser) {
       return unauthorizedResponse();
     }
@@ -79,6 +90,10 @@ export async function GET(request: NextRequest) {
     const pageSize = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : 50;
     const cursorParam = searchParams.get('cursor');
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+    // view=lite (current clients): one copy of the page and no account totals,
+    // which load separately from /api/certificates/stats. Older clients keep
+    // the full response: `items`, the `certificates` alias, and first-page stats.
+    const lite = searchParams.get('view') === 'lite';
 
     if (cursorParam && !cursor) {
       return NextResponse.json(
@@ -104,7 +119,8 @@ export async function GET(request: NextRequest) {
     let query: FirebaseFirestore.Query = certificatesRef
       .where('userId', '==', userId)
       .orderBy('createdAt', 'desc')
-      .orderBy(FieldPath.documentId(), 'desc');
+      .orderBy(FieldPath.documentId(), 'desc')
+      .select(...HISTORY_FIELDS);
 
     if (cursor) {
       query = query.startAfter(cursor.createdAt, cursor.id);
@@ -112,16 +128,16 @@ export async function GET(request: NextRequest) {
 
     // Account totals ride along with the first page only; History falls back
     // to counting the loaded records if they are unavailable.
-    const statsPromise = cursor
+    const statsPromise = cursor || lite
       ? Promise.resolve(undefined)
-      : getCertificateStats(db, userId).catch((error) => {
+      : timer.measure('aggregates', getCertificateStats(db, userId)).catch((error) => {
         logger.warn('Account totals unavailable', { userId, errorCode: String(error?.code ?? 'unknown') });
         return null;
       });
 
     let snapshot: FirebaseFirestore.QuerySnapshot;
     try {
-      snapshot = await query.limit(pageSize + 1).get();
+      snapshot = await timer.measure('list', query.limit(pageSize + 1).get());
     } catch (e: any) {
       const isMissingIndex = e.code === 9 || e.code === 'failed-precondition';
       logger.warn('History query failed', { userId, errorCode: e.code });
@@ -156,6 +172,8 @@ export async function GET(request: NextRequest) {
         emailStatus: data.emailStatus || 'not_sent', // 'not_sent' | 'sent' | 'failed'
         emailSentAt: data.emailSentAt?.toDate?.()?.toISOString() || null,
         emailError: data.emailError || null,
+        // accepted | delivered | bounced | suppressed | unknown ... (see lib/email/delivery.ts)
+        deliveryStatus: data.deliveryStatus || null,
         certificateImage: data.certificateImage || null, // URL to certificate image
         thumbnailUrl: data.thumbnailUrl || data.certificateImage || null,
       };
@@ -170,11 +188,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       items: certificates,
-      certificates,
+      ...(lite ? {} : { certificates }),
       nextCursor,
       hasMore,
       ...(stats !== undefined ? { stats } : {}),
-    }, { headers: { 'Cache-Control': 'private, no-store' } });
+    }, { headers: { 'Cache-Control': 'private, no-store', 'Server-Timing': timer.header() } });
   } catch (error) {
     const errorDetails = getErrorDetails(error);
     logger.error('Failed to fetch certificates', { error: errorDetails });

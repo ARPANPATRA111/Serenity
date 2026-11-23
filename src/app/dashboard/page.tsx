@@ -3,12 +3,14 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { HONOURS_ID, HONOURS_NAME, honoursProof } from '@/lib/templates/honoursDesign';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { coordinatedJson, readSessionJson, writeSessionJson } from '@/lib/api/requestCoordinator';
+import { MAX_TEMPLATE_FILE_BYTES, parseTemplateFile } from '@/lib/fabric/templateSerialization';
+import { fetchAccountStats, readCachedAccountStats } from '@/lib/certificates/accountStatsClient';
 import { 
   Plus, 
   FileText, 
@@ -26,24 +28,22 @@ import {
   Edit3,
   Search,
   Filter,
-  LogOut,
   User,
   Globe,
   Lock,
-  Settings,
   Bookmark,
   Mail,
   MailCheck,
   MailX,
   RefreshCw,
   CheckCircle2,
-  Crown
 } from 'lucide-react';
 import { SkeletonDashboard, Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
-import { SerenityBrand } from '@/components/brand/SerenityBrand';
+import { GuillocheSeal } from '@/components/brand/GuillocheSeal';
 import { EVENTS_ENABLED } from '@/lib/featureFlags';
 import { plural } from '@/lib/utils';
 import type { CertificateStats } from '@/lib/certificates/stats';
+import { SiteNav } from '@/components/marketing/MarketingNav';
 
 // Certificate interface for Firebase data
 interface CertificateRecord {
@@ -79,26 +79,6 @@ interface DashboardTemplate {
   publicationStatus?: 'private' | 'pending_review' | 'public' | 'rejected';
 }
 
-const fadeInUp = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -20 }
-};
-
-const staggerContainer = {
-  animate: {
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
-
-const scaleIn = {
-  initial: { opacity: 0, scale: 0.9 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.9 }
-};
-
 // Flat tints standing in for a template that has no thumbnail yet. Drawn from
 // the palette rather than the full Tailwind spectrum, so a grid of them reads
 // as one product instead of a colour chart.
@@ -109,12 +89,13 @@ const placeholderTints = [
   'bg-warning/15',
 ];
 
+const honoursThumbnail = honoursProof('Recipient Name');
+
 export default function DashboardPage() {
-  const { user, isLoading, isAuthenticated, logout } = useAuth();
+  const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [templateTab, setTemplateTab] = useState<'my' | 'public'>('my');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -128,8 +109,12 @@ export default function DashboardPage() {
   const [certificatesLoading, setCertificatesLoading] = useState(true);
   const [publicTemplatesLoading, setPublicTemplatesLoading] = useState(true);
   const [importLoading, setImportLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryAttempt, setSummaryAttempt] = useState(0);
+  const [statsState, setStatsState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
 
-  // Fetch bounded private dashboard data in one authenticated request.
+  // Fetch bounded private dashboard data in one authenticated request. The
+  // lists never wait for the account totals, which load separately below.
   useEffect(() => {
     let cancelled = false;
 
@@ -144,13 +129,11 @@ export default function DashboardPage() {
       type DashboardSummary = {
           recentCertificates: CertificateRecord[];
           recentTemplates: DashboardTemplate[];
-          stats?: CertificateStats | null;
       };
       const cached = readSessionJson<DashboardSummary>(cacheKey, 5 * 60_000);
       if (cached) {
         setCertificates(cached.recentCertificates || []);
         setTemplates(cached.recentTemplates || []);
-        setAccountStats(cached.stats || null);
         setCertificatesLoading(false);
         setTemplatesLoading(false);
       }
@@ -158,16 +141,18 @@ export default function DashboardPage() {
       try {
         const data = await coordinatedJson<DashboardSummary>(
           cacheKey,
-          () => authenticatedFetch('/api/dashboard-summary?templateLimit=6&certificateLimit=12'),
+          () => authenticatedFetch('/api/dashboard-summary?templateLimit=6&certificateLimit=12&stats=0'),
           15_000,
         );
         if (cancelled) return;
         setCertificates(data.recentCertificates || []);
         setTemplates(data.recentTemplates || []);
-        setAccountStats(data.stats || null);
-        writeSessionJson(cacheKey, data);
+        setSummaryError(null);
+        writeSessionJson(cacheKey, { recentCertificates: data.recentCertificates, recentTemplates: data.recentTemplates });
       } catch (error) {
         console.error('[Dashboard] Error fetching summary:', error);
+        // A failed load must not look like an empty account.
+        if (!cancelled && !cached) setSummaryError(error instanceof Error ? error.message : 'Dashboard data is temporarily unavailable.');
       } finally {
         if (!cancelled) {
           setCertificatesLoading(false);
@@ -178,7 +163,31 @@ export default function DashboardPage() {
 
     void fetchDashboardSummary();
     return () => { cancelled = true; };
-  }, [user?.id]);
+  }, [user?.id, summaryAttempt]);
+
+  // Exact account totals, shared with History. Shown as pending until they
+  // arrive; if they cannot be computed the cards fall back to the recent list.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const cachedStats = readCachedAccountStats(user.id);
+    if (cachedStats) {
+      setAccountStats(cachedStats);
+      setStatsState('ready');
+    } else {
+      setStatsState('loading');
+    }
+    fetchAccountStats(user.id)
+      .then((stats) => {
+        if (cancelled) return;
+        setAccountStats(stats);
+        setStatsState('ready');
+      })
+      .catch(() => {
+        if (!cancelled && !cachedStats) setStatsState('unavailable');
+      });
+    return () => { cancelled = true; };
+  }, [user?.id, summaryAttempt]);
 
   // Fetch public templates
   useEffect(() => {
@@ -321,6 +330,8 @@ export default function DashboardPage() {
 
   // Show skeleton while data is loading
   const isDataLoading = templatesLoading || certificatesLoading;
+  // Stat cards wait for the exact totals, or for the list they fall back to.
+  const isStatsLoading = statsState === 'loading' || (statsState === 'unavailable' && isDataLoading);
 
   // Account totals: exact server aggregates, or (if those are unavailable)
   // what the recent records show.
@@ -422,7 +433,12 @@ export default function DashboardPage() {
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user?.id) return;
-    
+    if (file.size > MAX_TEMPLATE_FILE_BYTES) {
+      alert('This file is larger than 10 MB, so it cannot be imported as a template.');
+      e.target.value = '';
+      return;
+    }
+
     setImportLoading(true);
     
     try {
@@ -431,20 +447,26 @@ export default function DashboardPage() {
       const templateData = JSON.parse(text);
       
       // Validate it's a valid template (has objects array or canvasJSON)
-      let canvasJSON: string;
+      let rawCanvasJSON: string;
       let templateName = templateData.name || file.name.replace('.json', '');
-      
+
       if (templateData.canvasJSON) {
         // Already a Serenity template format
-        canvasJSON = typeof templateData.canvasJSON === 'string' 
-          ? templateData.canvasJSON 
+        rawCanvasJSON = typeof templateData.canvasJSON === 'string'
+          ? templateData.canvasJSON
           : JSON.stringify(templateData.canvasJSON);
       } else if (templateData.objects) {
         // Fabric.js canvas format
-        canvasJSON = JSON.stringify(templateData);
+        rawCanvasJSON = JSON.stringify(templateData);
       } else {
         throw new Error('Invalid template format. Expected Serenity or Fabric.js format.');
       }
+
+      // Same checks and repairs as the editor's Import JSON: files exported
+      // by earlier releases lack the verification flag the server requires.
+      const parsed = parseTemplateFile(rawCanvasJSON);
+      if (!parsed.ok) throw new Error(parsed.error);
+      const canvasJSON = JSON.stringify(parsed.template);
       
       // Create new template via API
       const response = await authenticatedFetch('/api/templates', {
@@ -485,178 +507,55 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="app-shell dashboard-shell min-h-screen bg-background">
-      {/* Navigation */}
-      <motion.nav 
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5"
-      >
-        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl shadow-slate-950/5 backdrop-blur-2xl sm:px-6 lg:px-7">
-          <Link href="/" className="group"><SerenityBrand /></Link>
-          
-          {/* Search Bar */}
-          <div className="hidden md:flex flex-1 max-w-md mx-8">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search templates..."
-                aria-label="Search templates"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input pl-10 pr-4 h-10 w-full"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {EVENTS_ENABLED && (
-            <Link href="/events" className="hidden items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold transition hover:border-primary/40 hover:bg-muted md:inline-flex">
-              <Calendar className="h-4 w-4" />
-              Events
-            </Link>
-            )}
-            <ThemeToggle />
-            <Link href="/editor" className="btn-primary">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">New Certificate</span>
-            </Link>
-            
-            {/* User Menu */}
-            <div className="relative">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 hover:bg-muted transition-colors"
-              >
-                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-xs font-medium">
-                  {user?.name?.[0]?.toUpperCase() || 'U'}
-                </div>
-                <span className="hidden sm:inline text-sm font-medium truncate max-w-[100px]">
-                  {user?.name || 'User'}
-                </span>
-              </button>
-              
-              <AnimatePresence>
-                {showUserMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                    className="absolute right-0 mt-2 w-56 rounded-xl border border-border bg-card shadow-xl z-50"
-                  >
-                    <div className="p-3 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium truncate">{user?.name}</p>
-                        {user?.isPremium && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-warning dark:bg-warning/30 text-warning text-xs font-medium">
-                            <Crown className="h-3 w-3" />
-                            PRO
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
-                    </div>
-                    <div className="p-2">
-                      {!user?.isPremium && (
-                        <Link
-                          href="/premium"
-                          onClick={() => setShowUserMenu(false)}
-                          className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm bg-warning text-white hover:bg-warning/90 transition-colors mb-1"
-                        >
-                          <Crown className="h-4 w-4" />
-                          Upgrade to Premium
-                        </Link>
-                      )}
-                      <Link
-                        href="/settings"
-                        onClick={() => setShowUserMenu(false)}
-                        className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted transition-colors"
-                      >
-                        <Settings className="h-4 w-4" />
-                        Settings
-                      </Link>
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          logout();
-                        }}
-                        className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                      >
-                        <LogOut className="h-4 w-4" />
-                        Sign Out
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
-      </motion.nav>
+    <div className="app-shell dashboard-shell min-h-screen">
+      <SiteNav />
 
       <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Welcome Section */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="dashboard-welcome relative mb-8 overflow-hidden rounded-[2rem] border border-white/10 px-5 py-7 text-white shadow-2xl shadow-primary/20 sm:px-8 sm:py-9"
-        >
-          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <h1 className="font-display text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
-                  Welcome back, {user?.name?.split(' ')[0] || 'there'}.
-                </h1>
-                {user?.isPremium && (
-                  <motion.span 
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning text-white text-sm font-semibold shadow-sm"
-                  >
-                    <Crown className="h-4 w-4" />
-                    Premium
-                  </motion.span>
-                )}
-              </div>
-              <p className="mt-2 max-w-2xl text-slate-300">
-                {totalCertificates === 0 
-                  ? "Get started by creating your first certificate template."
-                  : thisMonthCerts > 0 
-                    ? `You've generated ${thisMonthCerts} ${plural(thisMonthCerts, 'certificate')} this month. Keep it up!`
-                    : "Here's what's happening with your certificates today."
-                }
-              </p>
-            </div>
-            {/* Quick stats for today */}
-            {!isDataLoading && totalCertificates > 0 && (
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-emerald-200 backdrop-blur">
-                  <MailCheck className="h-4 w-4" />
-                  <span className="font-medium">{emailsSent} sent</span>
-                </div>
-                {emailsFailed > 0 && (
-                  <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-rose-200 backdrop-blur">
-                    <MailX className="h-4 w-4" />
-                    <span className="font-medium">{emailsFailed} failed</span>
-                  </div>
-                )}
-              </div>
+        <section className="workspace-intro">
+          <GuillocheSeal id="studio-seal" className="workspace-rosette" draw />
+          <div>
+            <h1>Certificate studio</h1>
+            <p>{user?.name ? `Welcome back, ${user.name.split(' ')[0]}.` : 'Welcome back.'} Choose a design or continue your recent work.</p>
+            {!isStatsLoading && totalCertificates > 0 && (
+              <p className="text-sm"><span>{emailsSent} sent</span>{emailsFailed > 0 && <span> · {emailsFailed} failed</span>}</p>
             )}
+            <div className="workspace-actions">
+              <Link href="/templates" className="btn-primary"><FileText size={17} />Start from a template</Link>
+              <Link href="/editor" className="btn-outline"><Plus size={17} />Blank design</Link>
+            </div>
           </div>
-        </motion.div>
+          <Link href={`/editor?template=${HONOURS_ID}`} className="workspace-feature">
+            <Image unoptimized src={honoursThumbnail} width={842} height={595} alt="" />
+            <span>{HONOURS_NAME}<ArrowRight size={17} aria-hidden="true" /></span>
+          </Link>
+        </section>
+
+        {summaryError && (
+          <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+            <span>Your recent templates and certificates could not be loaded. {summaryError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryError(null);
+                setTemplatesLoading(true);
+                setCertificatesLoading(true);
+                setSummaryAttempt((attempt) => attempt + 1);
+              }}
+              className="rounded-lg border border-border bg-card px-3 py-1.5 font-medium hover:bg-muted"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Stats Grid */}
-        <motion.div 
-          initial="initial"
-          animate="animate"
-          variants={staggerContainer}
-          className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4 mb-8"
+        <div
+          className="dashboard-ledger mb-8 grid grid-cols-2 lg:grid-cols-4"
         >
-          {isDataLoading ? (
+          {isStatsLoading ? (
             // Skeleton loading state for stats
             [1, 2, 3, 4].map((i) => (
-              <div key={i} className="relative overflow-hidden rounded-2xl border border-border bg-card p-6">
+              <div key={i} className="relative overflow-hidden p-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-3">
                     <Skeleton className="h-4 w-20" />
@@ -668,19 +567,17 @@ export default function DashboardPage() {
               </div>
             ))
           ) : (
-            stats.map((stat, index) => (
-            <motion.div
+            stats.map((stat) => (
+            <div
               key={stat.id}
-              variants={fadeInUp}
-              whileHover={{ y: -4, transition: { duration: 0.2 } }}
-              className="dashboard-stat-card relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-md sm:p-6"
+              className="dashboard-stat-card relative overflow-hidden p-4 transition-colors duration-300 hover:bg-muted/40 sm:p-6"
             >
               <div className="relative flex items-start justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">
                     {stat.label}
                   </p>
-                  <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                  <p className="dashboard-stat-value text-3xl sm:text-4xl">
                     {stat.value.toLocaleString()}
                   </p>
                   <div className="flex items-center gap-1 mt-2">
@@ -698,92 +595,17 @@ export default function DashboardPage() {
                   <stat.icon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
               </div>
-            </motion.div>
+            </div>
           ))
           )}
-        </motion.div>
+        </div>
 
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="mb-8"
-        >
-          <h2 className="font-display text-xl font-semibold mb-4">Quick Actions</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Link href="/editor">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-white shadow-lg">
-                  <Plus className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-semibold">Create New</p>
-                  <p className="text-sm text-muted-foreground">Start from scratch</p>
-                </div>
-              </motion.div>
-            </Link>
-
-            <Link href="/templates">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
-              >
-                <div className="tile-primary h-11 w-11 shrink-0">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-semibold">Browse Templates</p>
-                  <p className="text-sm text-muted-foreground">Pre-made designs</p>
-                </div>
-              </motion.div>
-            </Link>
-
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleImportClick}
-              className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
-            >
-              <div className="tile-warning h-11 w-11 shrink-0">
-                <Upload className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-semibold">Import Template</p>
-                <p className="text-sm text-muted-foreground">Upload JSON file</p>
-              </div>
-              <input
-                aria-label="Import Template"
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleFileImport}
-                className="hidden"
-              />
-            </motion.div>
-
-            <Link href="/history">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="dashboard-action-card flex cursor-pointer items-center gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg"
-              >
-                <div className="tile-secondary h-11 w-11 shrink-0">
-                  <Clock className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-semibold">View History</p>
-                  <p className="text-sm text-muted-foreground">Past generations</p>
-                </div>
-              </motion.div>
-            </Link>
-          </div>
-        </motion.div>
+        <div className="workspace-links">
+          <Link href="/my-templates"><FileText size={17} /> My Templates</Link>
+          <button type="button" onClick={handleImportClick} disabled={importLoading}><Upload size={17} /> Import Template</button>
+          <input aria-label="Import Template" ref={fileInputRef} type="file" accept=".json" onChange={handleFileImport} hidden />
+          <Link href="/history"><Clock size={17} /> View History</Link>
+        </div>
 
         {/* Main Content Grid */}
         <div className="grid gap-8 lg:grid-cols-3">
@@ -794,6 +616,17 @@ export default function DashboardPage() {
             transition={{ delay: 0.3 }}
             className="lg:col-span-2"
           >
+            <div className="relative mb-4">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Search templates..."
+                aria-label="Search templates"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input h-10 w-full pl-10 pr-4"
+              />
+            </div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
                 <h2 className="font-display text-xl font-semibold">Templates</h2>

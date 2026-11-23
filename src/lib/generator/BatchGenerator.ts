@@ -44,7 +44,15 @@ export interface BatchGenerationOptions {
   onError?: (index: number, message: string) => void;
   onCertificateGenerated?: (id: string, record: Partial<FirebaseCertificateRecord>) => void;
   isCancelled?: () => boolean;
+  /**
+   * An allowance the caller fetched moments ago. Used instead of fetching it
+   * again when no older than ALLOWANCE_FRESH_MS. The server still enforces the
+   * allowance when records are saved, whatever this says.
+   */
+  allowance?: { canGenerate: boolean; isPremium: boolean; remaining: number; checkedAt: number };
 }
+
+const ALLOWANCE_FRESH_MS = 30_000;
 
 export interface GeneratedCertificateResult {
   rowIndex: number;
@@ -69,6 +77,7 @@ export interface BatchGenerationResult {
   certificateImageUrls: Map<string, string>;
   certificatePdfBlobs: Map<string, Blob>;
   zipBlob?: Blob;
+  allowanceUnavailable?: boolean;
   limitReached?: boolean;
   remaining?: number;
 }
@@ -160,6 +169,7 @@ export async function generateBatch(
     onError,
     onCertificateGenerated,
     isCancelled,
+    allowance,
   } = options;
 
   const generationBatchId = nanoid(12);
@@ -179,46 +189,47 @@ export async function generateBatch(
     certificatePdfBlobs: new Map(),
   };
 
-  await loadFontsForTemplate(templateJSON);
-
   // Check user's certificate generation limit before starting
   if (userId) {
     try {
-      const premiumResponse = await fetch('/api/users/premium', {
-        headers: authHeaders(authToken),
-      });
-      const premiumData = await premiumResponse.json();
+      const fresh = allowance && Date.now() - allowance.checkedAt <= ALLOWANCE_FRESH_MS;
+      const premiumData = fresh
+        ? { success: true, canGenerate: allowance.canGenerate, remainingFree: allowance.remaining, isPremium: allowance.isPremium }
+        : await (await fetch('/api/users/premium', { headers: authHeaders(authToken) })).json();
 
-      if (premiumData.success) {
-        const canGenerate = premiumData.canGenerate;
-        const remainingFree = premiumData.remainingFree ?? 5;
-        const isPremium = premiumData.isPremium;
+      if (!premiumData.success) throw new Error('Allowance check failed');
+      const canGenerate = premiumData.canGenerate;
+      const remainingFree = premiumData.remainingFree;
+      const isPremium = premiumData.isPremium;
 
-        if (!isPremium && !canGenerate) {
-          result.errors.push({
-            index: -1,
-            message: 'Free tier limit reached. Paid upgrades are not currently available.'
-          });
-          result.limitReached = true;
-          result.remaining = 0;
-          return result;
-        }
+      if (!isPremium && !canGenerate) {
+        result.errors.push({
+          index: -1,
+          message: 'The free certificate limit has been reached.'
+        });
+        result.limitReached = true;
+        result.remaining = 0;
+        return result;
+      }
 
-        if (!isPremium && dataRows.length > remainingFree) {
-          result.errors.push({
-            index: -1,
-            message: `You can only generate ${remainingFree} more certificate(s) on the free tier.`
-          });
-          result.limitReached = true;
-          result.remaining = remainingFree;
-          return result;
-        }
+      if (!isPremium && dataRows.length > remainingFree) {
+        result.errors.push({
+          index: -1,
+          message: `You can only generate ${remainingFree} more certificate(s) on the free tier.`
+        });
+        result.limitReached = true;
+        result.remaining = remainingFree;
+        return result;
       }
     } catch (e) {
       console.warn('[BatchGenerator] Failed to check premium status:', e);
-      // Continue anyway if the check fails - the API will still enforce limits
+      result.allowanceUnavailable = true;
+      result.errors.push({ index: -1, message: 'Your generation allowance could not be loaded.' });
+      return result;
     }
   }
+
+  await loadFontsForTemplate(templateJSON);
 
   // Register custom Fabric classes
   registerVariableTextbox();

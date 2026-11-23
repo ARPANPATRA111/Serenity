@@ -13,6 +13,7 @@ import { useFabricContext } from './FabricContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { validateTemplateInvariants } from '@/lib/fabric/templateInvariants';
+import { draftKey, readDraft, removeDraft, shouldOfferDraft, type Draft } from '@/lib/editor/drafts';
 import { exportCanvasImage } from '@/lib/fabric/exportQuality';
 import { A4_LANDSCAPE } from '@/lib/fabric/useFabric';
 import { useSearchParams } from 'next/navigation';
@@ -99,6 +100,20 @@ export function EditorLayout() {
   // Track which template was last loaded
   const lastLoadedTemplateId = useRef<string | null>(null);
 
+  // Unsaved-design drafts (see lib/editor/drafts.ts), scoped to this account
+  // and design. A newer draft than the saved design is offered, never applied
+  // without a choice.
+  const activeDraftKeyRef = useRef<string | null>(null);
+  const [draftOffer, setDraftOffer] = useState<{ key: string; draft: Draft } | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const startDraftTracking = useCallback((key: string, savedAt: string | null) => {
+    if (!fabricInstance) return;
+    activeDraftKeyRef.current = key;
+    fabricInstance.setDraftKey(key);
+    const draft = readDraft(key);
+    setDraftOffer(shouldOfferDraft(draft, fabricInstance.serializeForDraft(), savedAt) ? { key, draft } : null);
+  }, [fabricInstance]);
+
   // Reset store when creating a new template (no template param in URL)
   useEffect(() => {
     const paramTemplateId = searchParams?.get('template');
@@ -112,71 +127,142 @@ export function EditorLayout() {
     }
   }, [searchParams, resetEditorStore, setTemplateInfo]);
 
-  // Load template from API
-  useEffect(() => {
-    const paramTemplateId = searchParams?.get('template');
-    
-    if (paramTemplateId && paramTemplateId !== lastLoadedTemplateId.current && fabricInstance && user?.id) {
-      setLoadingTemplate(true);
-      templateLoadingRef.current = true;
-      lastLoadedTemplateId.current = paramTemplateId;
-      
-      authenticatedFetch(`/api/templates/${paramTemplateId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.template) {
-            // Check ownership - if not owner, set templateId to null (Copy Mode)
-            const isOwner = data.template.userId === user.id;
-            
-            if (isOwner) {
-              setTemplateInfo(data.template.id, data.template.name);
-            } else {
-              setTemplateInfo(null, `Copy of ${data.template.name}`);
-            }
-            
-            setTemplateName(isOwner ? data.template.name : `Copy of ${data.template.name}`);
+  // Load a saved template. The request starts as soon as the template ID and
+  // the signed-in user are known, while the canvas is still starting; the
+  // design is drawn once both are ready. Only the newest request is applied.
+  type FetchedTemplate = { requestedId: string; template: any };
+  const [fetchedTemplate, setFetchedTemplate] = useState<FetchedTemplate | null>(null);
+  const [templateLoadError, setTemplateLoadError] = useState<string | null>(null);
+  const [templateLoadAttempt, setTemplateLoadAttempt] = useState(0);
+  const templateRequestRef = useRef(0);
+  const paramTemplateId = searchParams?.get('template') || null;
 
-            // Load certificate metadata if available, otherwise reset to defaults
-            if (data.template.certificateMetadata) {
-              setCertificateMetadata(data.template.certificateMetadata);
-            } else {
-              // Reset to defaults if template has no metadata
-              setCertificateMetadata({ title: '', issuedBy: '', description: '', category: undefined, eventId: undefined });
-            }
-            
-            if (data.template.canvasJSON) {
-              try {
-                // Returned so the loading state lasts until the canvas is ready.
-                return fabricInstance.loadFromJSON(data.template.canvasJSON).then(() => {
-                   // Clean up selection after load
-                   fabricInstance.getCanvas()?.discardActiveObject();
-                   fabricInstance.getCanvas()?.requestRenderAll();
-                   setIsDirty(false);
-                   hasLoadedTemplate.current = true;
-                }).catch(e => {
-                   console.error('Failed to load template', e);
-                });
-              } catch (e) {
-                console.error('Failed to parse template JSON', e);
-              }
-            }
-          }
-        })
-        .catch(err => {
-          console.error('Failed to load template', err);
-        })
-        .finally(() => {
-          templateLoadingRef.current = false;
-          setLoadingTemplate(false);
-        });
+  useEffect(() => {
+    if (!paramTemplateId || !user?.id) return;
+    if (paramTemplateId === lastLoadedTemplateId.current) return;
+    const request = ++templateRequestRef.current;
+    setLoadingTemplate(true);
+    templateLoadingRef.current = true;
+    setTemplateLoadError(null);
+    setFetchedTemplate(null);
+
+    authenticatedFetch(`/api/templates/${paramTemplateId}`)
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (request !== templateRequestRef.current) return;
+        if (!res.ok || !data.success || !data.template) {
+          throw new Error(res.status === 404 || res.status === 403
+            ? 'This template does not exist or is not shared with you.'
+            : data.error || 'The template could not be loaded.');
+        }
+        setFetchedTemplate({ requestedId: paramTemplateId, template: data.template });
+      })
+      .catch((err) => {
+        if (request !== templateRequestRef.current) return;
+        console.error('Failed to load template', err);
+        setTemplateLoadError(err instanceof Error ? err.message : 'The template could not be loaded.');
+        setLoadingTemplate(false);
+        // Saving or generating stays blocked: the canvas is not this design.
+        templateLoadingRef.current = true;
+      });
+  }, [paramTemplateId, user?.id, templateLoadAttempt]);
+
+  useEffect(() => {
+    if (!fetchedTemplate || !fabricInstance || !user?.id) return;
+    if (fetchedTemplate.requestedId !== paramTemplateId) return;
+    const { template } = fetchedTemplate;
+    setFetchedTemplate(null);
+
+    // Check ownership - if not owner, set templateId to null (Copy Mode)
+    const isOwner = template.userId === user.id;
+    setTemplateInfo(isOwner ? template.id : null, isOwner ? template.name : `Copy of ${template.name}`);
+    setTemplateName(isOwner ? template.name : `Copy of ${template.name}`);
+    setCertificateMetadata(template.certificateMetadata
+      || { title: '', issuedBy: '', description: '', category: undefined, eventId: undefined });
+
+    const finish = (error?: unknown) => {
+      if (error) {
+        console.error('Failed to draw template', error);
+        setTemplateLoadError('The design could not be drawn. Retry, or start a new design.');
+        templateLoadingRef.current = true;
+      } else {
+        // Recorded only after success, so a failure can be retried.
+        lastLoadedTemplateId.current = fetchedTemplate.requestedId;
+        hasLoadedTemplate.current = true;
+        templateLoadingRef.current = false;
+        setIsDirty(false);
+        setLastSavedAt(isOwner ? template.updatedAt || null : null);
+        // Drafts of a copy are kept apart from drafts of the owner's design.
+        startDraftTracking(draftKey(user.id, isOwner ? template.id : `copy-of-${template.id}`), isOwner ? template.updatedAt : null);
+      }
+      setLoadingTemplate(false);
+    };
+
+    if (!template.canvasJSON) {
+      finish();
+      return;
     }
-  }, [searchParams, fabricInstance, setTemplateInfo, setTemplateName, setIsDirty, setCertificateMetadata, user?.id]);
+    fabricInstance.loadFromJSON(template.canvasJSON)
+      .then(() => {
+        fabricInstance.getCanvas()?.discardActiveObject();
+        fabricInstance.getCanvas()?.requestRenderAll();
+        finish();
+      })
+      .catch(finish);
+  }, [fetchedTemplate, fabricInstance, paramTemplateId, user?.id, setTemplateInfo, setTemplateName, setIsDirty, setCertificateMetadata, startDraftTracking]);
+
+  const retryTemplateLoad = useCallback(() => {
+    lastLoadedTemplateId.current = null;
+    setTemplateLoadError(null);
+    setTemplateLoadAttempt((attempt) => attempt + 1);
+  }, []);
+
+  // A blank new design keeps drafts under this account's "new" key.
+  useEffect(() => {
+    if (paramTemplateId || !fabricInstance || !user?.id) return;
+    startDraftTracking(draftKey(user.id, null), null);
+  }, [paramTemplateId, fabricInstance, user?.id, startDraftTracking]);
+
+  // Leaving with unsaved changes asks first. A draft is also kept, but the
+  // browser prompt is the only warning before work is replaced by navigation.
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
+
+  const restoreDraft = useCallback(async () => {
+    if (!draftOffer || !fabricInstance) return;
+    const offer = draftOffer;
+    setDraftOffer(null);
+    try {
+      await fabricInstance.loadFromJSON(offer.draft.canvasJSON);
+      setIsDirty(true);
+    } catch (error) {
+      console.error('Draft could not be restored', error);
+      setSaveErrorMessage('The draft could not be restored. Your saved design is unchanged.');
+    }
+  }, [draftOffer, fabricInstance, setIsDirty]);
+
+  const discardDraft = useCallback(() => {
+    if (draftOffer) removeDraft(draftOffer.key);
+    setDraftOffer(null);
+  }, [draftOffer]);
 
 
   // Handle Save - returns { success, error } for consumers like GenerationModal
   const handleSave = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
     if (!fabricInstance || !user || templateLoadingRef.current) return { success: false, error: 'Not ready' };
-    
+    // Preview puts a recipient's values on the canvas; saving then would store
+    // them in the reusable template and its thumbnail.
+    if (useEditorStore.getState().isPreviewMode) {
+      return { success: false, error: 'Exit Preview before saving.' };
+    }
+
     setSaveStatus('saving');
     
     try {
@@ -230,10 +316,20 @@ export function EditorLayout() {
         setSaveStatus('saved');
         setIsDirty(false);
         setSaveErrorMessage(null);
+        setLastSavedAt(new Date().toISOString());
+        setDraftOffer(null);
+        // The saved design replaces its draft.
+        if (activeDraftKeyRef.current) removeDraft(activeDraftKeyRef.current);
         // Check both data.id and data.template?.id for new templates
         const newTemplateId = data.id || data.template?.id;
         if (newTemplateId && !templateId) {
           setTemplateInfo(newTemplateId, savedName);
+          // Drafts of the design continue under its new ID.
+          const key = draftKey(user.id, newTemplateId);
+          activeDraftKeyRef.current = key;
+          fabricInstance.setDraftKey(key);
+          // Already on the canvas: the URL change below must not load it again.
+          lastLoadedTemplateId.current = newTemplateId;
           // Update URL without reload
           window.history.pushState({}, '', `/editor?template=${newTemplateId}`);
         }
@@ -261,14 +357,27 @@ export function EditorLayout() {
         <Toolbar 
           onSave={handleSave} 
           saveStatus={saveStatus}
-          isTemplateLoading={loadingTemplate}
+          isTemplateLoading={loadingTemplate || !!templateLoadError}
+          lastSavedAt={lastSavedAt}
+          isDirty={isDirty}
           onGenerate={() => setGenerationModalOpen(true)}
+          onOpenData={() => {
+            // The data sidebar exists at desktop widths; smaller screens use the drawer.
+            if (window.matchMedia('(min-width: 1024px)').matches) setRightSidebarOpen(true);
+            else setMobileRightDrawerOpen(true);
+            requestAnimationFrame(() => {
+              const upload = Array.from(document.querySelectorAll<HTMLElement>('[data-roster-upload]'))
+                .find((element) => element.offsetParent !== null);
+              upload?.focus();
+            });
+          }}
           onOpenCertificateInfo={() => setCertificateInfoModalOpen(true)}
         />
       </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 overflow-hidden relative min-h-0">
+      {/* Bottom padding keeps the canvas clear of the phone/tablet toolbar. */}
+      <div className="flex flex-1 overflow-hidden relative min-h-0 pb-[60px] lg:pb-0">
         {/* Left Sidebar - Hidden on small screens */}
         {leftSidebarOpen && (
           <div 
@@ -289,8 +398,41 @@ export function EditorLayout() {
           {/* Properties Bar (Top of Canvas) */}
           <PropertiesBar />
 
+          {draftOffer && (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm">
+              <span>
+                Unsaved changes to this design from{' '}
+                {new Date(draftOffer.draft.savedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} were found in this browser.
+              </span>
+              <span className="flex gap-2">
+                <button type="button" onClick={() => void restoreDraft()} className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+                  Restore changes
+                </button>
+                <button type="button" onClick={discardDraft} className="rounded-md border border-border bg-card px-3 py-1 text-xs font-medium hover:bg-muted">
+                  Discard
+                </button>
+              </span>
+            </div>
+          )}
+
           {/* Canvas Wrapper */}
           <div className="flex-1 relative overflow-hidden">
+             {templateLoadError && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+                  <div role="alert" className="max-w-sm rounded-xl border border-border bg-card p-5 text-center shadow-lg">
+                    <p className="font-semibold">This template could not be opened</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{templateLoadError} Saving and generating are paused so nothing overwrites it.</p>
+                    <div className="mt-4 flex justify-center gap-2">
+                      <button type="button" onClick={retryTemplateLoad} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                        Retry
+                      </button>
+                      <a href="/editor" className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted">
+                        New design
+                      </a>
+                    </div>
+                  </div>
+                </div>
+             )}
              {loadingTemplate && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-sm">
                    <div className="flex flex-col items-center gap-2">
@@ -332,7 +474,7 @@ export function EditorLayout() {
                 <button 
                   onClick={() => setMobileLeftDrawerOpen(false)}
                   className="p-1 rounded-lg hover:bg-muted"
-                  title="Close"
+                  title="Close" aria-label="Close tools and media"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -357,7 +499,7 @@ export function EditorLayout() {
                 <button 
                   onClick={() => setMobileRightDrawerOpen(false)}
                   className="p-1 rounded-lg hover:bg-muted"
-                  title="Close"
+                  title="Close" aria-label="Close data sources"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -370,13 +512,16 @@ export function EditorLayout() {
         )}
       </div>
 
-      {/* Mobile Bottom Toolbar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur-sm safe-area-bottom">
+      {/* Phone and tablet bottom toolbar. The data sidebar only appears at
+          desktop widths (lg), so tablets need the Data button as well; the
+          tools sidebar appears from md, so Tools is phone-only. */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur-sm safe-area-bottom">
         <div className="flex items-center justify-around py-2 px-4">
           <button
             onClick={() => setMobileLeftDrawerOpen(true)}
-            className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-muted transition-colors"
+            className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-muted transition-colors md:hidden"
             title="Tools & Media"
+            aria-label="Tools and media"
           >
             <Palette className="h-5 w-5" />
             <span className="text-[10px] text-muted-foreground">Tools</span>
@@ -385,6 +530,7 @@ export function EditorLayout() {
             onClick={() => setMobileRightDrawerOpen(true)}
             className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-muted transition-colors"
             title="Data Sources"
+            aria-label="Data sources: import a spreadsheet and map fields"
           >
             <Database className="h-5 w-5" />
             <span className="text-[10px] text-muted-foreground">Data</span>
@@ -395,6 +541,10 @@ export function EditorLayout() {
       {/* Generation Modal */}
       {generationModalOpen && (
         <GenerationModal
+          onEditInfo={() => {
+            setGenerationModalOpen(false);
+            setCertificateInfoModalOpen(true);
+          }}
           isOpen
           onClose={() => setGenerationModalOpen(false)}
           onSave={handleSave}
@@ -410,7 +560,7 @@ export function EditorLayout() {
 
       {/* Save Error Toast */}
       {saveErrorMessage && (
-        <div className="fixed bottom-16 md:bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-300">
+        <div className="fixed bottom-16 lg:bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-300">
           <div className="flex items-start gap-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg p-4 shadow-lg max-w-md">
             <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
             <div className="flex-1">

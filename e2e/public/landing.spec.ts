@@ -44,20 +44,77 @@ test.describe('public landing', () => {
     await expect(page.getByRole('link', { name: /explore templates/i }).first()).toBeVisible();
   });
 
-  test('the whole workflow is described on the page', async ({ page }) => {
+  test('the landing page summarises the workflow in pictures and short copy', async ({ page }) => {
     await page.goto('/');
     const body = await page.locator('body').innerText();
-    for (const term of ['Design', 'Import', 'Map', 'Generate', 'Deliver', 'Verify']) {
+    for (const term of ['Design', 'Import', 'Deliver', 'verify']) {
       expect(body).toContain(term);
     }
     expect(body).toMatch(/CSV/);
     expect(body).toMatch(/Excel/);
     expect(body).toMatch(/QR/i);
     expect(body).toMatch(/PDF/);
+    // Each step is explained by an illustration, not a paragraph.
+    expect(await page.locator('.step-grid .step-art').count()).toBe(3);
+  });
+
+  test('the full six-step workflow lives on /how-it-works', async ({ page }) => {
+    await page.goto('/how-it-works');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    const body = await page.locator('main').innerText();
+    for (const term of ['Design', 'Import', 'Map', 'Generate', 'Deliver', 'Verify']) {
+      expect(body).toContain(term);
+    }
+  });
+
+  test('hero slideshow cycles through different certificate designs', async ({ page }) => {
+    await page.goto('/');
+    const caption = page.locator('.proof-template-name');
+    const first = await caption.innerText();
+    await page.getByRole('button', { name: /next design/i }).click();
+    await expect(caption).not.toHaveText(first);
+    // The pile keeps earlier sheets behind the new one.
+    expect(await page.locator('.proof-card').count()).toBeGreaterThanOrEqual(3);
+    await expect(page.locator('.proof-card[data-depth="0"] svg[role="img"]')).toHaveCount(1);
+  });
+
+  test('the slideshow advances on its own every five seconds, even under the pointer and while scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    const caption = page.locator('.proof-template-name');
+    const first = await caption.innerText();
+    // Resting the pointer on the pile used to pause it; it must not.
+    await page.locator('.proof-deck').hover();
+    await expect(caption).not.toHaveText(first, { timeout: 7000 });
+    const second = await caption.innerText();
+    await page.mouse.wheel(0, 300);
+    await expect(caption).not.toHaveText(second, { timeout: 7000 });
+  });
+
+  test('the row and verification chips sit outside the certificate', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.waitForTimeout(2000);
+    const sheet = await page.locator('.proof-card[data-depth="0"]').boundingBox();
+    for (const chip of await page.locator('.proof-meta .proof-chip').all()) {
+      const box = await chip.boundingBox();
+      expect(box!.y, 'a chip must not overlap the top certificate').toBeGreaterThanOrEqual(sheet!.y + sheet!.height - 1);
+    }
+  });
+
+  test('every page with a bar uses the same site navigation; verification has none', async ({ page }) => {
+    for (const path of ['/', '/templates', '/features', '/pricing']) {
+      await page.goto(path);
+      await expect(page.locator('header.sr-nav'), path).toHaveCount(1);
+      await expect(page.locator('.app-nav-frame'), path).toHaveCount(0);
+    }
+    await page.goto('/verify');
+    await expect(page.getByRole('navigation', { name: /primary/i })).toHaveCount(0);
+    await expect(page.locator('header.sr-nav')).toHaveCount(0);
   });
 
   test('product evidence is real optimised imagery with alt text', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/features');
     const shots = page.locator('figure.sr-shot img');
     expect(await shots.count()).toBeGreaterThanOrEqual(3);
 
@@ -69,46 +126,25 @@ test.describe('public landing', () => {
     }
   });
 
-  test('template gallery renders server-side cards with previews', async ({ page }) => {
+  test('template showcase draws real designs that open in the editor', async ({ page }) => {
     await page.goto('/');
-    const cards = page.locator('#templates li.sr-tpl');
-    expect(await cards.count()).toBeGreaterThanOrEqual(3);
-
-    // Every preview must carry alt text and resolve to an inline or https source.
-    const previews = page.locator('#templates li.sr-tpl img');
-    for (let index = 0; index < (await previews.count()); index += 1) {
-      const source = await previews.nth(index).getAttribute('src');
-      expect(source).toMatch(/^(data:image\/|https:\/\/)/);
-      expect(await previews.nth(index).getAttribute('alt')).toBeTruthy();
+    const items = page.locator('#templates .tpl-item a:not([aria-hidden="true"])');
+    expect(await items.count()).toBeGreaterThanOrEqual(6);
+    for (let index = 0; index < (await items.count()); index += 1) {
+      expect(await items.nth(index).getAttribute('href')).toMatch(/^\/editor\?template=bundled-/);
     }
+    await expect(page.locator('#templates svg[role="img"]').first()).toHaveAttribute('aria-label', /template/);
   });
 
-  test('template gallery never leaks author identity', async ({ page }) => {
+  test('template showcase never leaks author identity', async ({ page }) => {
     await page.goto('/');
     const gallery = await page.locator('#templates').innerText();
     expect(gallery).not.toMatch(/@[a-z0-9.-]+\.[a-z]{2,}/i);
     expect(gallery).not.toMatch(/\bby\s+[A-Z][a-z]+\s+[A-Z][a-z]+/);
   });
 
-  test('template filter narrows the grid without a reload', async ({ page }) => {
-    await page.goto('/');
-    const group = page.getByRole('group', { name: /filter templates/i });
-    if ((await group.count()) === 0) test.skip();
-
-    const cards = page.locator('#templates li.sr-tpl');
-    const total = await cards.count();
-
-    const firstCategory = group.getByRole('button').nth(1);
-    await firstCategory.click();
-    await expect(firstCategory).toHaveAttribute('aria-pressed', 'true');
-    expect(await cards.count()).toBeLessThanOrEqual(total);
-
-    await group.getByRole('button', { name: /^all$/i }).click();
-    expect(await cards.count()).toBe(total);
-  });
-
   test('FAQ uses native disclosure semantics and answers core questions', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/faq');
     await expect(page.getByRole('heading', { name: /common questions/i })).toBeVisible();
 
     const items = page.locator('#faq details.sr-acc');
@@ -116,8 +152,6 @@ test.describe('public landing', () => {
     await expect(page.getByText(/What is Serenity Certificate Generator\?/i)).toBeVisible();
 
     // Answers ship in the HTML whether open or not, so they stay crawlable.
-    // A closed <details> renders no text, so this reads textContent rather
-    // than innerText.
     const closed = items.nth(2);
     expect(await closed.getAttribute('open')).toBeNull();
     const markup = await closed.evaluate((element) => element.textContent || '');
@@ -125,21 +159,23 @@ test.describe('public landing', () => {
   });
 
   test('pricing stays truthful about the free allowance and Pro', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/pricing');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     const body = await page.locator('body').innerText();
     expect(body).toMatch(/5 persisted certificates/i);
     expect(body).toMatch(/\$0/);
     expect(body).toMatch(/\$20/);
     expect(body).toMatch(/no self-serve checkout|arranged through a request/i);
-    // The source design ships a "TBD" pro tier; ours must state the real price.
     expect(body).not.toMatch(/\bTBD\b/);
   });
 
   test('no fabricated social proof, ratings, or usage counts', async ({ page }) => {
-    await page.goto('/');
-    const body = await page.locator('body').innerText();
-    for (const pattern of FABRICATED_CLAIMS) {
-      expect(body, `landing must not claim: ${pattern}`).not.toMatch(pattern);
+    for (const path of ['/', '/features', '/how-it-works', '/pricing', '/faq']) {
+      await page.goto(path);
+      const body = await page.locator('body').innerText();
+      for (const pattern of FABRICATED_CLAIMS) {
+        expect(body, `${path} must not claim: ${pattern}`).not.toMatch(pattern);
+      }
     }
   });
 
@@ -157,12 +193,35 @@ test.describe('public landing', () => {
     await expect(page.getByRole('navigation', { name: /primary/i })).toBeVisible();
   });
 
-  test('desktop navigation reaches every landing section', async ({ page }) => {
+  test('desktop navigation opens a dedicated page for each topic', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto('/');
-    for (const target of ['#how-it-works', '#product', '#verification', '#templates', '#pricing', '#faq']) {
-      await expect(page.locator(target)).toHaveCount(1);
+    for (const [label, path] of [['Product', '/features'], ['How it works', '/how-it-works'], ['Pricing', '/pricing'], ['FAQ', '/faq']] as const) {
+      await page.goto('/');
+      const nav = page.getByRole('navigation', { name: /primary/i });
+      await nav.getByRole('link', { name: label, exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await expect(nav.getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page');
     }
+  });
+
+  test('the theme switches on the same frame as the click', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: /switch to (dark|light) theme/i })).toBeEnabled();
+    const before = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+    const elapsed = await page.evaluate(async () => {
+      const button = document.querySelector<HTMLButtonElement>('.theme-toggle-button')!;
+      const was = document.documentElement.classList.contains('dark');
+      const start = performance.now();
+      button.click();
+      while (document.documentElement.classList.contains('dark') === was && performance.now() - start < 2000) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return performance.now() - start;
+    });
+    expect(await page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(!before);
+    expect(elapsed, 'the theme must not wait on a page transition').toBeLessThan(150);
   });
 
   test('mobile navigation opens, links out, and closes', async ({ page }) => {
@@ -260,15 +319,11 @@ test.describe('public landing — dark mode', () => {
     expect(overflow).toBeLessThanOrEqual(1);
   });
 
-  test('the inverted bands actually change with the theme', async ({ page }) => {
+  test('the shared backdrop follows the theme', async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem('theme', 'dark'));
     await page.goto('/');
-
-    // The source design has no dark mode; ours must not leave the deep bands
-    // identical in both themes, which would read as unthemed sections.
-    const deep = await page
-      .locator('#templates')
-      .evaluate((element) => getComputedStyle(element).backgroundColor);
-    expect(deep).not.toBe('rgb(11, 24, 41)');
+    const paper = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(paper).toBe('rgb(13, 16, 32)');
+    await expect(page.locator('.site-backdrop')).toHaveCount(1);
   });
 });

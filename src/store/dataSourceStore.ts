@@ -3,12 +3,14 @@ import type { ParsedDataSource, DataRow } from '@/types/fabric.d';
 
 export interface DataSourceState {
   dataSource: ParsedDataSource | null;
+  /** The imported file, kept in memory only so another worksheet can be chosen. */
+  sourceFile: File | null;
   headers: string[];
   rows: DataRow[];
   previewRowIndex: number;
   isLoading: boolean;
   error: string | null;
-  setDataSource: (source: ParsedDataSource | null) => void;
+  setDataSource: (source: ParsedDataSource | null, file?: File | null) => void;
   setPreviewRowIndex: (index: number) => void;
   clearDataSource: () => void;
   setLoading: (loading: boolean) => void;
@@ -18,16 +20,18 @@ export interface DataSourceState {
 
 export const useDataSourceStore = create<DataSourceState>((set, get) => ({
   dataSource: null,
+  sourceFile: null,
   headers: [],
   rows: [],
   previewRowIndex: 0,
   isLoading: false,
   error: null,
 
-  setDataSource: (source) => {
+  setDataSource: (source, file) => {
     if (source) {
       set({
         dataSource: source,
+        ...(file !== undefined ? { sourceFile: file } : {}),
         headers: source.headers,
         rows: source.rows,
         previewRowIndex: 0,
@@ -48,6 +52,7 @@ export const useDataSourceStore = create<DataSourceState>((set, get) => ({
   clearDataSource: () => {
     set({
       dataSource: null,
+      sourceFile: null,
       headers: [],
       rows: [],
       previewRowIndex: 0,

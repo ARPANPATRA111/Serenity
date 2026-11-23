@@ -147,4 +147,16 @@ describe('Firestore tenant and authority boundaries', () => {
     await assertFails(getDoc(doc(anonymousDb, 'generationBatches/batch-a')));
     await assertFails(setDoc(doc(ownerDb, 'generationBatches/batch-b'), { userId: 'user-a', certificateCount: 999 }));
   });
+
+  test('email delivery records, suppressions, provider events and send budgets are server-only', async () => {
+    const ownerDb = environment.authenticatedContext('user-a').firestore();
+    const anonymousDb = environment.unauthenticatedContext().firestore();
+
+    for (const db of [ownerDb, anonymousDb]) {
+      for (const path of ['emailDeliveries/delivery-a', 'emailSuppressions/hash-a', 'emailDeliveryEvents/event-a', 'rateLimits/email_provider_2026-11-23']) {
+        await assertFails(getDoc(doc(db, path)));
+        await assertFails(setDoc(doc(db, path), { userId: 'user-a', status: 'delivered', count: 0 }));
+      }
+    }
+  });
 });

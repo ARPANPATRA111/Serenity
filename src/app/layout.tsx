@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Bricolage_Grotesque, Inter, Space_Grotesk } from 'next/font/google';
+import { Fraunces, Manrope } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { FirebaseProvider } from '@/components/providers/FirebaseProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -11,36 +11,30 @@ import {
   websiteSchema,
   softwareApplicationSchema,
 } from '@/lib/seo/structuredData';
+import { SiteBackdrop } from '@/components/brand/SiteBackdrop';
 import './globals.css';
 
-const inter = Inter({
+/**
+ * Interface face: every label, control, table and paragraph.
+ */
+const sans = Manrope({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-sans',
   display: 'swap',
   fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
 });
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  variable: '--font-display',
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-});
-
 /**
- * Display face for the public marketing and authentication pages only.
- *
- * The variable is declared on `<body>` so the class is available everywhere,
- * but it is referenced solely from `.sr-scope`, so the authenticated
- * application keeps Space Grotesk and its type does not shift.
+ * Display face for headlines and certificate-like moments. Fraunces with its
+ * "soft" axis raised: warm, rounded serifs that stay calm at large sizes.
  */
-const bricolage = Bricolage_Grotesque({
+const serif = Fraunces({
   subsets: ['latin'],
-  variable: '--font-marketing',
-  weight: ['600', '700', '800'],
+  variable: '--font-serif',
+  style: ['normal', 'italic'],
+  axes: ['opsz', 'SOFT'],
   display: 'swap',
-  fallback: ['Space Grotesk', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+  fallback: ['Georgia', 'Times New Roman', 'serif'],
 });
 
 const SITE_URL =
@@ -107,8 +101,9 @@ export default function RootLayout({
         <script {...jsonLd(softwareApplicationSchema())} />
       </head>
       <body
-        className={`${inter.variable} ${spaceGrotesk.variable} ${bricolage.variable} font-sans antialiased`}
+        className={`${sans.variable} ${serif.variable} font-sans antialiased`}
       >
+        <SiteBackdrop />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

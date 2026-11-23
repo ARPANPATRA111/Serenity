@@ -10,6 +10,14 @@ import nodemailer from 'nodemailer';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { certificateFileStem, imageExtension } from '@/lib/certificates/fileName';
+import { randomUUID } from 'node:crypto';
+import {
+  certificateEmailFields,
+  classifyProviderError,
+  completeDelivery,
+  dailyLimits,
+  reserveDelivery,
+} from '@/lib/email/delivery';
 
 const logger = createLogger('Email.Send');
 const MAX_ATTACHMENT_BASE64_LENGTH = 8_000_000;
@@ -34,9 +42,28 @@ interface BrevoAttachment {
 interface BrevoEmailPayload {
   sender: { name: string; email: string };
   to: { email: string; name?: string }[];
+  replyTo?: { email: string; name?: string };
   subject: string;
   htmlContent: string;
+  textContent?: string;
   attachment?: BrevoAttachment[];
+  /** X-Mailin-custom carries the delivery ID back in provider events. */
+  headers?: Record<string, string>;
+}
+
+const PROVIDER_TIMEOUT_MS = 15_000;
+
+/** A provider answer that was not an acceptance; `status` is its HTTP status. */
+class ProviderRejection extends Error {
+  constructor(message: string, readonly status: number, readonly retryAfterMs: number | null) {
+    super(message);
+  }
+}
+
+/** Hides most of an address in server logs. */
+function maskEmail(email: string): string {
+  const [local, domain] = String(email).split('@');
+  return domain ? `${local.slice(0, 1)}***@${domain}` : '***';
 }
 
 async function sendEmailWithBrevo(payload: BrevoEmailPayload): Promise<{ messageId: string }> {
@@ -54,11 +81,18 @@ async function sendEmailWithBrevo(payload: BrevoEmailPayload): Promise<{ message
       'content-type': 'application/json',
     },
     body: JSON.stringify(payload),
+    // No answer in time leaves the outcome unknown (see classifyProviderError).
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Brevo API error: ${response.status} - ${errorBody}`);
+    const errorBody = (await response.text()).slice(0, 300);
+    const retryAfter = Number(response.headers.get('retry-after'));
+    throw new ProviderRejection(
+      `Brevo API error: ${response.status} - ${errorBody}`,
+      response.status,
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null,
+    );
   }
 
   const result = await response.json();
@@ -94,6 +128,9 @@ async function sendEmail(payload: BrevoEmailPayload): Promise<{ messageId: strin
     to: payload.to.map((recipient) => ({ name: recipient.name || '', address: recipient.email })),
     subject: payload.subject,
     html: payload.htmlContent,
+    text: payload.textContent,
+    replyTo: payload.replyTo ? { name: payload.replyTo.name || '', address: payload.replyTo.email } : undefined,
+    headers: payload.headers,
     attachments: payload.attachment?.map((attachment) => ({
       filename: attachment.name,
       content: Buffer.from(attachment.content, 'base64'),
@@ -107,9 +144,13 @@ async function sendEmail(payload: BrevoEmailPayload): Promise<{ messageId: strin
     const fileName = `${Date.now()}-${String(result.messageId).replace(/[^A-Za-z0-9._-]/g, '_')}.json`;
     await writeFile(path.join(outbox, fileName), JSON.stringify({
       messageId: result.messageId,
+      from: payload.sender,
+      replyTo: payload.replyTo ?? null,
+      headers: payload.headers ?? {},
       to: payload.to,
       subject: payload.subject,
       html: payload.htmlContent,
+      text: payload.textContent ?? null,
       attachments: (payload.attachment || []).map((attachment) => ({
         filename: attachment.name,
         bytes: Buffer.byteLength(attachment.content, 'base64'),
@@ -120,7 +161,7 @@ async function sendEmail(payload: BrevoEmailPayload): Promise<{ messageId: strin
   return { messageId: result.messageId };
 }
 
-const DAILY_EMAIL_LIMIT = parseInt(process.env.DAILY_EMAIL_LIMIT || '300', 10);
+const DAILY_EMAIL_LIMIT = dailyLimits().perAccount;
 
 interface SendEmailRequest {
   to: string;
@@ -132,35 +173,19 @@ interface SendEmailRequest {
   hasAttachment?: boolean;
 }
 
-async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
-  const db = getAdminFirestore();
-  const today = getTodayDateString();
-  const rateLimitRef = db.collection('rateLimits').doc(`email_${userId}_${today}`);
-  
-  const rateLimitDoc = await rateLimitRef.get();
-  
-  if (!rateLimitDoc.exists) {
-    await rateLimitRef.set({
-      count: 1,
-      date: today,
-      userId,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    return { allowed: true, remaining: DAILY_EMAIL_LIMIT - 1 };
-  }
-  
-  const currentCount = rateLimitDoc.data()?.count || 0;
-  
-  if (currentCount >= DAILY_EMAIL_LIMIT) {
-    return { allowed: false, remaining: 0 };
-  }
-  
-  await rateLimitRef.update({
-    count: FieldValue.increment(1),
-    lastEmailAt: FieldValue.serverTimestamp(),
-  });
-  
-  return { allowed: true, remaining: DAILY_EMAIL_LIMIT - currentCount - 1 };
+/** Plain-text alternative of the certificate email, with the same facts. */
+function generateEmailText(data: SendEmailRequest): string {
+  return [
+    `Congratulations, ${data.recipientName}!`,
+    '',
+    `${data.issuerName} has issued you a certificate: ${data.certificateTitle}.`,
+    data.hasAttachment ? 'Your certificate is attached to this email.' : 'Open the link below to view your certificate.',
+    '',
+    `Verify it at any time: ${data.verifyUrl}`,
+    `Certificate ID: ${data.certificateId}`,
+    '',
+    'Sent with Serenity.',
+  ].join('\n');
 }
 
 function generateEmailHTML(data: SendEmailRequest): string {
@@ -285,9 +310,17 @@ export async function POST(request: NextRequest) {
     const userId = authUser.uid;
 
     const body = await request.json();
-    const { to, recipientName, certificateId, certificateTitle, issuerName, certificatePdfBase64, certificateImageUrl } = body;
+    const { to, recipientName, certificateId, certificateTitle, issuerName, certificatePdfBase64, certificateImageUrl, idempotencyKey } = body;
 
-    logger.debug('Processing email send request', { requestId, to, certificateId, userId });
+    logger.debug('Processing email send request', { requestId, to: maskEmail(String(to || '')), certificateId, userId });
+
+    // Current clients send a key per send intent (a batch's first send, or one
+    // Resend), so duplicate clicks and retries never send twice. Requests
+    // without one behave as before: every request is a new attempt.
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== 'string' || !idempotencyKey || idempotencyKey.length > 120)) {
+      return NextResponse.json({ success: false, error: 'Invalid idempotency key' }, { status: 400 });
+    }
+    const sendIntent: string = idempotencyKey || `request:${randomUUID()}`;
 
     if (!to || !recipientName || !certificateId) {
       logger.warn('Missing required fields', { requestId, to: !!to, recipientName: !!recipientName, certificateId: !!certificateId });
@@ -299,7 +332,7 @@ export async function POST(request: NextRequest) {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(to)) {
-      logger.warn('Invalid email format', { requestId, to });
+      logger.warn('Invalid email format', { requestId, to: maskEmail(to) });
       return NextResponse.json(
         { success: false, error: 'Invalid email address format' },
         { status: 400 }
@@ -368,18 +401,74 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rateLimit = await checkRateLimit(userId);
-    if (!rateLimit.allowed) {
-      logger.info('Rate limit exceeded', { requestId, userId, limit: DAILY_EMAIL_LIMIT });
+    // A verified sender must be configured; there is no personal fallback.
+    const senderName = process.env.EMAIL_SENDER_NAME || 'Serenity Certificates';
+    const senderEmail = process.env.BREVO_SENDER_EMAIL?.trim();
+    const replyToEmail = process.env.EMAIL_REPLY_TO?.trim();
+    if (!senderEmail) {
+      logger.error('No sender address configured (BREVO_SENDER_EMAIL)', { requestId });
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Daily email limit (${DAILY_EMAIL_LIMIT}) reached. Please try again tomorrow.`,
-          code: 'RATE_LIMIT_EXCEEDED',
-        },
-        { status: 429 }
+        { success: false, error: 'Email sending is not configured. Certificates are saved; send them later from History.', code: 'EMAIL_SENDER_NOT_CONFIGURED' },
+        { status: 503 },
       );
     }
+
+    const today = getTodayDateString();
+    const reservation = await reserveDelivery(db, { userId, certificateId, to, idempotencyKey: sendIntent, day: today });
+    switch (reservation.outcome) {
+      case 'duplicate':
+        // Already accepted for this send: report it again, send nothing.
+        return NextResponse.json({ success: true, duplicate: true, messageId: reservation.messageId, deliveryId: reservation.deliveryId });
+      case 'in_progress':
+        return NextResponse.json(
+          { success: false, error: 'This email is already being sent.', code: 'DELIVERY_IN_PROGRESS', deliveryId: reservation.deliveryId },
+          { status: 409 },
+        );
+      case 'unknown':
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'An earlier attempt got no answer from the email service and may have been delivered. Check with the recipient, then use Resend.',
+            code: 'DELIVERY_OUTCOME_UNKNOWN',
+            deliveryId: reservation.deliveryId,
+          },
+          { status: 409 },
+        );
+      case 'suppressed':
+        try {
+          await certificateRef.update({ emailStatus: 'failed', deliveryStatus: 'suppressed', emailError: 'Not sent: this address bounced or reported earlier messages.' });
+        } catch (updateError) {
+          logger.warn('Failed to record suppressed recipient', { requestId, certificateId }, updateError as Error);
+        }
+        return NextResponse.json(
+          { success: false, error: 'Not sent: this address bounced or reported earlier messages. Use a different address.', code: 'RECIPIENT_SUPPRESSED' },
+          { status: 422 },
+        );
+      case 'account_limit':
+        logger.info('Rate limit exceeded', { requestId, userId, limit: reservation.limit });
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Daily email limit (${reservation.limit}) reached. Please try again tomorrow.`,
+            code: 'RATE_LIMIT_EXCEEDED',
+          },
+          { status: 429 }
+        );
+      case 'provider_limit':
+        logger.warn('Provider daily budget reached', { requestId, limit: reservation.limit });
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'The email service has reached today’s sending limit. Your certificates are saved; send the rest from History tomorrow.',
+            code: 'PROVIDER_DAILY_LIMIT',
+          },
+          { status: 429 }
+        );
+      default:
+        break;
+    }
+    const { deliveryId } = reservation;
+    const rateLimit = { remaining: reservation.remaining };
 
     const verifyUrl = buildVerificationUrl(certificateId);
 
@@ -392,9 +481,6 @@ export async function POST(request: NextRequest) {
       verifyUrl,
     };
 
-    const senderName = process.env.EMAIL_SENDER_NAME || 'Serenity Certificates';
-    const senderEmail = process.env.BREVO_SENDER_EMAIL || 'thispc119@gmail.com';
-
     try {
       const sanitizedName = certificateFileStem(recipientName);
       let imageType = 'image/png';
@@ -402,8 +488,10 @@ export async function POST(request: NextRequest) {
       const brevoPayload: BrevoEmailPayload = {
         sender: { name: senderName, email: senderEmail },
         to: [{ email: to, name: recipientName }],
+        ...(replyToEmail ? { replyTo: { email: replyToEmail, name: senderName } } : {}),
         subject: `🎉 ${emailData.certificateTitle}`,
         htmlContent: generateEmailHTML(emailData),
+        headers: { 'X-Mailin-custom': `serenity-delivery:${deliveryId}` },
       };
 
       if (certificatePdfBase64) {
@@ -467,64 +555,109 @@ export async function POST(request: NextRequest) {
       }
 
       // Build the body last so it only promises an attachment that is present.
-      brevoPayload.htmlContent = generateEmailHTML({
-        ...emailData,
-        hasAttachment: !!brevoPayload.attachment?.length,
-      });
+      const bodyData = { ...emailData, hasAttachment: !!brevoPayload.attachment?.length };
+      brevoPayload.htmlContent = generateEmailHTML(bodyData);
+      brevoPayload.textContent = generateEmailText(bodyData);
 
-      const info = await sendEmail(brevoPayload);
+      // One retry for a provider that answered "slow down" or with a server
+      // error. Nothing was accepted in those cases, so retrying is safe.
+      let info: { messageId: string };
+      try {
+        info = await sendEmail(brevoPayload);
+      } catch (firstError) {
+        const failure = classifyProviderError(firstError);
+        if (failure.kind !== 'rejected' || !failure.retryable) throw firstError;
+        const wait = Math.min((firstError as ProviderRejection).retryAfterMs ?? 1000, 5000);
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        info = await sendEmail(brevoPayload);
+      }
+      const hadAttachment = !!(brevoPayload.attachment && brevoPayload.attachment.length > 0);
 
-      await db.collection('emailLogs').add({
-        to,
-        certificateId,
-        messageId: info.messageId,
-        sentAt: FieldValue.serverTimestamp(),
-        userId,
-        hasAttachment: !!(brevoPayload.attachment && brevoPayload.attachment.length > 0),
-      });
-
-      // Update certificate with email status
-      if (certificateId) {
-        try {
-          await certificateRef.update({
-            emailStatus: 'sent',
-            emailSentAt: FieldValue.serverTimestamp(),
-            recipientEmail: to,
-            emailError: null,
-            emailMessageId: info.messageId,
-            emailHadAttachment: !!(brevoPayload.attachment && brevoPayload.attachment.length > 0),
-          });
-        } catch (updateError) {
-          logger.warn('Failed to update certificate email status', { requestId, certificateId }, updateError as Error);
-        }
+      // The provider has accepted the message. Bookkeeping failures below are
+      // logged but never reported as a failed send, which would invite a
+      // duplicate resend.
+      try {
+        await completeDelivery(db, { deliveryId, day: today, status: 'accepted', messageId: info.messageId });
+      } catch (recordError) {
+        logger.warn('Failed to record accepted delivery', { requestId, deliveryId }, recordError as Error);
+      }
+      try {
+        await db.collection('emailLogs').add({
+          to,
+          certificateId,
+          messageId: info.messageId,
+          deliveryId,
+          sentAt: FieldValue.serverTimestamp(),
+          userId,
+          hasAttachment: hadAttachment,
+        });
+      } catch (logError) {
+        logger.warn('Failed to write email log', { requestId, deliveryId }, logError as Error);
+      }
+      try {
+        await certificateRef.update({
+          emailStatus: 'sent',
+          deliveryStatus: 'accepted',
+          deliveryId,
+          emailSentAt: FieldValue.serverTimestamp(),
+          recipientEmail: to,
+          emailError: null,
+          emailMessageId: info.messageId,
+          emailHadAttachment: hadAttachment,
+        });
+      } catch (updateError) {
+        logger.warn('Failed to update certificate email status', { requestId, certificateId }, updateError as Error);
       }
 
-      logger.info('Email sent successfully', { requestId, to, certificateId, messageId: info.messageId, remaining: rateLimit.remaining });
+      logger.info('Email accepted by provider', { requestId, to: maskEmail(to), certificateId, deliveryId, remaining: rateLimit.remaining });
 
       return NextResponse.json({
         success: true,
         messageId: info.messageId,
+        deliveryId,
         remaining: rateLimit.remaining,
       });
     } catch (emailError) {
       const errorDetails = getErrorDetails(emailError);
-      logger.error('Failed to send email', { requestId, to, certificateId, error: errorDetails });
-      
-      // Update certificate with failed status
-      if (certificateId) {
-        try {
-          await certificateRef.update({
-            emailStatus: 'failed',
-            emailError: errorDetails.message,
-          });
-        } catch (updateError) {
-          logger.warn('Failed to update certificate failed status', { requestId, certificateId }, updateError as Error);
-        }
+      const failure = classifyProviderError(emailError);
+      logger.error('Failed to send email', { requestId, to: maskEmail(to), certificateId, deliveryId, outcome: failure.kind, error: errorDetails });
+
+      try {
+        await completeDelivery(db, failure.kind === 'unknown'
+          ? { deliveryId, day: today, status: 'unknown', reason: failure.message }
+          : { deliveryId, day: today, status: 'failed', retryable: failure.retryable, reason: failure.message });
+      } catch (recordError) {
+        logger.warn('Failed to record failed delivery', { requestId, deliveryId }, recordError as Error);
       }
-      
+
+      try {
+        await certificateRef.update(failure.kind === 'unknown'
+          ? {
+            emailStatus: 'failed',
+            ...certificateEmailFields('unknown'),
+            emailError: 'No answer from the email service: it may have been delivered. Check before resending.',
+          }
+          : { emailStatus: 'failed', deliveryStatus: 'failed', emailError: errorDetails.message.slice(0, 300) });
+      } catch (updateError) {
+        logger.warn('Failed to update certificate failed status', { requestId, certificateId }, updateError as Error);
+      }
+
       return NextResponse.json(
-        { success: false, error: 'Failed to send email. Please check your email configuration and try again.' },
-        { status: 500 }
+        failure.kind === 'unknown'
+          ? {
+            success: false,
+            error: 'The email service did not answer. The email may have been delivered; check before resending.',
+            code: 'DELIVERY_OUTCOME_UNKNOWN',
+            deliveryId,
+          }
+          : {
+            success: false,
+            error: 'Failed to send email. Please check your email configuration and try again.',
+            code: failure.retryable ? 'PROVIDER_UNAVAILABLE' : 'PROVIDER_REJECTED',
+            retryable: failure.retryable,
+            deliveryId,
+          },
+        { status: failure.kind === 'unknown' ? 504 : 500 }
       );
     }
 

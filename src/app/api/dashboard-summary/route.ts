@@ -4,6 +4,7 @@ import { toIsoDate } from '@/lib/dates';
 import { unauthorizedResponse, verifyAuth } from '@/lib/firebase/verifyAuth';
 import { getCertificateStats } from '@/lib/certificates/stats';
 import { createLogger } from '@/lib/logger';
+import { createServerTimer } from '@/lib/api/serverTiming';
 
 const logger = createLogger('DashboardSummary');
 
@@ -16,33 +17,39 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const timer = createServerTimer();
   try {
-    const authUser = await verifyAuth(request);
+    const authUser = await timer.measure('auth', verifyAuth(request));
     if (!authUser) return unauthorizedResponse();
 
     const { searchParams } = new URL(request.url);
     const templateLimit = Math.min(Math.max(Number(searchParams.get('templateLimit')) || 6, 1), 12);
     const certificateLimit = Math.min(Math.max(Number(searchParams.get('certificateLimit')) || 12, 1), 25);
+    // Current clients pass stats=0 and load totals from /api/certificates/stats,
+    // so the lists never wait for the aggregates. Older clients still get both.
+    const includeStats = searchParams.get('stats') !== '0';
     const db = getAdminFirestore();
 
     const [templatesSnapshot, certificatesSnapshot, stats] = await Promise.all([
-      db.collection('templates')
+      timer.measure('templates', db.collection('templates')
         .where('userId', '==', authUser.uid)
         .orderBy('updatedAt', 'desc')
         .select(...TEMPLATE_FIELDS)
         .limit(templateLimit)
-        .get(),
-      db.collection('certificates')
+        .get()),
+      timer.measure('certificates', db.collection('certificates')
         .where('userId', '==', authUser.uid)
         .orderBy('createdAt', 'desc')
         .select(...CERTIFICATE_FIELDS)
         .limit(certificateLimit)
-        .get(),
+        .get()),
       // Exact account totals; the page falls back to the recent list if unavailable.
-      getCertificateStats(db, authUser.uid).catch((error) => {
-        logger.warn('Account totals unavailable', { code: String((error as { code?: unknown })?.code ?? 'unknown') });
-        return null;
-      }),
+      includeStats
+        ? timer.measure('aggregates', getCertificateStats(db, authUser.uid)).catch((error) => {
+          logger.warn('Account totals unavailable', { code: String((error as { code?: unknown })?.code ?? 'unknown') });
+          return null;
+        })
+        : Promise.resolve(undefined),
     ]);
 
     const templates = templatesSnapshot.docs.map((document) => {
@@ -85,8 +92,8 @@ export async function GET(request: NextRequest) {
       success: true,
       recentTemplates: templates,
       recentCertificates: certificates,
-      stats,
-    }, { headers: { 'Cache-Control': 'private, no-store' } });
+      ...(includeStats ? { stats } : {}),
+    }, { headers: { 'Cache-Control': 'private, no-store', 'Server-Timing': timer.header() } });
   } catch (error: any) {
     const isMissingIndex = error?.code === 9 || error?.code === 'failed-precondition';
     console.error('[Dashboard Summary] Failed:', error);

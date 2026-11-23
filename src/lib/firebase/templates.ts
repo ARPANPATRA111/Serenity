@@ -198,10 +198,18 @@ export async function getUserTemplates(userId: string): Promise<Template[]> {
       })
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   } catch (error) {
+    // Reported to the caller (the API answers 503 with Retry) instead of an
+    // empty list, which looked like an account with no templates.
     console.error('[Firebase Templates] Error getting user templates:', error);
-    return [];
+    throw error;
   }
 }
+
+/** Fields a template card shows. No design JSON, owner email, or certificate details. */
+export const TEMPLATE_CARD_FIELDS = [
+  'id', 'name', 'thumbnail', 'createdAt', 'updatedAt', 'certificateCount', 'isPublic',
+  'stars', 'tags', 'category', 'publicationStatus',
+];
 
 export async function findTemplateByNormalizedName(
   userId: string,

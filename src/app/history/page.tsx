@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { 
@@ -26,12 +25,14 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { getIdToken } from '@/lib/firebase/client';
-import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { plural } from '@/lib/utils';
 import type { CertificateStats } from '@/lib/certificates/stats';
+import { fetchAccountStats, invalidateAccountStats, readCachedAccountStats } from '@/lib/certificates/accountStatsClient';
+import { SiteNav } from '@/components/marketing/MarketingNav';
 
 interface CertificateRecord {
   id: string;
+  batchId?: string | null;
   recipientName: string;
   recipientEmail: string;
   title: string;
@@ -46,7 +47,17 @@ interface CertificateRecord {
   emailSentAt: string | null;
   emailError: string | null;
   certificateImage?: string | null;
+  deliveryStatus?: string | null;
 }
+
+/** Finer delivery outcomes, reported by the email provider after sending. */
+const DELIVERY_DETAIL: Record<string, string> = {
+  delivered: 'Delivered',
+  deferred: 'Delayed',
+  bounced: 'Bounced',
+  suppressed: 'Blocked by recipient',
+  unknown: 'Unconfirmed: may have arrived',
+};
 
 interface BatchGroup {
   id: string;
@@ -81,6 +92,8 @@ export default function HistoryPage() {
     sending: boolean;
     error: string | null;
     success: boolean;
+    /** One Resend intent: repeated clicks in this dialog never send twice. */
+    sendKey: string;
   }>({
     isOpen: false,
     certificate: null,
@@ -88,6 +101,7 @@ export default function HistoryPage() {
     sending: false,
     error: null,
     success: false,
+    sendKey: '',
   });
 
   const fetchCertificates = useCallback(async () => {
@@ -97,14 +111,14 @@ export default function HistoryPage() {
     }
     
     try {
-      const response = await authenticatedFetch('/api/certificates?limit=50', {
+      // The list never waits for account totals, which load separately.
+      const response = await authenticatedFetch('/api/certificates?limit=50&view=lite', {
         cache: 'no-store',
       });
       
       if (response.ok) {
         const data = await response.json();
         setCertificates(data.items || data.certificates || []);
-        setAccountStats(data.stats || null);
         setNextCursor(data.nextCursor || null);
         setHasMore(data.hasMore === true);
         setLoadError(null);
@@ -114,6 +128,8 @@ export default function HistoryPage() {
       }
     } catch (error) {
       console.error('[HistoryPage] Error fetching certificates:', error);
+      // A failed load must not look like an empty history.
+      setLoadError('Certificate history could not be loaded. Check your connection and retry.');
     } finally {
       setLoading(false);
     }
@@ -123,13 +139,33 @@ export default function HistoryPage() {
     fetchCertificates();
   }, [fetchCertificates]);
 
+  // Exact totals for the whole account, shared with the dashboard. Until they
+  // arrive (or if they are unavailable) the summary counts the loaded records.
+  const loadAccountStats = useCallback(async (fresh = false) => {
+    if (!user?.id) return;
+    if (fresh) invalidateAccountStats();
+    else {
+      const cached = readCachedAccountStats(user.id);
+      if (cached) setAccountStats(cached);
+    }
+    try {
+      setAccountStats(await fetchAccountStats(user.id));
+    } catch {
+      // Keep whatever is shown; the loaded-record counts are the fallback.
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void loadAccountStats();
+  }, [loadAccountStats]);
+
   const loadMoreCertificates = async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
 
     try {
       const response = await authenticatedFetch(
-        `/api/certificates?limit=50&cursor=${encodeURIComponent(nextCursor)}`,
+        `/api/certificates?limit=50&view=lite&cursor=${encodeURIComponent(nextCursor)}`,
         { cache: 'no-store' },
       );
       const data = await response.json();
@@ -158,7 +194,9 @@ export default function HistoryPage() {
     certificates.forEach(cert => {
       const dateKey = new Date(cert.createdAt).toDateString();
       const templateName = cert.templateName || 'Unknown Template';
-      const groupKey = `${templateName}-${dateKey}`;
+      // One group per generation run. Records from releases that stored no
+      // batch ID are grouped by template and local day, as before.
+      const groupKey = cert.batchId ? `batch:${cert.batchId}` : `${templateName}-${dateKey}`;
       
       if (!groups[groupKey]) {
         groups[groupKey] = {
@@ -231,13 +269,17 @@ export default function HistoryPage() {
       sending: false,
       error: null,
       success: false,
+      sendKey: `resend:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`,
     });
   };
 
   const closeResendModal = () => {
     setResendModal(prev => ({ ...prev, isOpen: false }));
     // Refresh certificates after a short delay to get updated status
-    setTimeout(() => fetchCertificates(), 500);
+    setTimeout(() => {
+      void fetchCertificates();
+      void loadAccountStats(true);
+    }, 500);
   };
 
   const handleResendEmail = async () => {
@@ -271,6 +313,7 @@ export default function HistoryPage() {
           verifyUrl,
           // Include certificate image for attachment
           certificateImageUrl: cert.certificateImage || undefined,
+          idempotencyKey: resendModal.sendKey || undefined,
         }),
       });
 
@@ -341,19 +384,8 @@ export default function HistoryPage() {
   }, [certificates, accountStats]);
 
   return (
-    <div className="app-shell min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
-        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
-          <Link href="/"><SerenityBrand /></Link>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Link href="/editor" className="btn-primary">
-              New Certificate
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="app-shell min-h-screen">
+      <SiteNav />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
         {/* Header */}
@@ -425,12 +457,17 @@ export default function HistoryPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search by name, email, or title..."
+              placeholder={hasMore ? 'Search loaded certificates…' : 'Search by name, email, or title...'}
               aria-label="Search certificates by name, email, or title"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="input pl-10 pr-4 h-10 w-full"
             />
+            {hasMore && (searchQuery.trim() || filterStatus !== 'all') && (
+              <p className="mt-1 text-xs text-muted-foreground" role="status">
+                Showing matches among the {certificates.length} loaded certificates. Use Load more to include older ones.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -450,8 +487,19 @@ export default function HistoryPage() {
 
         {/* Loading State */}
         {loadError && (
-          <div role="alert" className="mb-4 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
-            {loadError}
+          <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+            <span>{loadError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLoadError(null);
+                if (certificates.length === 0) setLoading(true);
+                void fetchCertificates();
+              }}
+              className="rounded-md border border-error/30 bg-background px-3 py-1 font-medium text-foreground hover:bg-muted"
+            >
+              Retry
+            </button>
           </div>
         )}
         {loading ? (
@@ -459,7 +507,7 @@ export default function HistoryPage() {
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
             <p className="mt-4 text-muted-foreground">Loading certificates...</p>
           </div>
-        ) : filteredBatches.length > 0 ? (
+        ) : loadError && certificates.length === 0 ? null : filteredBatches.length > 0 ? (
           <div className="space-y-4">
             {filteredBatches.map((batch) => (
               <div key={batch.id} className="card overflow-hidden">
@@ -538,6 +586,11 @@ export default function HistoryPage() {
                               <td className="px-4 py-3">
                                 <div className="flex flex-col gap-1">
                                   {getStatusBadge(cert.emailStatus)}
+                                  {DELIVERY_DETAIL[cert.deliveryStatus || ''] && (
+                                    <span className="ml-1 text-xs text-muted-foreground" title={cert.emailError || undefined}>
+                                      {DELIVERY_DETAIL[cert.deliveryStatus || '']}
+                                    </span>
+                                  )}
                                   {cert.emailSentAt && (
                                     <span className="text-xs text-muted-foreground">
                                       {new Date(cert.emailSentAt).toLocaleString()}

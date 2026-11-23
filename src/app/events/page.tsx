@@ -4,7 +4,6 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  ArrowLeft,
   CalendarDays,
   Clock3,
   ExternalLink,
@@ -21,11 +20,10 @@ import {
 } from 'lucide-react';
 import { useAuth, AuthLoading } from '@/contexts/AuthContext';
 import { authenticatedFetch } from '@/lib/api/authFetch';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import type { EventInput, SerenityEvent } from '@/types/events';
-import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { EVENTS_ENABLED } from '@/lib/featureFlags';
 import { notFound } from 'next/navigation';
+import { SiteNav } from '@/components/marketing/MarketingNav';
 
 const EVENT_TYPES = [
   'Hackathon',
@@ -219,21 +217,8 @@ export default function EventsPage() {
   if (isLoading || !user) return <AuthLoading />;
 
   return (
-    <main className="app-shell min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 bg-transparent px-3 pt-3 sm:px-5">
-        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/"><SerenityBrand /></Link>
-            <Link href="/dashboard" className="hidden items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground sm:inline-flex">
-              <ArrowLeft className="h-4 w-4" /> Dashboard
-            </Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            <button onClick={openCreate} className="btn-primary"><Plus className="h-4 w-4" />Create event</button>
-          </div>
-        </div>
-      </header>
+    <main className="app-shell min-h-screen text-foreground">
+      <SiteNav />
 
       <section className="relative overflow-hidden border-b border-border/60">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_20%,rgb(var(--color-primary)/.16),transparent_35%),radial-gradient(circle_at_85%_30%,rgb(var(--color-accent)/.12),transparent_32%)]" />
@@ -246,9 +231,12 @@ export default function EventsPage() {
                 Events are optional. Add the details that matter: schedule, venue, links, organizer, and imagery. Then link an event from Certificate Information in the editor.
               </p>
             </div>
+            <div className="flex flex-wrap items-center gap-3">
+            <button onClick={openCreate} className="btn-primary"><Plus className="h-4 w-4" />Create event</button>
             <div className="rounded-2xl border border-border bg-card/70 px-5 py-4 shadow-sm backdrop-blur">
               <p className="text-2xl font-bold">{eventCountLabel}</p>
               <p className="text-sm text-muted-foreground">available to link</p>
+            </div>
             </div>
           </div>
         </div>
@@ -303,7 +291,7 @@ export default function EventsPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 p-4 backdrop-blur-sm sm:p-8">
           <div className="mx-auto max-w-4xl overflow-hidden rounded-[2rem] border border-border bg-card shadow-2xl">
-            <div className="flex items-start justify-between border-b border-border bg-gradient-to-r from-primary/10 via-transparent to-accent/10 p-6 sm:p-8">
+            <div className="flex items-start justify-between border-b border-border bg-muted/50 p-6 sm:p-8">
               <div>
                 <p className="text-sm font-bold uppercase tracking-[0.18em] text-primary">{editing ? 'Edit event' : 'New event'}</p>
                 <h2 className="mt-2 font-display text-3xl font-bold">{editing ? editing.name : 'Add useful context, not busywork.'}</h2>

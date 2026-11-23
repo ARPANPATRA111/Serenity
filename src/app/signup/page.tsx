@@ -2,6 +2,8 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { authPageHref } from '@/lib/navigation/safeRedirect';
 import { Loader2, MailCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthShell } from '@/components/auth/AuthShell';
@@ -18,6 +20,7 @@ import { FREE_CERTIFICATE_LIMIT } from '@/lib/plans/certificateLimits';
 const MIN_PASSWORD_LENGTH = 8;
 
 export default function SignupPage() {
+  const searchParams = useSearchParams();
   const { signup, loginWithGoogle, isLoading, user } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -94,7 +97,7 @@ export default function SignupPage() {
       footer={
         <p className="sr-body text-center text-sm">
           Already have an account?{' '}
-          <Link href="/login" className="sr-link">
+          <Link href={authPageHref('/login', searchParams.get('redirect'))} className="sr-link">
             Sign in
           </Link>
         </p>

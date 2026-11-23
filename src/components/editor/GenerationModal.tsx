@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { ProgressBar, GenerationProgress } from '@/components/ui/ProgressBar';
@@ -12,6 +12,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateBatch, downloadZip, retryCertificatePersistence, type BatchGenerationResult } from '@/lib/generator';
 import { authenticatedFetch } from '@/lib/api/authFetch';
 import { getIdToken } from '@/lib/firebase/client';
+import { invalidateAccountStats } from '@/lib/certificates/accountStatsClient';
+import { summarizeRoster, unmatchedTemplateTokens } from '@/lib/excel/rosterSummary';
 import { Download, FileText, Mail, CheckCircle, AlertCircle, Info, Loader2, ChevronRight, Lock, RefreshCw } from 'lucide-react';
 import { plural } from '@/lib/utils';
 
@@ -31,6 +33,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 }
 
 interface GenerationModalProps {
+  onEditInfo: () => void;
   isOpen: boolean;
   onClose: () => void;
   onSave?: () => Promise<{ success: boolean; error?: string }>;
@@ -45,7 +48,7 @@ interface EmailResult {
   error?: string;
 }
 
-export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProps) {
+export function GenerationModal({ isOpen, onClose, onSave, onEditInfo }: GenerationModalProps) {
   const { fabricInstance } = useFabricContext();
   const { dataSource, headers, rows } = useDataSourceStore();
   const { templateId, templateName, certificateMetadata } = useEditorStore();
@@ -79,6 +82,9 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
   const [zipDownloaded, setZipDownloaded] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [allowanceAttempt, setAllowanceAttempt] = useState(0);
+  const [allowanceFailed, setAllowanceFailed] = useState(false);
+  const allowanceCheckedAtRef = useRef(0);
   const [premiumCheck, setPremiumCheck] = useState<{ loading: boolean; canGenerate: boolean; remaining: number; isPremium: boolean }>({
     loading: true, canGenerate: true, remaining: 5, isPremium: false,
   });
@@ -87,15 +93,15 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
   // as literal "{{Column}}" text, so they are flagged before generating.
   const unmatchedPlaceholders = useMemo(() => {
     if (!isOpen) return [];
-    const objects = fabricInstance?.getCanvas()?.getObjects() ?? [];
-    const keys = new Set<string>();
-    for (const object of objects as Array<{ dynamicKey?: unknown }>) {
-      if (typeof object.dynamicKey === 'string' && object.dynamicKey && !headers.includes(object.dynamicKey)) {
-        keys.add(object.dynamicKey);
-      }
-    }
-    return Array.from(keys);
+    const objects = (fabricInstance?.getCanvas()?.getObjects() ?? []) as Array<{ dynamicKey?: unknown; text?: unknown; isVerificationUrl?: unknown }>;
+    return unmatchedTemplateTokens(objects, headers);
   }, [isOpen, fabricInstance, headers]);
+
+  // What this roster will produce, shown before generating.
+  const roster = useMemo(
+    () => summarizeRoster(rows, { nameField, emailField: sendEmails ? emailField : undefined }),
+    [rows, nameField, emailField, sendEmails],
+  );
 
   // Find email-like columns in headers
   const emailColumns = useMemo(() => {
@@ -128,59 +134,69 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     };
   }, [emailField, sendEmails, rows, nameField]);
 
-  // Reset state when modal opens
+  // Reset state each time the modal opens. Only the opening matters: changing
+  // a column mapping while it is open used to rerun this, switching the email
+  // toggle off and fetching the allowance again.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
-      setStep('configure');
-      reset();
-      setResultBlob(null);
-      setEmailResults([]);
-      setEmailProgress({ current: 0, total: 0 });
-      setSendEmails(false);
-      setSaveError(null);
-      setLastResult(null);
-      setZipDownloaded(false);
-      setRetryError(null);
-      
-      // Check premium status
-      if (user?.id) {
-        setPremiumCheck(prev => ({ ...prev, loading: true }));
-        authenticatedFetch('/api/users/premium')
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              setPremiumCheck({
-                loading: false,
-                canGenerate: data.canGenerate,
-                remaining: data.remainingFree ?? 5,
-                isPremium: data.isPremium,
-              });
-            } else {
-              setPremiumCheck({ loading: false, canGenerate: true, remaining: 5, isPremium: false });
-            }
-          })
-          .catch(() => {
-            setPremiumCheck({ loading: false, canGenerate: true, remaining: 5, isPremium: false });
-          });
-      }
-      
-      // Re-pick columns when the spreadsheet changed and the remembered
-      // column no longer exists; otherwise every certificate would be named
-      // "Certificate_1", "Certificate_2", ...
-      if (headers.length > 0 && (!nameField || !headers.includes(nameField))) {
-        const nameColumn = headers.find((h) =>
-          h.toLowerCase().includes('name')
-        );
-        setNameField(nameColumn || headers[0]);
-      }
+    const justOpened = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+    if (!justOpened) return;
 
-      if (emailField && !headers.includes(emailField)) {
-        setEmailField(emailColumns[0] || '');
-      } else if (emailColumns.length > 0 && !emailField) {
-        setEmailField(emailColumns[0]);
-      }
+    setStep('configure');
+    reset();
+    setResultBlob(null);
+    setEmailResults([]);
+    setEmailProgress({ current: 0, total: 0 });
+    setSendEmails(false);
+    setSaveError(null);
+    setLastResult(null);
+    setZipDownloaded(false);
+    setRetryError(null);
+
+  }, [isOpen, reset]);
+
+  useEffect(() => {
+    if (!isOpen || !user?.id) return;
+    let current = true;
+    allowanceCheckedAtRef.current = 0;
+    setAllowanceFailed(false);
+    setPremiumCheck(prev => ({ ...prev, loading: true }));
+    void authenticatedFetch('/api/users/premium')
+      .then(async response => {
+        if (!response.ok) throw new Error('Allowance unavailable');
+        const data = await response.json();
+        if (!data.success) throw new Error('Allowance unavailable');
+        if (!current) return;
+        allowanceCheckedAtRef.current = Date.now();
+        setPremiumCheck({
+          loading: false, canGenerate: data.canGenerate,
+          remaining: data.remainingFree ?? 0, isPremium: data.isPremium,
+        });
+      })
+      .catch(() => {
+        if (!current) return;
+        setAllowanceFailed(true);
+        setPremiumCheck({ loading: false, canGenerate: false, remaining: 0, isPremium: false });
+      });
+    return () => { current = false; };
+  }, [isOpen, user?.id, allowanceAttempt]);
+
+  // Re-pick columns only when the spreadsheet no longer has the chosen ones
+  // (a different file was imported); a manual choice is otherwise kept.
+  // Without this every certificate would be named "Certificate_1", ...
+  useEffect(() => {
+    if (!isOpen) return;
+    if (headers.length > 0 && (!nameField || !headers.includes(nameField))) {
+      const nameColumn = headers.find((h) => h.toLowerCase().includes('name'));
+      setNameField(nameColumn || headers[0]);
     }
-  }, [isOpen, headers, reset, emailColumns, nameField, emailField, user?.id]);
+    if (emailField && !headers.includes(emailField)) {
+      setEmailField(emailColumns[0] || '');
+    } else if (emailColumns.length > 0 && !emailField) {
+      setEmailField(emailColumns[0]);
+    }
+  }, [isOpen, headers, emailColumns, nameField, emailField]);
 
   const outcome = useMemo(() => {
     const unsavedCount = lastResult?.unsavedRecords.length ?? 0;
@@ -283,6 +299,9 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             certificateTitle: certificateMetadata.title || 'Certificate of Completion',
             issuerName: certificateMetadata.issuedBy || user?.name || 'Serenity',
             certificatePdfBase64,
+            // One send per certificate per batch: a retried request, or the
+            // same batch's emails sent again, is never delivered twice.
+            idempotencyKey: `batch:${result.generationBatchId}:${certificateId}`,
           }),
         });
 
@@ -309,6 +328,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     }
 
     setEmailResults(emailResultsList);
+    // Sent and failed counts changed.
+    invalidateAccountStats();
   }, [emailField, rows, nameField, certificateMetadata, user?.name]);
 
   /** Downloads, emails, and shows the summary once every record is saved. */
@@ -392,9 +413,25 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
       // Read the store at call time: a value captured when this callback was
       // created would never see a later Cancel click.
       isCancelled: () => useGenerationStore.getState().isCancelled,
+      // The allowance this modal fetched on opening, if still fresh, so the
+      // generator does not ask again. The server enforces it on save anyway.
+      allowance: premiumCheck.loading || !allowanceCheckedAtRef.current
+        ? undefined
+        : { ...premiumCheck, checkedAt: allowanceCheckedAtRef.current },
     });
 
     setLastResult(result);
+    // Totals on the dashboard and History now include this batch.
+    invalidateAccountStats();
+
+    if (result.allowanceUnavailable) {
+      complete();
+      allowanceCheckedAtRef.current = 0;
+      setAllowanceFailed(true);
+      setPremiumCheck({ loading: false, canGenerate: false, remaining: 0, isPremium: false });
+      setStep('configure');
+      return;
+    }
 
     // Nothing was rendered because the batch exceeds the plan allowance. Say
     // exactly how many remain: with some allowance left, a smaller
@@ -434,6 +471,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
     certificateMetadata,
     isCertificateInfoComplete,
     finishGeneration,
+    premiumCheck,
   ]);
 
   const handleRetrySave = useCallback(async () => {
@@ -535,6 +573,45 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                 </option>
               ))}
             </select>
+            <dl className="mt-3 space-y-1 rounded-lg bg-muted/40 p-3 text-xs" aria-label="What this spreadsheet will produce">
+              <div className="flex gap-2">
+                <dt className="text-muted-foreground">Certificates:</dt>
+                <dd className="font-medium">{roster.rowCount}</dd>
+              </div>
+              {roster.sampleFileName && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-muted-foreground">Example file:</dt>
+                  <dd className="break-all font-mono" data-testid="sample-file-name">{roster.sampleFileName}</dd>
+                </div>
+              )}
+              {roster.longestName && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-muted-foreground">Longest name:</dt>
+                  <dd>
+                    <span className="font-medium">{roster.longestName.value}</span>{' '}
+                    ({roster.longestName.length} characters, row {roster.longestName.row}). Check it fits in Preview.
+                  </dd>
+                </div>
+              )}
+              {roster.blankNameRows.length > 0 && (
+                <div className="flex gap-2 text-warning" role="status">
+                  <dt className="shrink-0">No name:</dt>
+                  <dd>
+                    {roster.blankNameRows.length} {plural(roster.blankNameRows.length, 'row')} ({roster.blankNameRows.slice(0, 8).join(', ')}
+                    {roster.blankNameRows.length > 8 ? ', …' : ''}). These files are named Certificate_&lt;row&gt;.
+                  </dd>
+                </div>
+              )}
+              {roster.duplicateNames.length > 0 && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-muted-foreground">Same name twice:</dt>
+                  <dd>
+                    {roster.duplicateNames.slice(0, 5).join(', ')}{roster.duplicateNames.length > 5 ? ', …' : ''}. Each still gets its own
+                    certificate ID and verification link.
+                  </dd>
+                </div>
+              )}
+            </dl>
           </div>
 
           {/* Email Options */}
@@ -616,8 +693,8 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
                   {unmatchedPlaceholders.length === 1 ? 'A placeholder has' : 'Some placeholders have'} no matching column
                 </p>
                 <p className="mt-1 text-muted-foreground">
-                  {unmatchedPlaceholders.map((key) => `{{${key}}}`).join(', ')} will print as written. Column names must match exactly,
-                  including capital letters.
+                  {unmatchedPlaceholders.map((key) => `{{${key}}}`).join(', ')} will print as written. Inserted fields must match a
+                  column name exactly, including capital letters; {'{{tokens}}'} typed inside text ignore capitals.
                 </p>
               </div>
             </div>
@@ -633,7 +710,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-success" />
-                Unique QR code verification
+                Verification link in every PDF
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-success" />
@@ -655,9 +732,11 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               <div className="text-sm">
                 <p className="font-medium text-warning">Certificate Info Required</p>
                 <p className="text-muted-foreground mt-1">
-                  Please fill in the Certificate Information (Title, Issued By, Description) 
-                  before generating certificates. Click the <strong>Info</strong> button in the toolbar.
+                  Add the certificate title and issuing organisation to the public verification record.
                 </p>
+                <button type="button" onClick={onEditInfo} className="mt-2 text-sm font-semibold underline">
+                  Edit certificate info
+                </button>
               </div>
             </div>
           )}
@@ -672,11 +751,17 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
           )}
 
           {/* Free Tier Limit Warning */}
-          {!premiumCheck.loading && !premiumCheck.canGenerate && (
+          {allowanceFailed && (
+            <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+              Your generation allowance could not be loaded.
+              <button type="button" className="btn-outline" onClick={() => setAllowanceAttempt(value => value + 1)}>Retry</button>
+            </div>
+          )}
+          {!allowanceFailed && !premiumCheck.loading && !premiumCheck.canGenerate && (
             <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
               <p className="font-semibold">Free limit reached</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Paid upgrades are not currently available. You can continue editing and exporting the template itself.
+                You can keep editing and exporting your template. Contact Serenity about Pro for larger batches.
               </p>
             </div>
           )}
@@ -687,7 +772,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
               <Info className="h-4 w-4 text-primary shrink-0" />
               <p className="text-xs text-muted-foreground">
                 Free plan: <strong>{premiumCheck.remaining}</strong> generation{premiumCheck.remaining !== 1 ? 's' : ''} remaining.{' '}
-                Billing is not currently available.
+                Larger batches are available with Pro.
               </p>
             </div>
           )}
@@ -715,7 +800,7 @@ export function GenerationModal({ isOpen, onClose, onSave }: GenerationModalProp
             >
               {premiumCheck.loading ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking...</>
-              ) : !premiumCheck.canGenerate ? (
+              ) : allowanceFailed ? 'Allowance unavailable' : !premiumCheck.canGenerate ? (
                 <><Lock className="mr-2 h-4 w-4" /> Limit Reached</>
               ) : (
                 'Start Generation'

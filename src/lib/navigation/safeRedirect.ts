@@ -28,3 +28,11 @@ export function sanitizeAuthRedirect(value: string | null | undefined): string {
     return '/dashboard';
   }
 }
+
+export function authPageHref(path: '/login' | '/signup', redirect: string | null, verificationSent = false) {
+  const params = new URLSearchParams();
+  if (verificationSent) params.set('message', 'verification-sent');
+  if (redirect) params.set('redirect', sanitizeAuthRedirect(redirect));
+  const query = params.toString();
+  return query ? path + '?' + query : path;
+}

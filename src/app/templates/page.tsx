@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArrowLeft, Bookmark, Library, Search, X } from 'lucide-react';
 import { TemplateCard } from '@/components/templates/TemplateCard';
-import { SerenityBrand } from '@/components/brand/SerenityBrand';
 import { plural } from '@/lib/utils';
+import { SiteNav } from '@/components/marketing/MarketingNav';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Template {
   id: string;
@@ -60,6 +60,7 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState<'stars' | 'updated' | 'name'>('stars');
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -118,37 +119,26 @@ export default function TemplatesPage() {
   }, [templates, searchQuery, selectedCategory, sortBy]);
 
   return (
-    <div className="app-shell min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-transparent px-3 pt-3 sm:px-5">
-        <div className="app-nav-frame mx-auto flex h-16 max-w-7xl items-center justify-between rounded-2xl border border-border/70 bg-background/80 px-4 shadow-xl backdrop-blur-2xl sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <SerenityBrand />
-          </Link>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Link href="/editor" className="btn-primary">
-              Open Editor
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="app-shell min-h-screen">
+      <SiteNav />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Link
-            href="/dashboard"
-            className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Link>
+          {user && (
+            <Link
+              href="/dashboard"
+              className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
+            </Link>
+          )}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="font-display text-3xl font-bold">Public Templates</h1>
+              <h1 className="font-display text-3xl font-bold">Template library</h1>
               <p className="mt-1 text-muted-foreground">
-                Browse templates shared by the community
+                Choose a design to open an editable copy in your studio.
               </p>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -203,9 +193,10 @@ export default function TemplatesPage() {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
+                aria-pressed={selectedCategory === cat}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                   selectedCategory === cat
-                    ? 'bg-primary text-white shadow-sm'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
@@ -253,7 +244,7 @@ export default function TemplatesPage() {
         )}
 
         {/* Create Custom */}
-        <div className="mt-12 rounded-2xl bg-gradient-to-r from-primary/10 to-accent/10 p-8 text-center">
+        <div className="mt-12 rounded-2xl bg-muted/60 p-8 text-center">
           <h2 className="font-display text-2xl font-bold">
             Share Your Creations
           </h2>

@@ -19,6 +19,7 @@ export const GOOGLE_FONTS = [
   { name: 'Outfit', weights: [400, 500, 600, 700] },
   { name: 'Manrope', weights: [400, 500, 600, 700] },
   
+  { name: 'Fraunces', weights: [400, 500, 600, 700] },
   { name: 'Playfair Display', weights: [400, 500, 600, 700] },
   { name: 'Merriweather', weights: [400, 700] },
   { name: 'Libre Baskerville', weights: [400, 700] },

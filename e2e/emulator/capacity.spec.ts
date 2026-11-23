@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -84,12 +84,21 @@ test.describe('free-tier capacity', () => {
   test('certificates issued with Blob-hosted previews keep showing them', async ({ page, baseURL }) => {
     // An earlier release stored previews as public objects (Vercel Blob; the
     // emulator's stand-in is /api/dev-object). Those URLs must keep working.
-    const source = path.join(process.cwd(), '.local-object-store', 'objects', 'certificates');
-    const sample = readdirSync(source, { recursive: true }).map(String).find((file) => file.endsWith('.jpg'));
-    expect(sample, 'a stored preview to reuse').toBeTruthy();
     const objectPath = `certificates/${OWNER.uid}/LegacyBlob01.jpg`;
-    mkdirSync(path.join(process.cwd(), '.local-object-store', 'objects', 'certificates', OWNER.uid), { recursive: true });
-    copyFileSync(path.join(source, sample!), path.join(process.cwd(), '.local-object-store', 'objects', ...objectPath.split('/')));
+    const destination = path.join(process.cwd(), '.local-object-store', 'objects', objectPath);
+    const sample = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 842;
+      canvas.height = 595;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = 'white';
+      context.fillRect(0, 0, 842, 595);
+      context.fillStyle = 'black';
+      context.fillText('Legacy certificate fixture', 32, 48);
+      return canvas.toDataURL('image/jpeg').split(',')[1];
+    });
+    mkdirSync(path.dirname(destination), { recursive: true });
+    writeFileSync(destination, Buffer.from(sample, 'base64'));
 
     const now = new Date().toISOString();
     await admin().db.collection('certificates').doc('LegacyBlob01').set({

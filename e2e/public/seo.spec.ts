@@ -43,6 +43,19 @@ test.describe('public SEO', () => {
       }),
     );
     expect(types).toContain('SoftwareApplication');
+  });
+
+  test('the FAQ page carries FAQPage structured data', async ({ page }) => {
+    await page.goto('/faq');
+    const types = await page.locator('script[type="application/ld+json"]').evaluateAll((nodes) =>
+      nodes.map((n) => {
+        try {
+          return JSON.parse(n.textContent || '{}')['@type'];
+        } catch {
+          return null;
+        }
+      }),
+    );
     expect(types).toContain('FAQPage');
   });
 });
